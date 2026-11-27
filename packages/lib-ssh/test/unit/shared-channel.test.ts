@@ -84,6 +84,18 @@ describe('the host channel over the shared session', () => {
     );
   });
 
+  it('F-2408 BR-4: gives the session lock of a script to the session, and none when it has none', async () => {
+    await channel().runScript(REQUEST, () => undefined);
+    await channel().runScript(
+      {...REQUEST, sessionLock: {path: '/tmp/lock', action: 'open'}},
+      () => undefined,
+    );
+    deepStrictEqual(
+      runs.map(started => started.sessionLock),
+      [undefined, {path: '/tmp/lock', action: 'open'}],
+    );
+  });
+
   it('runs a script one byte under the limit of an exec argument', async () => {
     await channel().runScript(
       {...REQUEST, script: 'x'.repeat(EXEC_ARGUMENT_LIMIT_BYTES - 1)},
@@ -130,8 +142,19 @@ describe('the host channel over the shared session', () => {
     );
   });
 
-  it('refuses the PowerShell interpreter with its reason, and writes nothing to the session', async () => {
-    const outcome = await channel().runScript(
+  /** The channel over a session on a host of `platform`. */
+  function channelOn(platform: 'linux' | 'windows'): SharedSessionChannel {
+    return channel({
+      direct: {
+        identity: () => 'user@host:22',
+        platformHint: () => platform,
+        copyToHost: () => Promise.resolve({kind: 'copied'}),
+      },
+    });
+  }
+
+  it('F-2701 5.0 step 5: a POSIX session refuses a PowerShell script with its reason, and writes nothing to the session', async () => {
+    const outcome = await channelOn('linux').runScript(
       {...REQUEST, interpreter: 'powershell'},
       () => undefined,
     );
@@ -142,10 +165,37 @@ describe('the host channel over the shared session', () => {
           kind: 'failed',
           failure: {
             kind: 'spawnFailed',
-            detail: 'the shared session runs no powershell script yet',
+            detail: 'the session runs posixShell scripts, not powershell',
           },
         },
         0,
+      ],
+    );
+  });
+
+  it('F-2701 5.0 step 5: a Windows session refuses a POSIX script, and runs a PowerShell one past the POSIX argument bound', async () => {
+    const refused = await channelOn('windows').runScript(
+      REQUEST,
+      () => undefined,
+    );
+    ending = Promise.resolve({kind: 'ended', status: 0});
+    const large = 'Write-Output 1\n'.repeat(EXEC_ARGUMENT_LIMIT_BYTES / 10);
+    const accepted = await channelOn('windows').runScript(
+      {...REQUEST, interpreter: 'powershell', script: large},
+      () => undefined,
+    );
+    deepStrictEqual(
+      [refused, accepted.kind, runs.map(started => started.script === large)],
+      [
+        {
+          kind: 'failed',
+          failure: {
+            kind: 'spawnFailed',
+            detail: 'the session runs powershell scripts, not posixShell',
+          },
+        },
+        'exited',
+        [true],
       ],
     );
   });

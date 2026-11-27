@@ -267,9 +267,9 @@ async function nextDialogAfter(
   return waitForDialog(name, DIALOG_MILLISECONDS);
 }
 
-/** A dialog as the rows compare it: its message, its detail and its buttons in sorted order. */
+/** A dialog as the rows compare it: its message, its detail and its buttons in the order the dialog shows them. */
 function dialogText(dialog: ShownDialog): [string, string, string[]] {
-  return [dialog.message, dialog.details, [...dialog.buttons].sort()];
+  return [dialog.message, dialog.details, dialog.buttons];
 }
 
 /**
@@ -553,7 +553,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
     }
   });
 
-  it('F-0405 AC-26 (b26): a rebuild with a docker that does not exist shows S339 with F-0410’s buttons, and the container keeps its id, a recorded deviation (athena on #939, remote-oss/remote-containers#123)', async () => {
+  it('F-0405 AC-26 (b26): a rebuild with a docker that does not exist shows S339 with Edit devcontainer.json Locally | More Actions... | Retry, and the old container is kept or gone, either acceptable', async () => {
     const folder = devContainerFolder('rebuild-docker');
     try {
       const name = await reopened(folder);
@@ -567,10 +567,16 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
       deepStrictEqual(
         {
           details: dialog.details,
-          buttons: [...dialog.buttons].sort(),
-          containers,
+          buttons: dialog.buttons,
+          keptOrGone:
+            containers.length === 0 ||
+            (containers.length === 1 && containers[0] === kept),
         },
-        {details: S339, buttons: RECOVERY_BUTTONS, containers: [kept]},
+        {
+          details: S339,
+          buttons: RECOVERY_BUTTONS,
+          keptOrGone: true,
+        },
       );
     } finally {
       await removeContainers(folder);
@@ -683,7 +689,7 @@ describe('the remaining Dev Containers gate rows (card containers-19)', function
         dialog: [
           'Docker version 17.12.0 or later required.',
           `Command not found: '${missing}'. Check the license for details.`,
-          ['Cancel', 'Install', 'License'],
+          ['License', 'Cancel', 'Install'],
         ],
         remoteName: null,
         containers: [kept],

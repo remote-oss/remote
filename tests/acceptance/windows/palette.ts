@@ -1,6 +1,8 @@
+import {activeWindowName} from './display.ts';
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
+  moveQuickPickFocus,
   pageFocusFacts,
   pressEscape,
   quickPickOf,
@@ -69,14 +71,18 @@ async function showedPalette(name: string): Promise<void> {
       );
     // A window that does not answer must not replace the palette's own error.
     const terminals = await terminalFacts(name).catch(() => undefined);
+    // The taker of the focus is a window the pages' states cannot see: the display's active window says who it is.
+    const displayWindowName = await activeWindowName().catch(
+      (reading: unknown) => String(reading),
+    );
     throw new Error(
-      `${String(caught)}; pages ${JSON.stringify(pages)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
+      `${String(caught)}; pages ${JSON.stringify(pages)}, the display's active window ${JSON.stringify(displayWindowName)}; the quick input and focus in the first seconds (ms from the command) ${JSON.stringify(trail)}; terminals ${JSON.stringify(terminals?.terminals ?? '(unreadable)')}, active ${JSON.stringify(terminals?.active ?? '(unreadable)')}; the agent's events, with the terminals it saw open or become active (ms from the command, which was sent at 0) ${JSON.stringify(events)}`,
       {cause: caught},
     );
   }
 }
 
-/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled. */
+/** The labels of the items that the command palette of window `name` lists for `text`, once its list has settled, whose launch has the palette's history of run commands switched off (`PALETTE_HISTORY_OFF` in `tools/acceptance-launches.ts`), so a row that reads the order of the list finds the alphabetical one. */
 export async function paletteItems(
   name: string,
   text: string,
@@ -92,8 +98,46 @@ export async function paletteItems(
     }
     items = next;
   }
+  items = await withTheRowsBelow(name, items);
   await pressEscape(name);
   return items;
+}
+
+/**
+ * `above`, the rows the palette's list renders at its top, and the rows it renders at its end: the list draws only the
+ * rows that fit the window, and an ArrowUp from the first row moves the focus to the last and scrolls it into view. The
+ * two reads overlap, or meet, and are joined at that overlap.
+ */
+async function withTheRowsBelow(
+  name: string,
+  above: readonly string[],
+): Promise<string[]> {
+  if (above.length === 0) {
+    return [...above];
+  }
+  await moveQuickPickFocus(name, 'ArrowUp');
+  await new Promise(resolve => setTimeout(resolve, SETTLE_MILLISECONDS));
+  const bottom = (await quickPickOf(name))?.items ?? [];
+  if (above.join('\n') === bottom.join('\n')) {
+    // Every row fits the window: the end of the list is the top.
+    return [...above];
+  }
+  for (
+    let shared = Math.min(above.length, bottom.length);
+    shared >= 1;
+    shared -= 1
+  ) {
+    if (
+      above.slice(above.length - shared).join('\n') ===
+      bottom.slice(0, shared).join('\n')
+    ) {
+      return [...above, ...bottom.slice(shared)];
+    }
+  }
+  // Joined with no row in common the reads could have a row between them, which would be dropped without a word.
+  throw new Error(
+    `the two reads of the palette of window ${name} share no row: the top reads ${JSON.stringify(above)} and the end reads ${JSON.stringify(bottom)}`,
+  );
 }
 
 /** Runs the command of the Command Palette whose title is exactly `title` in window `name`, not the first match. */

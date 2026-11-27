@@ -26,6 +26,33 @@ export function valueOf(
   return readSetting(host, settings[entry]);
 }
 
+/** The settings the client search lists in its own form, which the settings listing leaves to it. */
+const LISTED_BY_THE_SEARCH: ReadonlyArray<keyof typeof settings> = [
+  'path',
+  'permitPtyAllocation',
+];
+
+/**
+ * The settings of the log's listing: every setting of the table but those the client search lists, each with its id
+ * and its effective value; `remote.SSH.useExecServer` is false while the manual bootstrap is on.
+ */
+export function listedSettings(
+  host: SettingHost,
+): Array<readonly [string, unknown]> {
+  const bootstrapping = localDownloadModeOf(host) === 'manualBootstrap';
+  return (Object.keys(settings) as Array<keyof typeof settings>)
+    .filter(entry => !LISTED_BY_THE_SEARCH.includes(entry))
+    .map(
+      entry =>
+        [
+          settings[entry].id,
+          bootstrapping && entry === 'useExecServer'
+            ? false
+            : valueOf(host, entry),
+        ] as const,
+    );
+}
+
 /** A switch's value: true only for the boolean true. */
 export function switchOf(
   host: SettingHost,
@@ -48,16 +75,31 @@ export function textOf(
   return typeof value === 'string' ? value : '';
 }
 
+/** The undeclared value of `remote.SSH.localServerDownload` that turns the manual bootstrap on. */
+const MANUAL_BOOTSTRAP_VALUE = 'manual-bootstrap';
+
 /**
  * Where a connect may download the server archive: `off` when `remote.SSH.allowLocalServerDownload` is
- * false, else `remote.SSH.localServerDownload` when it is `always` or `off`, else `auto`.
+ * false, else `remote.SSH.localServerDownload` when it is `always` or `off`, `manualBootstrap` for its undeclared value
+ * `manual-bootstrap`, else `auto`.
  */
 export function localDownloadModeOf(host: SettingHost): LocalDownloadMode {
   if (valueOf(host, 'allowLocalServerDownload') === false) {
     return 'off';
   }
   const mode = valueOf(host, 'localServerDownload');
+  if (mode === MANUAL_BOOTSTRAP_VALUE) {
+    return 'manualBootstrap';
+  }
   return mode === 'always' || mode === 'off' ? mode : 'auto';
+}
+
+/** `remote.SSH.useExecServer` as a connect uses it: false while the manual bootstrap is on, whatever is configured. */
+export function effectiveUseExecServer(host: SettingHost): boolean {
+  return (
+    switchOf(host, 'useExecServer') &&
+    localDownloadModeOf(host) !== 'manualBootstrap'
+  );
 }
 
 /** `remote.SSH.enableAgentForwarding`: on unless it is the boolean false, as its default of true reads. */

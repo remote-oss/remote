@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   bundleFolderOf,
   clientCases,
+  CLIENT_EPHEMERAL_LOWEST,
   CONFIG_FILE_LAUNCHES,
   extensionsOf,
   failureCases,
@@ -20,6 +21,7 @@ import {
   windowPortRangeProblem,
   hostCases,
   hostSetupOf,
+  holderListeningCommand,
   portFreeCommand,
   type Launch,
   launchLabelled,
@@ -30,6 +32,7 @@ import {
   withRunTokens,
 } from './acceptance-launches.ts';
 import {chosenLaunches} from './acceptance.ts';
+import {HOST_EPHEMERAL_RANGE} from './acceptance-run.ts';
 import {UPDATE_SERVICE_NAME} from './acceptance-downloads.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
 import {TemporaryWorkspace} from './temporary-workspace.ts';
@@ -148,6 +151,7 @@ function labelsFromExplorer(): string[] {
     'wsl-linux-web',
     'wsl',
     'windows-host',
+    'containers-wsl',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -336,10 +340,14 @@ describe('the launches of the VSCodium run', () => {
         'default-ports',
         'ssh-core',
         'ssh-newclient',
+        'ssh-newclient-pickers',
         'ssh-agents',
         'ssh-askpass',
         'ssh-askpass-env',
         'ssh-askpass-space',
+        ...['12', '13', '14'].map(killedCase => `ssh-killed-${killedCase}`),
+        'ssh-locks',
+        'ssh-downloaders',
         'ssh-containers',
         'no-proposals',
         'cli-path',
@@ -411,7 +419,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer, the wsl-linux launches and wsl WSL and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
+  it('tooling-30, tooling-33, containers-09, connect-81: only the explorer launches install the explorer, the wsl-linux launches and wsl WSL and the containers launches Dev Containers, they, the trust launches, terminal-login, login-shells, preconnect, agent-notmp and default-ports open a debugging port, and explorer-alone disables remote-ssh and containers the stand-in of the other Dev Containers', () => {
     deepStrictEqual(
       launches.flatMap(launch =>
         launch.kind === 'plain' &&
@@ -434,19 +442,28 @@ describe('the launches of the VSCodium run', () => {
         ['terminal-odd', undefined, true, undefined],
         ['passphrase-late', undefined, true, undefined],
         ['login-shells', undefined, true, undefined],
+        ['preconnect', undefined, true, undefined],
         ['agent-notmp', undefined, true, undefined],
         ['default-ports', undefined, true, undefined],
         ['ssh-core', undefined, true, undefined],
         ['ssh-newclient', undefined, true, undefined],
+        ['ssh-newclient-pickers', undefined, true, undefined],
         ['ssh-agents', undefined, true, undefined],
         ['ssh-askpass', undefined, true, undefined],
         ['ssh-askpass-env', undefined, true, undefined],
         ['ssh-askpass-space', undefined, true, undefined],
+        ['ssh-killed-12', undefined, true, undefined],
+        ['ssh-killed-13', undefined, true, undefined],
+        ['ssh-killed-14', undefined, true, undefined],
+        ['ssh-locks', undefined, true, undefined],
+        ['ssh-downloaders', undefined, true, undefined],
         ['ssh-containers', ['remote-oss.remote-containers'], true, undefined],
+        ['cli-path', undefined, true, undefined],
         ['wsl-linux', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
         ['windows-host', undefined, true, undefined],
+        ['containers-wsl', ['remote-oss.remote-containers'], true, undefined],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -665,10 +682,11 @@ describe('the launches of the VSCodium run', () => {
           launch.proposedApi,
         ]),
       [
+        ['containers-wsl', 'containers-wsl', shared, undefined, undefined],
         ...['containers-a', 'containers-b'].map(label => [
           label,
           'containers',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ]),
@@ -745,7 +763,7 @@ describe('the launches of the VSCodium run', () => {
         [
           'containers-shutdown',
           'containers-shutdown',
-          shared,
+          {...shared, 'workbench.commandPalette.history': 0},
           ['ms-vscode-remote.remote-containers'],
           undefined,
         ],
@@ -817,7 +835,13 @@ describe('the launches of the VSCodium run', () => {
           'containers-ssh-env-host',
           'containers-ssh-noclient',
         ].map(label => [label, label, shared, undefined, undefined]),
-        ['containers-view', 'containers-view', shared, undefined, undefined],
+        [
+          'containers-view',
+          'containers-view',
+          {...shared, 'workbench.commandPalette.history': 0},
+          undefined,
+          undefined,
+        ],
       ],
     );
   });
@@ -891,6 +915,7 @@ describe('the launches of the VSCodium run', () => {
       launches.filter(needsDevContainerImage).map(launch => launch.label),
       [
         'ssh-containers',
+        'containers-wsl',
         ...CONTAINERS_LAUNCHES,
         'extensionpack',
         'extensionpack-german',
@@ -930,6 +955,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'once',
           },
         ],
@@ -947,6 +973,7 @@ describe('the launches of the VSCodium run', () => {
           true,
           {
             'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
             'security.workspace.trust.startupPrompt': 'never',
           },
         ],
@@ -1077,6 +1104,13 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
+  it('#3003: the cli-path launch is a renderer launch with the title the page helpers find a window by and core’s custom dialogs, which a page read shows', () => {
+    deepStrictEqual(
+      launches.find(launch => launch.label === 'cli-path')?.settings,
+      {'window.title': '[${rootName}]', 'window.dialogStyle': 'custom'},
+    );
+  });
+
   it('tooling-51, connect-84, containers-101, tooling-168, #2355: socket-prime (a part of socket), the containers-podman launch, cli-path, wsl, the ports and install primers and the six genuine launches are named only, and only the genuine ones start VS Code', () => {
     deepStrictEqual(
       launches
@@ -1091,6 +1125,7 @@ describe('the launches of the VSCodium run', () => {
         'cli-path',
         'wsl',
         'windows-host',
+        'containers-wsl',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',
@@ -1282,7 +1317,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh', () => {
+  it('#2600: only ssh-newclient asks for the pinned OpenSSH client, its remote.SSH.path is the path the run passes, and ssh-core keeps the machine’s ssh and opens no Welcome page', () => {
     const client = '/cache/remote-oss/openssh-10.6p2-9ae44872090c/bin/ssh';
     deepStrictEqual(
       [
@@ -1295,9 +1330,68 @@ describe('the launches of the VSCodium run', () => {
         launchLabelled(launches, 'ssh-core').settings,
       ],
       [
-        ['ssh-newclient'],
+        ['ssh-newclient', 'ssh-newclient-pickers'],
         {'window.title': '[${rootName}]', 'remote.SSH.path': client},
-        {'window.title': '[${rootName}]'},
+        {
+          'window.title': '[${rootName}]',
+          'workbench.startupEditor': 'none',
+          'workbench.commandPalette.history': 0,
+        },
+      ],
+    );
+  });
+
+  it('#2940: every launch whose rows read the order of the palette’s list starts with the palette’s history switched off, so no earlier command leads the alphabetical list', () => {
+    function history(launch: Launch): unknown {
+      return settingsOfLaunch(launch)?.['workbench.commandPalette.history'];
+    }
+    deepStrictEqual(
+      [
+        [
+          'ssh-core',
+          'ssh-agents',
+          'terminal-login',
+          'wsl-linux',
+          'trust',
+          'web-ui',
+          'web-ui-trust',
+          'containers-shutdown',
+          'containers-view',
+          'explorer-home',
+        ].map(label => history(launchLabelled(launches, label))),
+        launches
+          .filter(launch => launch.suite === 'containers')
+          .map(history)
+          .filter(value => value !== 0),
+        history(launchLabelled(launches, 'windows')),
+      ],
+      [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [], undefined],
+    );
+  });
+
+  it('#2653: the install step of the pinned OpenSSH client matches every launch that asks for it, in both workflows, since a name such as ssh-newclient-pickers matches only as a substring', () => {
+    const condition =
+      "contains(matrix.part.launches, 'ssh-newclient') || contains(matrix.part.launches, '@ssh')";
+    const steps = ['ci.yml', 'acceptance-launches.yml'].map(
+      file =>
+        readFileSync(
+          path.join(REPOSITORY_ROOT, '.github', 'workflows', file),
+          'utf8',
+        )
+          .split('\n')
+          .filter(line => line.includes(condition)).length,
+    );
+    deepStrictEqual(
+      [
+        steps,
+        launchesOf(REPOSITORY_ROOT)
+          .filter(launch => launch.sshClient === 'pinned')
+          .map(launch => launch.label.includes('ssh-newclient')),
+      ],
+      [
+        // the cache and the install, in the shared steps and in the CLI job's copy of them
+        [4, 4],
+        [true, true],
       ],
     );
   });
@@ -1323,7 +1417,7 @@ describe('the launches of the VSCodium run', () => {
     );
   });
 
-  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, agent-notmp, default-ports, the explorer, trust and containers launches and every ports case', () => {
+  it('D-85: the settings of their own are agent-off, the terminal and socket launches, the failing connects that name them, the client searches, login-shells, preconnect, agent-notmp, default-ports, cli-path, the explorer, trust and containers launches and every ports case', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.settings !== undefined)
@@ -1334,6 +1428,15 @@ describe('the launches of the VSCodium run', () => {
         'failure-platform-escape',
         'failure-port-range-busy',
         'failure-i686',
+        'failure-install-path-invalid',
+        'failure-install-path-nocreate',
+        'failure-install-path-root',
+        'failure-install-path-file',
+        'failure-install-path-readonly',
+        'failure-manual-bootstrap',
+        'failure-download-offline',
+        'failure-proxy-invalid',
+        'failure-proxy-refused',
         'terminal',
         'socket-prime',
         'socket',
@@ -1344,15 +1447,23 @@ describe('the launches of the VSCodium run', () => {
         'terminal-odd',
         'passphrase-late',
         'login-shells',
+        'preconnect',
         'agent-notmp',
         'default-ports',
         'ssh-core',
         'ssh-newclient',
+        'ssh-newclient-pickers',
         'ssh-agents',
         'ssh-askpass',
         'ssh-askpass-env',
         'ssh-askpass-space',
+        'ssh-killed-12',
+        'ssh-killed-13',
+        'ssh-killed-14',
+        'ssh-locks',
+        'ssh-downloaders',
         'ssh-containers',
+        'cli-path',
         ...labelsFromExplorer(),
       ],
     );
@@ -1382,6 +1493,15 @@ describe('the launches of the VSCodium run', () => {
         'failure-platform-escape',
         'failure-port-range-busy',
         'failure-i686',
+        'failure-install-path-invalid',
+        'failure-install-path-nocreate',
+        'failure-install-path-root',
+        'failure-install-path-file',
+        'failure-install-path-readonly',
+        'failure-manual-bootstrap',
+        'failure-download-offline',
+        'failure-proxy-invalid',
+        'failure-proxy-refused',
       ],
     );
   });
@@ -1404,6 +1524,15 @@ describe('the launches of the VSCodium run', () => {
         ['failure-platform-escape', 'platform-escape'],
         ['failure-port-range-busy', 'port-range-busy'],
         ['failure-i686', 'i686'],
+        ['failure-install-path-invalid', 'install-path-invalid'],
+        ['failure-install-path-nocreate', 'install-path-nocreate'],
+        ['failure-install-path-root', 'install-path-root'],
+        ['failure-install-path-file', 'install-path-file'],
+        ['failure-install-path-readonly', 'install-path-readonly'],
+        ['failure-manual-bootstrap', 'manual-bootstrap'],
+        ['failure-download-offline', 'download-offline'],
+        ['failure-proxy-invalid', 'proxy-invalid'],
+        ['failure-proxy-refused', 'proxy-refused'],
       ],
     );
   });
@@ -1423,6 +1552,15 @@ describe('the launches of the VSCodium run', () => {
         ['failure-platform-escape', undefined],
         ['failure-port-range-busy', [41060, 41061]],
         ['failure-i686', undefined],
+        ['failure-install-path-invalid', undefined],
+        ['failure-install-path-nocreate', undefined],
+        ['failure-install-path-root', undefined],
+        ['failure-install-path-file', undefined],
+        ['failure-install-path-readonly', undefined],
+        ['failure-manual-bootstrap', undefined],
+        ['failure-download-offline', undefined],
+        ['failure-proxy-invalid', undefined],
+        ['failure-proxy-refused', undefined],
       ],
     );
   });
@@ -1500,6 +1638,23 @@ describe('the launches of the VSCodium run', () => {
   });
 });
 
+describe('the install case with a stand-in CLI', () => {
+  it('#2735: the launch of a case that names a stand-in CLI starts the CLI-source editor, and no other launch of the table does', () => {
+    const launches = launchesOf(REPOSITORY_ROOT);
+    deepStrictEqual(
+      [
+        launches
+          .filter(launch => launch.kind === undefined && launch.cliStandIn)
+          .map(launch => launch.label),
+        hostCases(REPOSITORY_ROOT, 'suite-install')
+          .filter(hostCase => hostCase.cliStandIn === true)
+          .map(hostCase => `install-${hostCase.label}`),
+      ],
+      [['install-local-exec-cli'], ['install-local-exec-cli']],
+    );
+  });
+});
+
 describe('the ports cases', () => {
   const launches = launchesOf(REPOSITORY_ROOT);
   const cases = hostCases(REPOSITORY_ROOT, 'suite-ports');
@@ -1539,7 +1694,7 @@ describe('the ports cases', () => {
     );
   });
 
-  it('coverage-13: the setup frees the held ports and the server, then holds each port and waits for it', () => {
+  it('coverage-13, #2683: the setup frees the held ports and the server, then holds each port once the host has no other socket on it, and waits for each holder to listen', () => {
     const current = caseOf('range-gaps');
     deepStrictEqual(hostSetupOf(current, PORTS_SUITE), [
       {command: "pkill -f 'n[c] -lk -p'; true"},
@@ -1551,21 +1706,28 @@ describe('the ports cases', () => {
           'sleep 0.5; done; exit 1',
       },
       {command: portFreeCommand(45001)},
+      {command: portFreeCommand(45000)},
       {command: 'nc -lk -p 45000 -s 127.0.0.1 -e /bin/true', detach: true},
+      {command: portFreeCommand(45002)},
       {command: 'nc -lk -p 45002 -s 127.0.0.1 -e /bin/true', detach: true},
-      {
-        command:
-          'for i in $(seq 1 20); do ' +
-          "netstat -ltn | grep -q ' 127.0.0.1:45000 ' && exit 0; " +
-          'sleep 0.25; done; exit 1',
-      },
-      {
-        command:
-          'for i in $(seq 1 20); do ' +
-          "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; " +
-          'sleep 0.25; done; exit 1',
-      },
+      {command: holderListeningCommand(45000)},
+      {command: holderListeningCommand(45002)},
     ]);
+  });
+
+  it('#2683: a holder that does not listen within five seconds fails the setup with the sockets that have its port and the holders that run', () => {
+    deepStrictEqual(
+      holderListeningCommand(45002),
+      [
+        'for i in $(seq 1 20); do ',
+        "netstat -ltn | grep -q ' 127.0.0.1:45002 ' && exit 0; ",
+        'sleep 0.25; done; ',
+        'echo "nothing listens on 127.0.0.1:45002 after 5 s; the sockets with that local port:"; ',
+        "netstat -tanp | awk '$4 ~ /:45002$/'; ",
+        'echo "the holders that run:"; ',
+        "ps | grep '[n]c -lk'; exit 1",
+      ].join(''),
+    );
   });
 
   it('coverage-13: a case that keeps the server gets no kill of it', () => {
@@ -1588,15 +1750,56 @@ describe('the ports cases', () => {
     );
   });
 
-  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port', () => {
+  it("#2683: every port a ports case names on the host is below the host's own ephemeral range, so that no client socket of the host can hold it", () => {
+    const [lowest = 0] = HOST_EPHEMERAL_RANGE.split(' ').map(Number);
+    const named = cases
+      .flatMap(
+        current => JSON.stringify(current).match(/\b[1-5]\d{4}\b/gu) ?? [],
+      )
+      .map(Number)
+      .filter(port => port >= 40000);
+    deepStrictEqual(
+      [named.length > 0, named.filter(port => port >= lowest)],
+      [true, []],
+    );
+  });
+
+  it("#2453: every port the tunnel range rows name is above the launch's window ports and below the client's ephemeral range, so no outgoing connection of the client can hold one", () => {
+    const [, lastWindowPort = 0] = WINDOW_PORT_RANGE.split('-').map(Number);
+    const named = (
+      readFileSync(
+        path.join(
+          REPOSITORY_ROOT,
+          'tests',
+          'acceptance',
+          'ssh-core',
+          'tunnel-ranges.test.ts',
+        ),
+        'utf8',
+      ).match(/\b\d{5}\b/gu) ?? []
+    )
+      .map(Number)
+      .filter(port => port <= 65_535);
+    deepStrictEqual(
+      [
+        named.length > 0,
+        named.filter(
+          port => port >= CLIENT_EPHEMERAL_LOWEST || port <= lastWindowPort,
+        ),
+      ],
+      [true, []],
+    );
+  });
+
+  it('#2563: a case that keeps its server, or holds the port it expects, does not wait for the port, and a holder waits for its own port once', () => {
     deepStrictEqual(
       [
         hostSetupOf(caseOf('reuse'), PORTS_SUITE).length,
         hostSetupOf({...caseOf('range-held'), port: 45000}, PORTS_SUITE).filter(
-          entry => entry.command.startsWith('for i in $(seq 1 120)'),
+          entry => entry.command === portFreeCommand(45000),
         ).length,
       ],
-      [1, 0],
+      [1, 1],
     );
   });
 
@@ -2307,7 +2510,10 @@ describe('the platform cases (card coverage-12)', () => {
           {PATH: '<run>/browser-bin:<path>'},
           undefined,
           undefined,
-          {'window.title': '[${rootName}]'},
+          {
+            'window.title': '[${rootName}]',
+            'workbench.commandPalette.history': 0,
+          },
         ],
       ],
     );
@@ -2352,7 +2558,7 @@ describe('the platform cases (card coverage-12)', () => {
     const all = launchesOf(REPOSITORY_ROOT);
     deepStrictEqual(
       [
-        (first ?? 0) > 1023 && (last ?? 65535) < 32768,
+        (first ?? 0) > 1023 && (last ?? 65535) < CLIENT_EPHEMERAL_LOWEST,
         all
           .filter(
             launch =>

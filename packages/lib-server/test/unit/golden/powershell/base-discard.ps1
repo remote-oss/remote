@@ -7,6 +7,7 @@ $COMMIT = 'abc1230000000000000000000000000000000000'
 $ARCHIVE_URL = 'https://example.invalid/server.tar.gz'
 $ARCHIVE_PATH = ''
 $ARCHIVE_REMOVE = 'no'
+$ARCHIVE_INTO_INSTALL = 'no'
 $ARCHIVE_FORMAT = 'tar.gz'
 $STAGING_SUFFIX = '1700000000000'
 $INSTALL_TREE = ''
@@ -100,7 +101,7 @@ if ($INSTALL_ROOT -ne '') {
 }
 $DATA_DIR = [System.IO.Path]::Combine($DATA_ROOT, $DATA_FOLDER)
 $INSTALL_DIR = [System.IO.Path]::Combine($DATA_DIR, 'bin', $COMMIT)
-$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT)
+$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT + '.' + $STAGING_SUFFIX + '.' + $PID)
 $CLI_FILE = [System.IO.Path]::Combine($DATA_DIR, $CLI_NAME)
 $BOOT_PREFIX = [System.IO.Path]::Combine($DATA_DIR, '.' + $COMMIT)
 if ($INSTALL_TREE -ne '') {

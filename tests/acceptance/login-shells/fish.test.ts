@@ -3,6 +3,7 @@ import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {onHostAs, waitFor} from '../windows/harness.ts';
 import {
   FISH_DATA_FOLDER,
+  fishWithoutProbe,
   fishServerInstalled,
   fishServerRuns,
   linesSince,
@@ -45,6 +46,10 @@ function surfacesSince(mark: number, window: string): string[] {
 
 describe('the server rows on a fish login shell (card tooling-55)', function () {
   this.timeout(600_000);
+
+  before(() => fishWithoutProbe());
+
+  after(() => fishWithoutProbe(false));
 
   it('F-2411 AC-24 (ruling-fish): on a host whose login shell is fish, Kill on Host says it killed the server, and the server is stopped', async () => {
     await fishServerInstalled('fish-kill');

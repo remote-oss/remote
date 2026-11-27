@@ -20,7 +20,8 @@ export type ScriptStep =
   | 'stopCli'
   | 'kill'
   | 'uninstall'
-  | 'cleanup';
+  | 'cleanup'
+  | 'heldServer';
 
 /** The extra actions of a stepwise install, in the order they run. */
 export type StepwiseAction = 'prepare' | 'unpack' | 'activate';
@@ -94,6 +95,11 @@ export interface ScriptParameters {
    * lock is busy and the step is tried again.
    */
   removeArchive: boolean;
+  /**
+   * Whether the install first puts the archive at `archivePath` into the install folder, under the manual bootstrap's
+   * fixed archive name with its marker file, under the host lock, and unpacks it from there.
+   */
+  archiveIntoInstall?: boolean;
   archiveFormat: 'tar.gz' | 'zip';
   /** The epoch milliseconds that name the staging folder of a stepwise install. */
   epochMilliseconds: number;
@@ -141,12 +147,13 @@ const POSIX_ONLY = 'posixShell';
 const POWERSHELL_ONLY = 'powershell';
 
 /** What an install's lock reports when it is busy or cannot be written. */
-const LOCK_FACTS = [
+const LOCK_FACTS: ReadonlyArray<StepOutcome<string>> = [
   'server.lockPath',
   'server.lockInTemporary',
   'server.writeFailedPath',
   'server.writeFailedError',
-] as const;
+  {key: 'server.lockHeld', only: POSIX_ONLY},
+];
 
 /** What an install of the server or the CLI reports: its lock, its download and its times. */
 const INSTALL_OUTCOMES: StepOutcomes = {
@@ -156,10 +163,12 @@ const INSTALL_OUTCOMES: StepOutcomes = {
     'CreateInstallDirFailed',
     'ServerDownloadFailed',
     'UnpackFailed',
+    {key: 'CommandMissing', only: POSIX_ONLY},
     {key: 'NoDownloaderAvailable', only: POSIX_ONLY},
   ],
   facts: [
     ...LOCK_FACTS,
+    {key: 'install.missing', only: POSIX_ONLY},
     'server.downloadStatus',
     'timing.download',
     'timing.install',
@@ -218,8 +227,9 @@ export const STEP_OUTCOMES: Readonly<
     facts: ['server.stagingDir'],
   },
   unpack: {
-    statuses: ['Ok', 'UnpackFailed'],
+    statuses: ['Ok', 'UnpackFailed', {key: 'CommandMissing', only: POSIX_ONLY}],
     facts: [
+      {key: 'install.missing', only: POSIX_ONLY},
       {key: 'server.identityFrom', only: POSIX_ONLY},
       {key: 'server.identityTo', only: POSIX_ONLY},
     ],
@@ -275,6 +285,7 @@ export const STEP_OUTCOMES: Readonly<
     statuses: ['Ok', 'LockBusy', 'CreateInstallDirFailed'],
     facts: [...LOCK_FACTS],
   },
+  heldServer: {statuses: ['Ok'], facts: ['server.alive', 'server.port']},
 };
 
 /** The statuses or fact keys of `outcomes` that the interpreter's script may report. */
@@ -344,6 +355,7 @@ const STEP_ROLES: Readonly<
   kill: ['common', 'process', 'serverTree', 'stop'],
   uninstall: ['common', 'process', 'serverTree', 'stop'],
   cleanup: ['common', 'lock', 'folderKind'],
+  heldServer: ['common', 'process'],
 };
 
 /** The roles of one request's script: its step's, and the tree's when an install or a start uses a server tree. */
@@ -376,6 +388,7 @@ export function parameterValuesOf(
     ['ARCHIVE_URL', parameters.archiveUrl],
     ['ARCHIVE_PATH', parameters.archivePath],
     ['ARCHIVE_REMOVE', yesNo(parameters.removeArchive)],
+    ['ARCHIVE_INTO_INSTALL', yesNo(parameters.archiveIntoInstall === true)],
     ['ARCHIVE_FORMAT', parameters.archiveFormat],
     ['STAGING_SUFFIX', parameters.epochMilliseconds],
     ['INSTALL_TREE', parameters.installTree],

@@ -31,9 +31,13 @@ import {
 } from './acceptance-wsl.ts';
 import {pinnedSshClient} from './acceptance-ssh-client.ts';
 import {staleRefusal} from './acceptance-stale.ts';
-import {ghcrLayer, prepareRunTemplates} from './acceptance-templates.ts';
+import {
+  answerOf,
+  ghcrLayer,
+  type LayerFetch,
+  prepareRunTemplates,
+} from './acceptance-templates.ts';
 import {spawn} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {
   appendFileSync,
   existsSync,
@@ -56,12 +60,18 @@ import {
   CLI_ARCHIVES,
   CLI_ARCHIVES_REPOSITORY,
   EARLIER_SERVER_ARCHIVE,
+  pinnedFileOf,
   type RunDownloads,
   startRunDownloads,
   UPDATE_SERVICE_NAME,
   updateServicePinCommand,
 } from './acceptance-downloads.ts';
-import {CLI_TEMPLATE_PATH, cliSourceEditorOf} from './acceptance-cli-editor.ts';
+import {
+  CLI_TEMPLATE_PATH,
+  cliSourceEditorOf,
+  commitOfEditor,
+  standInNameProblem,
+} from './acceptance-cli-editor.ts';
 import {
   acceptanceRunId,
   buildDevContainerImage,
@@ -75,6 +85,11 @@ import {
   sweepStaleRunObjects,
 } from './acceptance-run.ts';
 import {checked, type CommandRunner, runCommand} from './command-runner.ts';
+import {
+  endAfterGrace,
+  PREPARE_STEP_MILLISECONDS,
+  timedStep,
+} from './prepare-steps.ts';
 import {EDITOR_VERSION, GENUINE_VERSIONS} from './editor-floor.ts';
 import {type HostBase, HOST_BASE_VARIANTS} from './host-variants.ts';
 import {
@@ -302,10 +317,14 @@ export interface HarnessVariables {
   HARNESS_EDITOR: EditorChoice;
   /** The file the log channel's lines are appended to, in the run's folder. */
   REMOTE_OSS_ACCEPTANCE_LOG: string;
+  /** The `DOCKER_HOST` the run itself started with, which a launch may replace for its editor: the run's own engine. */
+  HARNESS_ENGINE_HOST?: string;
   /** The VSCodium executable, in the VSCodium run only. */
   HARNESS_VSCODIUM_EXECUTABLE?: string;
   /** The CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`), only when a chosen launch starts it. */
   HARNESS_CLI_EDITOR_EXECUTABLE?: string;
+  /** The commit of the CLI-source copy's `product.json`, which a row compares with the one the client's CLI request names. */
+  HARNESS_CLIENT_COMMIT?: string;
   /** The version of the editor the tests run on: the recorded version, or the job's for a genuine launch. */
   HARNESS_EDITOR_VERSION: string;
   /** The VS Code executable of the genuine version, only when a chosen launch starts it. */
@@ -386,6 +405,7 @@ export interface HarnessDependencies {
     runFolder: string,
     earlier: boolean,
     cliArchives: boolean,
+    cliStandIn: boolean,
   ) => Promise<RunDownloads>;
   /** Starts the run's own ssh-agent on `socket`, with no askpass of its own; the VSCodium run only. */
   startAgent: (socket: string) => Started;
@@ -501,7 +521,7 @@ export function sshConfigOf(
  * account at the host's own address on the run network, which a route cut makes unreachable or silent); `changedkey` (the
  * harness host whose known-hosts file pins another key, so ssh finds the key changed); `noforward-key` (the harness account
  * with a key whose authorized_keys line carries `no-port-forwarding`); and the aliases of the
- * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `password-ask` (the same account whose host key is
+ * host's other accounts: `password` (login by password only), `password-retry` (the password-only account that asks again after a wrong password, three prompts, so that ssh's refusal names `password`) and `proxy-ask-terminal` (the same for a login terminal, which answers it) and `proxy-ask` (the password account behind a ProxyCommand that asks on the terminal), `held` (the harness account behind a ProxyCommand that never connects, so a connect stays in flight), `password-ask` (the same account whose host key is
  * asked, against its own known-hosts file a test deletes to make the key unknown again), `noforward` (TCP
  * forwarding refused), `nosocket` (stream-local forwarding refused), `noall` (all forwarding refused), `mute` (a login shell that does not answer), `harness-fish` (a login shell that is fish), `readonly` (a server data folder that exists
  * and cannot be written) and `master` and `master-ask` (the password account behind a ControlMaster); and `agentfwd`,
@@ -634,6 +654,11 @@ export function harnessSshConfig(
       ...PASSWORD_LINES,
       `ProxyCommand setsid bash -c 'printf "Proceed? " >/dev/tty && read answer </dev/tty && exec 3<>/dev/tcp/127.0.0.1/${String(port)} && { cat <&3 & exec cat >&3; }'`,
     ]),
+    // The harness account behind a ProxyCommand that never connects, so a window on it stays at its resolve until the row ends it.
+    ...accountAlias('held', 'harness', port, folder, [
+      ...keyLines(folder),
+      'ProxyCommand sleep 3600',
+    ]),
     'Host password-ask',
     '  HostName 127.0.0.1',
     `  Port ${String(port)}`,
@@ -668,6 +693,13 @@ export function harnessSshConfig(
     ),
     ...accountAlias('mute', 'harness-mute', port, folder, keyLines(folder)),
     ...accountAlias('i686', 'harness-i686', port, folder, keyLines(folder)),
+    ...accountAlias(
+      'nofetch',
+      'harness-nofetch',
+      port,
+      folder,
+      keyLines(folder),
+    ),
     ...accountAlias(
       'harness-fish',
       'harness-fish',
@@ -1224,6 +1256,12 @@ async function prepare(
   genuineVersion: string,
 ): Promise<HarnessVariables> {
   const {command} = dependencies;
+  function step<Value>(
+    name: string,
+    work: () => Promise<Value> | Value,
+  ): Promise<Value> {
+    return timedStep(name, PREPARE_STEP_MILLISECONDS, work);
+  }
   const runId = acceptanceRunId(process.env, process.pid);
   const podman = chosen.some(launch => launch.engine === 'podman');
   if (podman) {
@@ -1231,11 +1269,14 @@ async function prepare(
   }
   const downloads =
     editor === 'vscodium'
-      ? await dependencies.startDownloads(
-          root,
-          runFolder,
-          chosen.some(launch => launch.earlierServerArchive === true),
-          chosen.some(startsCliEditor),
+      ? await step('the download servers', () =>
+          dependencies.startDownloads(
+            root,
+            runFolder,
+            chosen.some(launch => launch.earlierServerArchive === true),
+            chosen.some(startsPinnedCliEditor),
+            chosen.some(startsStandInCliEditor),
+          ),
         )
       : undefined;
   if (downloads !== undefined) {
@@ -1272,7 +1313,7 @@ async function prepare(
     appendFileSync(configFile, await dependencies.windowsHostBlock(runFolder));
   }
   writeUserSettings(runFolder, configFile);
-  await waitForHost(dependencies, configFile);
+  await step('the host answering', () => waitForHost(dependencies, configFile));
   // A launch whose window connects to a host of another base gets that host beside the run's, one per base, with the
   // same key and password, the same download names and its own ssh_config.
   const baseHosts: Partial<Record<HostBase, string>> = {};
@@ -1305,11 +1346,17 @@ async function prepare(
         controlFolderOf(runFolder),
       ),
     );
-    await waitForHost(dependencies, baseConfig);
+    await step(`the ${base} host answering`, () =>
+      waitForHost(dependencies, baseConfig),
+    );
   }
-  await dependencies.bundleSuite(root);
+  await step('the suite bundle', () => dependencies.bundleSuite(root));
   const vscodium =
-    editor === 'vscodium' ? await dependencies.vscodiumExecutable() : undefined;
+    editor === 'vscodium'
+      ? await step('the VSCodium executable', () =>
+          dependencies.vscodiumExecutable(),
+        )
+      : undefined;
   const cliEditor =
     vscodium === undefined ||
     downloads === undefined ||
@@ -1318,14 +1365,27 @@ async function prepare(
       : dependencies.cliEditor(
           vscodium,
           runFolder,
-          `${downloads.variables.HARNESS_DOWNLOADS_HTTP ?? ''}${CLI_TEMPLATE_PATH}`,
+          `${cliBaseOf(downloads.variables, chosen)}${CLI_TEMPLATE_PATH}`,
         );
+  const nameProblem =
+    cliEditor === undefined || !chosen.some(startsStandInCliEditor)
+      ? undefined
+      : standInNameProblem(cliEditor);
+  if (nameProblem !== undefined) {
+    throw new Error(nameProblem);
+  }
+  const clientCommit =
+    cliEditor === undefined ? undefined : commitOfEditor(cliEditor);
   const vsixFiles = packagedExtensions(root);
   if (
     editor === 'vscodium' &&
     launchesOf(root).some(launch => launch.kind === 'plain')
   ) {
-    vsixFiles.push(await dependencies.windowAgentVsix(root, runFolder));
+    vsixFiles.push(
+      await step('the window agent package', () =>
+        dependencies.windowAgentVsix(root, runFolder),
+      ),
+    );
   }
   // Every launch of the table gets its installs, chosen or not, so every language pack file has to exist.
   for (const launch of editor === 'vscodium' ? launchesOf(root) : []) {
@@ -1336,7 +1396,9 @@ async function prepare(
   const vscode = chosen.some(
     launch => launch.kind === 'plain' && launch.client === 'vscode',
   )
-    ? await dependencies.vscodeExecutable(genuineVersion)
+    ? await step('the VS Code executable', () =>
+        dependencies.vscodeExecutable(genuineVersion),
+      )
     : undefined;
   const installs = installsOf(
     root,
@@ -1355,7 +1417,9 @@ async function prepare(
     const editorCommands = {
       vscodium:
         vscodium === undefined
-          ? await dependencies.editorCli()
+          ? await step('the editor command line', () =>
+              dependencies.editorCli(),
+            )
           : vscodiumCliOf(vscodium),
       vscode:
         vscode === undefined
@@ -1366,14 +1430,24 @@ async function prepare(
     const stateBefore = process.env.XDG_STATE_HOME;
     process.env.XDG_STATE_HOME = stateFolderOf(runFolder, 'install');
     try {
-      for (const {folder, files, client} of installs) {
-        checked(command, editorCommands[client], [
-          `--extensions-dir=${folder}`,
-          `--user-data-dir=${userDataFolderOf(runFolder)}`,
-          `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
-          ...files.flatMap(file => ['--install-extension', file]),
-        ]);
-      }
+      await step(
+        `installing the extensions into ${String(installs.length)} folders`,
+        () => {
+          for (const {folder, files, client} of installs) {
+            checked(
+              command,
+              editorCommands[client],
+              [
+                `--extensions-dir=${folder}`,
+                `--user-data-dir=${userDataFolderOf(runFolder)}`,
+                `--shared-data-dir=${path.join(runFolder, 'shared-data')}`,
+                ...files.flatMap(file => ['--install-extension', file]),
+              ],
+              PREPARE_STEP_MILLISECONDS,
+            );
+          }
+        },
+      );
     } finally {
       if (stateBefore === undefined) {
         delete process.env.XDG_STATE_HOME;
@@ -1400,13 +1474,15 @@ async function prepare(
   const registry = chosen.some(
     launch => launch.registry === true || launch.templates === true,
   )
-    ? await dependencies.startRegistry(runId)
+    ? await step('the registry', () => dependencies.startRegistry(runId))
     : undefined;
   if (registry !== undefined) {
     stops.push(() => registry.stop());
   }
   const wslDistros = chosen.some(launch => launch.wslDistros === true)
-    ? await dependencies.prepareWslDistros(runId, runFolder)
+    ? await step('the WSL distributions', () =>
+        dependencies.prepareWslDistros(runId, runFolder),
+      )
     : undefined;
   if (wslDistros !== undefined) {
     stops.push(() => wslDistros.unregister());
@@ -1416,11 +1492,13 @@ async function prepare(
     : undefined;
   const templateRegistry =
     registry !== undefined && chosen.some(launch => launch.templates === true)
-      ? await dependencies.prepareTemplates(
-          root,
-          runFolder,
-          registry.address,
-          devContainerImage,
+      ? await step('the templates', () =>
+          dependencies.prepareTemplates(
+            root,
+            runFolder,
+            registry.address,
+            devContainerImage,
+          ),
         )
       : undefined;
   const templateIndex = downloads?.variables.HARNESS_DOWNLOADS_LOCAL;
@@ -1463,10 +1541,14 @@ async function prepare(
     HARNESS_VSIX_FILES: vsixFiles.join(path.delimiter),
     HARNESS_EDITOR: editor,
     REMOTE_OSS_ACCEPTANCE_LOG: path.join(runFolder, 'log.txt'),
+    ...engineHostVariable(process.env),
     ...(vscodium === undefined ? {} : {HARNESS_VSCODIUM_EXECUTABLE: vscodium}),
     ...(cliEditor === undefined
       ? {}
       : {HARNESS_CLI_EDITOR_EXECUTABLE: cliEditor}),
+    ...(clientCommit === undefined
+      ? {}
+      : {HARNESS_CLIENT_COMMIT: clientCommit}),
     HARNESS_EDITOR_VERSION: EDITOR_VERSION,
     ...(vscode === undefined
       ? {}
@@ -1483,6 +1565,14 @@ async function prepare(
           HARNESS_PASSPHRASE_FILE: keys.passphraseFile,
         }),
   };
+}
+
+/** The variable that names the run's own engine, from the `DOCKER_HOST` the run started with; none when it has none. */
+export function engineHostVariable(environment: NodeJS.ProcessEnv): {
+  HARNESS_ENGINE_HOST?: string;
+} {
+  const host = environment.DOCKER_HOST;
+  return host === undefined || host === '' ? {} : {HARNESS_ENGINE_HOST: host};
 }
 
 /**
@@ -1561,9 +1651,12 @@ function runHostSetup(
       entry.command,
     ]);
     if (result.status !== 0) {
-      throw new Error(
-        `host setup failed: ${entry.command}\n${result.stderr.trim()}`,
-      );
+      // What the command printed on either stream: its own account of what it found, as portFreeCommand's is.
+      const output = [result.stdout, result.stderr]
+        .map(text => text.trim())
+        .filter(text => text !== '')
+        .join('\n');
+      throw new Error(`host setup failed: ${entry.command}\n${output}`);
     }
   }
 }
@@ -1835,6 +1928,11 @@ export async function runAcceptance(
     if (chosen.length === 0) {
       return 0;
     }
+  }
+  const conflict = cliTemplateConflict(chosen);
+  if (conflict !== undefined) {
+    console.error(`acceptance: ${conflict}`);
+    return 2;
   }
   const genuine = genuineVersionIn(process.env);
   if (typeof genuine === 'object') {
@@ -2120,7 +2218,14 @@ export function vscodiumConfiguration(
   };
   return {
     label: launch.label,
-    useInstallation: {fromPath: executable},
+    // A launch of a case with a stand-in CLI starts the run's CLI-source copy; the run makes the copy only when it chose
+    // such a launch, and the configuration of one it did not choose is never started.
+    useInstallation: {
+      fromPath:
+        launch.cliStandIn === true
+          ? (environment.HARNESS_CLI_EDITOR_EXECUTABLE ?? executable)
+          : executable,
+    },
     extensionDevelopmentPath:
       launch.extraExtensions === undefined
         ? runner
@@ -2253,18 +2358,19 @@ async function editorCli(): Promise<string> {
   );
 }
 
-/** The VS Code executable at the version under test, downloaded when it is missing, with one retry. */
+/** The VS Code executable at the version under test, downloaded when it is missing, with retries. */
 async function vscodeExecutable(version: string): Promise<string> {
-  return await withOneRetry(
+  return await withRetries(
     () => downloadAndUnzipVSCode(version),
     delay,
     console.log.bind(console),
   );
 }
 
-/** What the VSCodium download needs from outside: the network and the unpacking. */
+/** What the VSCodium download needs from outside: the network, the archive's write and the unpacking. */
 export interface VscodiumTransfer {
   download: (url: string) => Promise<Uint8Array>;
+  writeFile: (file: string, bytes: Uint8Array) => void;
   unpack: (archive: Uint8Array, folder: string) => void;
 }
 
@@ -2294,8 +2400,10 @@ export function vscodiumCliOf(
 
 /**
  * The VSCodium executable of the pinned release under `<root>/.vscode-test`, in a folder of the release and the
- * client's platform, so a build of another architecture is never taken for it. A missing build is downloaded, checked
- * against the release's sha256 and unpacked; one already there is used as it is.
+ * client's platform, so a build of another architecture is never taken for it. A missing build is unpacked from its
+ * release asset in the run's download cache, `<root>/.vscode-test/downloads`, which CI restores by the pins: an asset
+ * there with the release's sha256 is taken as it is, any other is downloaded, checked and written there first. A build
+ * already unpacked is used as it is.
  */
 export async function vscodiumExecutableOf(
   root: string,
@@ -2322,11 +2430,14 @@ export async function vscodiumExecutableOf(
   if (expected === undefined) {
     throw new Error(`no VSCodium build is pinned for ${key}`);
   }
-  const archive = await transfer.download(releaseAssetUrlOf(build.asset));
-  if (createHash('sha256').update(archive).digest('hex') !== expected) {
-    throw new Error('the VSCodium download does not match its checksum');
-  }
-  transfer.unpack(archive, folder);
+  const archive = await pinnedFileOf(
+    path.join(root, '.vscode-test', 'downloads', build.asset),
+    releaseAssetUrlOf(build.asset),
+    expected,
+    transfer,
+    'the VSCodium download does not match its checksum',
+  );
+  transfer.unpack(readFileSync(archive), folder);
   return executable;
 }
 
@@ -2366,8 +2477,12 @@ export async function runWithRetry(
   return second.exitCode;
 }
 
-/** How long the harness waits before its one retry of a step that failed, in milliseconds. */
-export const RETRY_PAUSE_MILLISECONDS = 5000;
+/**
+ * The pauses, in milliseconds, before each retry of a download that failed: four tries in all, the pauses growing, so
+ * that a burst of the release network's errors (504s that last a minute) passes before the third try, and the last
+ * waits three minutes, as long as github.com has been seen refusing a runner (connect timeouts, 403s: #3197).
+ */
+const DOWNLOAD_PAUSES_MILLISECONDS: readonly number[] = [5000, 15_000, 180_000];
 
 /**
  * The text of a failure for the harness's line: an Error's message; when that is empty, its cause's text; when it
@@ -2399,24 +2514,35 @@ export function failureText(caught: unknown): string {
 }
 
 /**
- * Runs `step`; when it throws, reports the failure through `report`, waits `RETRY_PAUSE_MILLISECONDS`, and runs
- * it once more. The second attempt's result or error is the outcome.
+ * Runs `step`; each time it throws while a pause of `pauses` is left, reports the failure through `report`, waits that
+ * pause and runs it again. When the last try throws too, it rejects with every try's error, in order (`errors` holds
+ * the ones before).
  */
-export async function withOneRetry<Value>(
+export async function withRetries<Value>(
   step: () => Promise<Value>,
   sleep: (milliseconds: number) => Promise<void>,
   report: (line: string) => void,
+  pauses: readonly number[] = DOWNLOAD_PAUSES_MILLISECONDS,
+  errors: readonly string[] = [],
 ): Promise<Value> {
   try {
     return await step();
   } catch (error) {
+    const failed = [...errors, failureText(error)];
+    const [pause, ...later] = pauses;
+    if (pause === undefined) {
+      throw new Error(
+        failed
+          .map((text, index) => `try ${String(index + 1)}: ${text}`)
+          .join('; '),
+        {cause: error},
+      );
+    }
     report(
-      `acceptance: ${failureText(error)}; retrying once in ${String(
-        RETRY_PAUSE_MILLISECONDS / 1000,
-      )} s`,
+      `acceptance: ${failureText(error)}; try ${String(failed.length + 1)} in ${String(pause / 1000)} s`,
     );
-    await sleep(RETRY_PAUSE_MILLISECONDS);
-    return await step();
+    await sleep(pause);
+    return await withRetries(step, sleep, report, later, failed);
   }
 }
 
@@ -2584,9 +2710,56 @@ export function runTestCli(
   );
 }
 
+/**
+ * Why a selection cannot run, when it names a launch with real CLI archives and a launch with a stand-in CLI: the
+ * CLI-source copy has one template, which the host's downloader and the client reach by different bases. Nothing when it
+ * names at most one of them.
+ */
+function cliTemplateConflict(chosen: readonly Launch[]): string | undefined {
+  const pinned = chosen.filter(startsPinnedCliEditor);
+  const standIn = chosen.filter(startsStandInCliEditor);
+  return pinned.length === 0 || standIn.length === 0
+    ? undefined
+    : `the run names a launch with real CLI archives (${pinned
+        .map(launch => launch.label)
+        .join(', ')}) and one with a stand-in CLI (${standIn
+        .map(launch => launch.label)
+        .join(
+          ', ',
+        )}): the CLI-source copy has one template, so name them in separate runs`;
+}
+
+/**
+ * The download host's base that the CLI-source copy's template names: the host's own (`downloads`), where a chosen
+ * launch (`cli-path`) has the host's downloader fetch real CLI archives, else the client's loopback, where the client
+ * itself downloads the stand-in archive of a chosen install case, since the client cannot resolve `downloads`. A run
+ * that chooses both is refused at its selection (`cliTemplateConflict`).
+ */
+function cliBaseOf(
+  variables: Readonly<Record<string, string | undefined>>,
+  chosen: readonly Launch[],
+): string {
+  return (
+    (chosen.some(startsPinnedCliEditor)
+      ? variables.HARNESS_DOWNLOADS_HTTP
+      : (variables.HARNESS_DOWNLOADS_LOCAL ??
+        variables.HARNESS_DOWNLOADS_HTTP)) ?? ''
+  );
+}
+
+/** Whether a launch starts the run's CLI-source copy of VSCodium, which needs the CLI archives' token. */
+export function startsPinnedCliEditor(launch: Launch): boolean {
+  return launch.kind === 'plain' && launch.cliSource === true;
+}
+
+/** Whether a launch starts the run's CLI-source copy of VSCodium, against a stand-in CLI archive that needs no token. */
+function startsStandInCliEditor(launch: Launch): boolean {
+  return launch.kind === undefined && launch.cliStandIn === true;
+}
+
 /** Whether a launch starts the run's CLI-source copy of VSCodium. */
 function startsCliEditor(launch: Launch): boolean {
-  return launch.kind === 'plain' && launch.cliSource === true;
+  return startsPinnedCliEditor(launch) || startsStandInCliEditor(launch);
 }
 
 /**
@@ -2804,22 +2977,40 @@ export function editorChoiceOf(
     : undefined;
 }
 
-/** Downloads `url` into memory through `fetcher`, with one retry. */
+/**
+ * The layer of a mirrored template from `ghcr.io` through `fetcher`, with the downloads' retries: a request the network
+ * drops, or one ghcr.io refuses, is tried again after each of their pauses before the run's preparation fails (#2927).
+ */
+export function retriedGhcrLayer(
+  fetcher: typeof fetch = fetch,
+  pause: Sleeper = delay,
+): LayerFetch {
+  return template =>
+    withRetries(
+      () => ghcrLayer(template, fetcher),
+      pause,
+      console.log.bind(console),
+    );
+}
+
+/** Downloads `url` into memory through `fetcher`, with retries, and reports the download on its first try. */
 export async function downloadWithRetry(
   url: string,
   fetcher: typeof fetch = fetch,
   pause: Sleeper = delay,
+  report: (line: string) => void = console.log.bind(console),
 ): Promise<Uint8Array> {
-  return withOneRetry(
+  report(`acceptance: downloading ${url}`);
+  return withRetries(
     async () => {
-      const response = await fetcher(url);
+      const response = await answerOf(fetcher, url);
       if (!response.ok) {
         throw new Error(`${url}: ${String(response.status)}`);
       }
       return new Uint8Array(await response.arrayBuffer());
     },
     pause,
-    console.log.bind(console),
+    report,
   );
 }
 
@@ -2827,7 +3018,7 @@ export async function downloadWithRetry(
 const REDIRECTS: readonly number[] = [301, 302, 303, 307, 308];
 
 /**
- * Downloads a private release asset from its API `address` with `token`, with one retry. The API answers with a
+ * Downloads a private release asset from its API `address` with `token`, with retries. The API answers with a
  * redirect to a signed address, which is fetched without the token. With no token, the download fails and names the
  * variable that holds it.
  */
@@ -2842,9 +3033,9 @@ export async function privateAssetDownload(
       `${address}: the CLI archives need REMOTE_OSS_CLI_ARCHIVES_TOKEN, a token that may read ${CLI_ARCHIVES_REPOSITORY}`,
     );
   }
-  return withOneRetry(
+  return withRetries(
     async () => {
-      const answer = await fetcher(address, {
+      const answer = await answerOf(fetcher, address, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/octet-stream',
@@ -2852,9 +3043,15 @@ export async function privateAssetDownload(
         redirect: 'manual',
       });
       const signed = answer.headers.get('location');
+      // The signed address carries its own credential in its query, so a failure names the asset's address.
       const response =
         REDIRECTS.includes(answer.status) && signed !== null
-          ? await fetcher(signed)
+          ? await answerOf(
+              fetcher,
+              signed,
+              undefined,
+              `${address} (its signed address)`,
+            )
           : answer;
       if (!response.ok) {
         throw new Error(`${address}: ${String(response.status)}`);
@@ -2923,7 +3120,11 @@ if (isMainModule(import.meta.url)) {
           REPOSITORY_ROOT,
           process.platform,
           process.arch,
-          {download: downloadWithRetry, unpack: unpackArchive},
+          {
+            download: downloadWithRetry,
+            writeFile: writeFileSync,
+            unpack: unpackArchive,
+          },
         ),
         cliEditor: cliSourceEditorOf.bind(undefined, runCommand),
         runTests: runTestCli,
@@ -2960,11 +3161,11 @@ if (isMainModule(import.meta.url)) {
             root,
             runFolder,
             address,
-            ghcrLayer,
+            retriedGhcrLayer(),
             undefined,
             devContainerImage,
           ),
-        startDownloads: (root, runFolder, earlier, cliArchives) =>
+        startDownloads: (root, runFolder, earlier, cliArchives, cliStandIn) =>
           startRunDownloads(
             runCommand,
             downloadWithRetry,
@@ -2983,6 +3184,8 @@ if (isMainModule(import.meta.url)) {
                     ),
                 }
               : undefined,
+            undefined,
+            cliStandIn,
           ),
         runPlain: (root, variables, launch) =>
           runPlainLaunch(
@@ -3009,5 +3212,7 @@ if (isMainModule(import.meta.url)) {
       parsed.editor,
       parsed.launches,
     );
+    // A step that outlived its limit leaves its work running, which would hold the process to the job's own limit.
+    endAfterGrace();
   }
 }

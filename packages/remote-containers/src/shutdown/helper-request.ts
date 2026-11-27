@@ -7,6 +7,7 @@
 import path from 'node:path';
 import type {AcquireRequest} from 'lib-helper';
 import {SHUTDOWN_END_POLICY} from './shutdown-handler.ts';
+import {REGISTER_ANSWER_MILLISECONDS} from './window-lease.ts';
 
 /** The registry namespace of the shutdown helper. */
 const SHUTDOWN_NAMESPACE = 'remote-containers.shutdown';
@@ -20,6 +21,19 @@ export const SHUTDOWN_CLIENT_WAITS = {
   startLimitMilliseconds: 10_000,
   retryMilliseconds: 100,
 } as const;
+
+/**
+ * The longest a connect waits for the answer to its register, counted from the register's send, which includes the
+ * acquire: a hello refused by a helper that is ending waits for that helper's close (the hello limit and the policy's
+ * action bound), a fresh helper starts (its start limit) and welcomes (a hello limit), and then the answer takes what a
+ * stop already running may take.
+ */
+export const REGISTER_WAIT_MILLISECONDS =
+  SHUTDOWN_CLIENT_WAITS.helloLimitMilliseconds +
+  SHUTDOWN_END_POLICY.actionBound +
+  SHUTDOWN_CLIENT_WAITS.startLimitMilliseconds +
+  SHUTDOWN_CLIENT_WAITS.helloLimitMilliseconds +
+  REGISTER_ANSWER_MILLISECONDS;
 
 /** The request to acquire the instance's shutdown helper, for the extension at `extensionFolder` with `storageFolder`. */
 export function shutdownHelperRequest(

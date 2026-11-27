@@ -14,6 +14,7 @@ import type {
   SharedConnection,
 } from 'lib-ssh';
 import {payloadOf} from '../connect/connect-commands.ts';
+import {sshStartedLine} from '../diagnostics/log-content.ts';
 import type {PhaseEvent} from './connect.ts';
 import {ofAcquire, ofConnection} from './failure.ts';
 import {sshTargetOf} from './host-settings.ts';
@@ -81,17 +82,27 @@ export interface LoginLease {
   refuse(promptId: number): Promise<boolean>;
 }
 
+/** The key of the connection a connect acquires: the input's own, else the target's connection identity. */
+export function connectionKeyOf(input: ConnectInput): string {
+  return input.connectionKey ?? payloadOf(sshTargetOf(input.target));
+}
+
 /** The step that opens the connection of a connect. */
 export function openConnectionStep(
   dependencies: ConnectionStepDependencies,
 ): ConnectSteps['openConnection'] {
   return async (input, terms, cancellation) => {
-    const hostString =
-      input.connectionKey ?? payloadOf(sshTargetOf(input.target));
+    const hostString = connectionKeyOf(input);
     const acquired = await dependencies.acquire({
       ...dependencies.requestFor(input, terms),
       hostString,
       cancellation,
+      // The stale line is written as the replacement is claimed, before the new helper starts and any of its lines.
+      onStaleReplaced: () => {
+        dependencies.logger.info(
+          'Local connection server record was stale and replaced',
+        );
+      },
     });
     if (acquired.kind === 'refused') {
       return {kind: 'failed', failure: acquired.refusal};
@@ -122,6 +133,9 @@ export function openConnectionStep(
     let startedLogin = false;
     const stopStages = connection.onNotice(notice => {
       if (notice.type === 'loginOwned' || notice.type === 'loginStarted') {
+        if (!startedLogin) {
+          dependencies.logger.info(sshStartedLine());
+        }
         startedLogin = true;
       }
       if (notice.type === 'waitingForOtherWindow') {
@@ -144,6 +158,16 @@ export function openConnectionStep(
       end();
       return {kind: 'failed', failure: ofConnection(outcome.failure)};
     }
+    // The pids are known only once the connection is set up, and the line goes with the mode: a starter logs its start,
+    // a joiner its reuse. A helper of an earlier build gave neither pid, and its connect logs none of the lines.
+    const helperProcessId = connection.helperProcessId;
+    if (helperProcessId !== undefined && outcome.sshProcessId !== undefined) {
+      dependencies.logger.info(
+        connection.startedByMe
+          ? `Local connection server started: pid ${String(helperProcessId)}, ssh pid ${String(outcome.sshProcessId)}`
+          : `Local connection server reused: pid ${String(helperProcessId)}, ssh pid ${String(outcome.sshProcessId)}`,
+      );
+    }
     dependencies.adoptRunFacts(outcome.runFacts);
     token = outcome.sharedRecord?.connectionToken;
     let channel: HostChannel;
@@ -155,10 +179,13 @@ export function openConnectionStep(
         ? `the stored data has no record of host ${hostString}`
         : `the stored data has a record of host ${hostString}: ${record.operatingSystem}`,
     );
+    const {detectedPlatform} = outcome;
     const reused =
-      record === undefined
-        ? terms
-        : {...terms, platform: platformOfRecord(record.operatingSystem)};
+      record !== undefined
+        ? {...terms, platform: platformOfRecord(record.operatingSystem)}
+        : terms.platform === 'unknown' && detectedPlatform === 'windows'
+          ? {...terms, platform: 'windows' as const}
+          : terms;
     try {
       channel = dependencies.channelFor(connection, reused, input);
     } catch (caught) {
@@ -176,6 +203,7 @@ export function openConnectionStep(
         socksPort: outcome.socksPort,
         startedLogin,
         storedRecord: outcome.sharedRecord ?? undefined,
+        startedHelper: connection.startedByMe,
         storeSharedRecord: record => {
           token = record.connectionToken;
           return connection.storeSharedRecord(record);
@@ -183,6 +211,7 @@ export function openConnectionStep(
         onNotice: listener => connection.onNotice(listener),
         answer: (promptId, text) => connection.answer(promptId, text),
         refuse: promptId => connection.refuse(promptId),
+        checkSession: () => connection.checkSession(),
         release: end,
       },
     };

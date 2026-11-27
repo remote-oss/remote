@@ -23,6 +23,7 @@ import {
   hostPassword,
   inWindow,
   isOpen,
+  leftoverPagesNote,
   noHelperWithin,
   onHost,
   onHostAs,
@@ -117,6 +118,26 @@ export async function serverProcesses(): Promise<number[]> {
   return (await hostServerProcesses()).filter(
     server => !leftBefore.includes(server),
   );
+}
+
+/**
+ * The main processes of the servers on the host, the shell that starts one and its node process. A server that an earlier
+ * row left is counted too, since the window of a row attaches to it: they are the processes a Kill Current must leave.
+ * The children of a server (a window's extension host, a terminal host) come and go with the windows and are not counted.
+ */
+export async function serverMainProcesses(): Promise<number[]> {
+  // A status of 1 is no match; any other status of pgrep, a bad pattern or a failure, fails the call. The pattern is
+  // written so that the shell's own command line does not match it.
+  return (
+    await onHost(
+      'sh',
+      '-c',
+      `pgrep -u harness -f '${DATA_FOLDER}/.* [-]-start-server'; status=$?; [ $status -le 1 ] || exit $status`,
+    )
+  )
+    .split('\n')
+    .filter(line => line !== '')
+    .map(Number);
 }
 
 /**
@@ -325,16 +346,29 @@ export async function openLocalWindow(
 }
 
 /**
+ * Closes every window of the launch but `local` whose agent is still active, whichever row opened it: a window that a
+ * failed row left, and a window a row opened and never closed. A window that will not close must not fail the hook, and
+ * with it every row after: `closeContained` dismisses its dialog and, failing that, ends its extension host. A window
+ * whose agent has ended is not listed here, whatever its page does.
+ */
+export async function closeLeftoverWindows(): Promise<void> {
+  for (const name of windowNames()) {
+    if (name !== 'local' && isOpen(name)) {
+      await closeContained(name, pressEscape);
+    }
+  }
+  const left = await leftoverPagesNote();
+  if (left !== undefined) {
+    process.stderr.write(`after closing the leftover windows: ${left}\n`);
+  }
+}
+
+/**
  * Closes every window of the launch but `local` that is open, waits until no connection helper runs, and from then on
  * counts no server process that runs on the host now.
  */
 export async function closeAllButLocal(): Promise<void> {
-  for (const name of windowNames()) {
-    if (name !== 'local' && isOpen(name)) {
-      // A window that will not close must not fail the hook, and with it every row after: it is closed by force.
-      await closeContained(name, pressEscape);
-    }
-  }
+  await closeLeftoverWindows();
   await noHelperWithin(60_000);
   leftBefore = await hostServerProcesses();
 }
@@ -474,6 +508,21 @@ export async function fishServerInstalled(name: string): Promise<void> {
   } finally {
     await closeWindow(name);
   }
+}
+
+/**
+ * Turns the local connection server off and stores the platform of `harness-fish`, or undoes both with `false`. A fish
+ * login shell runs none of a piped input before the input ends, so in the default mode it never answers the platform
+ * probe and its connect fails at the connect wait, as F-2206 AC-28 says, with or without an entry; in the non-local mode
+ * the entry decides the platform and no probe runs (F-2206 7.E5's own workaround). The rows of other features on fish
+ * connect so.
+ */
+export async function fishWithoutProbe(on = true): Promise<void> {
+  await setting('remote.SSH.useLocalServer', on ? false : undefined);
+  await setting(
+    'remote.SSH.remotePlatform',
+    on ? {'harness-fish': 'linux'} : undefined,
+  );
 }
 
 /** Whether a server of `harness-fish` runs on the host; the bracket keeps pgrep from matching its own command line. */

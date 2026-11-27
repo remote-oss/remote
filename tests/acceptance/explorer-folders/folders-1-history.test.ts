@@ -5,7 +5,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {mkdirSync, readFileSync, readdirSync} from 'node:fs';
+import {existsSync, mkdirSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   callCommand,
@@ -28,6 +28,7 @@ import {
   pressControlAlt,
   rememberPage,
   rowAction,
+  rowMenuAction,
   titleAction,
   viewRows,
 } from '../windows/renderer.ts';
@@ -48,7 +49,70 @@ import {
   viewWindow,
   visit,
 } from '../windows/explorer-folders.ts';
-import {HOST_A, HOST_B, CURRENT, IN_NEW, refreshed} from './folders-support.ts';
+import {HISTORY_FOLDER, storedPathsOf} from '../windows/stored-history.ts';
+import {
+  HOST_A,
+  HOST_B,
+  CURRENT,
+  IN_NEW,
+  REMOVE,
+  refreshed,
+} from './folders-support.ts';
+
+/** The extension's folder of the profile's global storage, where the history files live. */
+function storageFolder(): string {
+  return path.join(
+    variable('HARNESS_USER_DATA'),
+    'User/globalStorage/remote-oss.remote-ssh',
+  );
+}
+
+/** Every file and folder under the extension's global storage, relative to it and sorted; none when there is no folder. */
+function filesOf(): string[] {
+  try {
+    return readdirSync(storageFolder(), {recursive: true}).map(String).sort();
+  } catch {
+    return [];
+  }
+}
+
+/** The text of each file of the history folder, by name; none when there is no folder. */
+function historyTexts(): Map<string, string> {
+  const folder = path.join(variable('HARNESS_USER_DATA'), ...HISTORY_FOLDER);
+  return new Map(
+    existsSync(folder)
+      ? readdirSync(folder).map(name => [
+          name,
+          readFileSync(path.join(folder, name), 'utf8'),
+        ])
+      : [],
+  );
+}
+
+/** The text of `file`, or none when it is not there. */
+function textOf(file: string): string | undefined {
+  return existsSync(file) ? readFileSync(file, 'utf8') : undefined;
+}
+
+/** Waits until the connection log stops gaining lines: a window's connection writes to it for a while after it is connected, and longer on a slow runner. */
+async function logSettled(): Promise<void> {
+  let lines = -1;
+  for (let attempt = 0; attempt < 20 && lines !== connectionLog().length;) {
+    lines = connectionLog().length;
+    attempt += 1;
+    await new Promise(resolve => setTimeout(resolve, 3_000));
+  }
+}
+
+/** What the commands and the view must not change: the settings, the keybindings, the SSH config, the log's length and the files of the extension's storage. */
+function untouched(): unknown[] {
+  return [
+    readFileSync(userSettingsFile(), 'utf8'),
+    textOf(path.join(variable('HARNESS_USER_DATA'), 'User/keybindings.json')),
+    readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8'),
+    connectionLog().length,
+  ];
+}
 
 describe('the recent folders under a host (card coverage-102, part 1)', function () {
   this.timeout(600_000);
@@ -305,13 +369,52 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
         30_000,
       );
     }
+    // The history of the row's folders after each visit, as the window answers it and as the extension's history files
+    // hold it, for the message of a settle that fails: card #2757 found an entry missing from the window's reading, and
+    // the two together say at which visit it left and whether the files lost it too.
+    const trace: string[] = [];
+    async function told(read: () => Promise<string[]>): Promise<string> {
+      // Read for the message only: a read that fails is told, and never fails the row.
+      return read().then(
+        found => JSON.stringify(found),
+        (caught: unknown) => `(unreadable: ${String(caught)})`,
+      );
+    }
+    function storedPaths(): Promise<string[]> {
+      // A missing folder is no empty history: the read rejects, so that it is not read as a lost entry.
+      return Promise.resolve().then(() => {
+        const files = path.join(
+          variable('HARNESS_USER_DATA'),
+          ...HISTORY_FOLDER,
+        );
+        const stored = readdirSync(files).map(name => ({
+          name,
+          text: readFileSync(path.join(files, name), 'utf8'),
+        }));
+        return storedPathsOf(stored, HOST_B, scope);
+      });
+    }
+    async function visited(name: string): Promise<void> {
+      await visit(HOST_B, name);
+      trace.push(
+        `${name}: window ${await told(() => ownPathsOf(HOST_B, scope))}, stored ${await told(storedPaths)}`,
+      );
+    }
     try {
-      await visit(HOST_B, 'c102-c1');
-      await visit(HOST_B, 'c102-c2');
-      await visit(HOST_B, 'c102-cgone');
+      await visited('c102-c1');
+      await visited('c102-c2');
+      await visited('c102-cgone');
+      // Printed green or red alike, so that a red's trace has a green to be set beside.
+      console.log(`c102 history after each visit:\n${trace.join('\n')}`);
       await onHost('rm', '-rf', gone);
       from = await viewWindow('c102-from');
-      await foldersSettled(from, HOST_B, [gone, second, first], scope);
+      await foldersSettled(
+        from,
+        HOST_B,
+        [gone, second, first],
+        scope,
+        `the history of the row's folders after each visit was ${trace.join(' then ')}`,
+      );
 
       let before = activations('c102-c1');
       await rowAction(from, VIEW, 'c102-c1', IN_NEW);
@@ -378,17 +481,6 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
       ['l', 'getActiveSshRemote'],
       ['m', 'openRemoteSshTarget'],
     ] as const;
-    const storage = path.join(
-      variable('HARNESS_USER_DATA'),
-      'User/globalStorage/remote-oss.remote-ssh',
-    );
-    function filesOf(): string[] {
-      try {
-        return readdirSync(storage, {recursive: true}).map(String).sort();
-      } catch {
-        return [];
-      }
-    }
     const keybindingsFile = path.join(
       variable('HARNESS_USER_DATA'),
       'User/keybindings.json',
@@ -415,13 +507,7 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
     );
     try {
       await connectedTo(remote, HOST_B);
-      // The connection of the SSH window writes to the log for a while after it is connected, and longer on a slow runner.
-      let lines = -1;
-      for (let attempt = 0; attempt < 20 && lines !== connectionLog().length;) {
-        lines = connectionLog().length;
-        attempt += 1;
-        await new Promise(resolve => setTimeout(resolve, 3_000));
-      }
+      await logSettled();
       const before = stateOf();
       const historyBefore = await historyOf();
       const toasts: unknown[] = [];
@@ -442,5 +528,88 @@ describe('the recent folders under a host (card coverage-102, part 1)', function
       restore();
       await closeIfOpen(remote);
     }
+  });
+
+  it('F-2503 AC-26 (view): Refresh on the view changes no setting, keybinding, file or log line, Remove from Recent List adds only the window’s own history file, holding a removed event of the entry, and getActiveSshRemote after it changes nothing more', async () => {
+    const entry = `${HOME}/c102-v1`;
+    const scope = `${HOME}/c102-v`;
+    await visit(HOST_B, 'c102-v1');
+    await refreshed();
+    await foldersSettled('local', HOST_B, [entry], scope);
+    await logSettled();
+    const before = {
+      untouched: untouched(),
+      files: filesOf(),
+      history: historyTexts(),
+    };
+    await titleAction('local', VIEW, 'Refresh');
+    await foldersSettled('local', HOST_B, [entry], scope);
+    const refresh = {
+      untouched: untouched(),
+      files: filesOf(),
+      history: historyTexts(),
+    };
+    await rowMenuAction('local', VIEW, 'c102-v1', REMOVE);
+    await foldersSettled('local', HOST_B, [], scope);
+    const removal = {
+      untouched: untouched(),
+      files: filesOf(),
+      history: historyTexts(),
+    };
+    const answer = await callCommand(
+      'local',
+      'remote-internal.getActiveSshRemote',
+      ENVELOPE,
+    );
+    const changed = [...removal.history]
+      .filter(([name, text]) => refresh.history.get(name) !== text)
+      .map(([name, text]) => ({
+        name: name.replace(/^[0-9a-f-]+(?=\.json$)/u, '<session>'),
+        removed: (
+          JSON.parse(text) as {events: Array<Record<string, unknown>>}
+        ).events.some(
+          event =>
+            event.host === HOST_B &&
+            event.kind === 'removed' &&
+            (event.entry as {path?: string}).path === entry,
+        ),
+      }));
+    // At most the history folder and the one file of this window's session: any other name is told as it is.
+    const added = removal.files.filter(file => !refresh.files.includes(file));
+    const strange = added.filter(
+      file =>
+        file !== 'folder-history' &&
+        !/^folder-history\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\.json$/u.test(
+          file,
+        ),
+    );
+    deepStrictEqual(
+      {
+        refresh,
+        changed,
+        strange,
+        gone: refresh.files.filter(file => !removal.files.includes(file)),
+        moreUntouched: removal.untouched,
+        later: {
+          rejection: answer.rejection,
+          untouched: untouched(),
+          files: filesOf(),
+          history: historyTexts(),
+        },
+      },
+      {
+        refresh: before,
+        changed: [{name: '<session>.json', removed: true}],
+        strange: [],
+        gone: [],
+        moreUntouched: before.untouched,
+        later: {
+          rejection: undefined,
+          untouched: before.untouched,
+          files: removal.files,
+          history: removal.history,
+        },
+      },
+    );
   });
 });

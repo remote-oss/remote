@@ -424,6 +424,36 @@ describe('identifier-sources', () => {
       );
     });
 
+    it('reads a pseudoLocalized flag of true and false back', () => {
+      deepStrictEqual(
+        [
+          declaredOf({
+            source: 'x#1',
+            standsDownFor: 'r',
+            pseudoLocalized: true,
+          }).pseudoLocalized,
+          declaredOf({
+            source: 'x#1',
+            standsDownFor: 'r',
+            pseudoLocalized: false,
+          }).pseudoLocalized,
+        ],
+        [true, false],
+      );
+    });
+
+    it('fails on a pseudoLocalized that is not a boolean', () => {
+      throws(
+        () =>
+          declaredOf({
+            source: 'x#1',
+            standsDownFor: 'r',
+            pseudoLocalized: 'yes',
+          }),
+        {message: 'declared.pseudoLocalized must be a boolean'},
+      );
+    });
+
     it('fails on an unknown field of an entry', () => {
       throws(
         () =>
@@ -547,17 +577,19 @@ describe('identifier-sources', () => {
       });
     });
 
-    it('asks identifiers of an extension with src/, not of one without or of a library', () => {
+    it('asks identifiers of an extension with src/, not of one without, of a library or of a service', () => {
       workspace.write('packages/with/src/extension.ts', '');
       workspace.writeManifest('without');
       workspace.write('packages/lib-x/src/channel.ts', '');
+      workspace.write('packages/tunnel-relay/src/main.ts', '');
       deepStrictEqual(
         [
           needsIdentifiers(path.join(workspace.root, 'packages/with')),
           needsIdentifiers(path.join(workspace.root, 'packages/without')),
           needsIdentifiers(path.join(workspace.root, 'packages/lib-x')),
+          needsIdentifiers(path.join(workspace.root, 'packages/tunnel-relay')),
         ],
-        [true, false, false],
+        [true, false, false, false],
       );
     });
   });

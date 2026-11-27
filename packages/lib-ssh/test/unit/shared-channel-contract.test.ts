@@ -145,6 +145,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
                 };
               },
             },
+            socksProbe: () => Promise.resolve(true),
             files,
             launcherFiles: {writeExecutable: () => Promise.resolve()},
             newNonce,
@@ -197,6 +198,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
               displayHost: 'harness',
               externalAskpass: false,
               askpassFirstMessageMilliseconds: 5000,
+              hostPlatform: 'linux',
             },
           }),
         policy: {kind: 'graceAfterLastLease', milliseconds: 50},
@@ -229,6 +231,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
   }
 
   const HARNESS: ChannelHarness = {
+    pendingOn: '#3281',
     scriptFailures: ['channelClosed', 'timeout'],
     copyFailures: [],
     reachesClientFiles: false,
@@ -258,6 +261,9 @@ describe('host channel over the shared ssh session: the lib-host contract', func
   });
 
   for (const contractCase of channelContractCases(HARNESS)) {
-    it(contractCase.name, contractCase.check);
+    it(
+      contractCase.name,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 });

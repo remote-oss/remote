@@ -15,15 +15,74 @@ import {
   devContainerFolder,
   devContainersOf,
   reopenInContainer,
+  containersLog,
+  containersLogSince,
   reopenStarted,
   variable,
+  withLogTail,
 } from '../windows/harness.ts';
+import {dialogOf} from '../windows/renderer.ts';
+import {buildFailedText} from './build-failure.ts';
+
+/** The error of a build that ended in a dialog before its window connected. */
+class BuildFailedError extends Error {}
+import {
+  brokerUrlOf,
+  secondBuildText,
+  corruptArchiveLines,
+  corruptArchiveName,
+  failingDownload,
+  probeArchive,
+  probeText,
+} from '../windows/corrupt-archive.ts';
 import {runTemplatesReady} from '../windows/run-templates.ts';
 
 const execFileAsync = promisify(execFile);
 
 /** How long a build with Features may take, in milliseconds. */
 const BUILD_MILLISECONDS = 600_000;
+
+/** How often a build's wait looks for the dialog of a failed build, in milliseconds. */
+const DIALOG_LOOK_MILLISECONDS = 10_000;
+
+/**
+ * Waits for `window` to connect to its container, for up to `milliseconds`, and fails at once, with the dialog's text and
+ * the build's last error lines, when the build ends in a dialog first: a failed build otherwise leaves the row waiting
+ * out the whole connect timeout, its cause only in the log's tail (card #3267).
+ */
+async function connectedUnlessBuildFailed(
+  window: string,
+  milliseconds: number,
+): Promise<void> {
+  const mark = containersLog().length;
+  const deadline = Date.now() + milliseconds;
+  for (;;) {
+    try {
+      await connectedToContainer(
+        window,
+        Math.min(DIALOG_LOOK_MILLISECONDS, Math.max(deadline - Date.now(), 1)),
+      );
+      return;
+    } catch (caught) {
+      const dialog = await dialogOf(window).catch(() => undefined);
+      if (dialog !== undefined) {
+        throw new BuildFailedError(
+          buildFailedText(window, dialog, containersLogSince(mark)),
+          {cause: caught},
+        );
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          withLogTail(
+            `window ${window} did not connect to its container within ${String(milliseconds)} ms`,
+            containersLogSince(mark),
+          ),
+          {cause: caught},
+        );
+      }
+    }
+  }
+}
 
 /** The id of one of the run's own Features, as the registry the CLI pulls from names it. */
 export function runFeature(feature: string): string {
@@ -80,32 +139,106 @@ export function featureBuilds(): {
     prepare?: (folder: string) => void,
     reloaded?: () => void,
   ) => Promise<Built>;
+  buildAgainOnCorruptArchive: (
+    name: string,
+    configuration: Readonly<Record<string, unknown>>,
+    prepare?: (folder: string) => void,
+  ) => Promise<Built & {mark: number}>;
   closeNow: (window: string) => Promise<void>;
   reopen: (built: Built, removeContainer: boolean) => Promise<Built>;
 } {
   const opened: string[] = [];
   const folders: string[] = [];
+  // Behind the window of a build that ended in a dialog there is a build that has ended and an agent that takes no
+  // command, so a close would only time out (120 s): the window is left to the end of the run, as a corrupt archive's is.
+  const abandoned = new Set<string>();
   afterEach(async () => {
     for (const window of opened.splice(0)) {
-      await closeWindow(window);
+      if (!abandoned.has(window)) {
+        await closeWindow(window);
+      }
     }
     for (const folder of folders.splice(0)) {
       await removeContainers(folder);
     }
   });
+  async function build(
+    name: string,
+    configuration: Readonly<Record<string, unknown>>,
+    prepare?: (folder: string) => void,
+    reloaded?: () => void,
+  ): Promise<Built> {
+    await runTemplatesReady();
+    const folder = devContainerFolder(name, configuration);
+    folders.push(folder);
+    prepare?.(folder);
+    const window = await openFolderWindow(folder);
+    opened.push(window);
+    await reopenStarted(window);
+    reloaded?.();
+    try {
+      await connectedUnlessBuildFailed(window, BUILD_MILLISECONDS);
+    } catch (caught) {
+      if (caught instanceof BuildFailedError) {
+        abandoned.add(window);
+      }
+      throw caught;
+    }
+    const [containerId = ''] = await devContainersOf(folder);
+    return {window, folder, containerId};
+  }
   return {
-    build: async (name, configuration, prepare, reloaded) => {
-      await runTemplatesReady();
-      const folder = devContainerFolder(name, configuration);
-      folders.push(folder);
-      prepare?.(folder);
-      const window = await openFolderWindow(folder);
-      opened.push(window);
-      await reopenStarted(window);
-      reloaded?.();
-      await connectedToContainer(window, BUILD_MILLISECONDS);
-      const [containerId = ''] = await devContainersOf(folder);
-      return {window, folder, containerId};
+    build,
+    buildAgainOnCorruptArchive: async (name, configuration, prepare) => {
+      const firstMark = containersLog().length;
+      try {
+        return {
+          ...(await build(name, configuration, prepare)),
+          mark: firstMark,
+        };
+      } catch (first) {
+        const reasons = corruptArchiveLines(containersLogSince(firstMark));
+        if (reasons.length === 0) {
+          throw first;
+        }
+        // Behind the window of the failed build there is a build that has ended and an agent that takes no command, so
+        // a close would only time out: the window is left to the end of the run, and its containers are removed now.
+        const abandonedWindow = opened.pop();
+        const abandoned = folders.pop();
+        if (abandoned !== undefined) {
+          await removeContainers(abandoned);
+        }
+        console.log(
+          `${name}: the first build's download came back corrupt, so it is built once more (its window ${String(abandonedWindow)} stays open to the end of the run): ${reasons.join(' | ')}`,
+        );
+        const secondMark = containersLog().length;
+        try {
+          return {
+            ...(await build(`${name}-again`, configuration, prepare)),
+            mark: secondMark,
+          };
+        } catch (second) {
+          const again = corruptArchiveLines(containersLogSince(secondMark));
+          const download = failingDownload(containersLogSince(firstMark));
+          const broker =
+            download === undefined ? undefined : brokerUrlOf(download);
+          const fromHere =
+            broker === undefined
+              ? ''
+              : ` Probe of the broker address: ${probeText(await probeArchive(broker))}.`;
+          throw new Error(
+            `${secondBuildText({
+              firstName: corruptArchiveName(containersLogSince(firstMark)),
+              featureRow: name,
+              first: reasons,
+              second: again,
+              secondMessage:
+                second instanceof Error ? second.message : String(second),
+            })}${fromHere}`,
+            {cause: second},
+          );
+        }
+      }
     },
     closeNow: async window => {
       opened.splice(opened.indexOf(window), 1);
@@ -124,6 +257,20 @@ export function featureBuilds(): {
       return {window, folder: built.folder, containerId};
     },
   };
+}
+
+/** The text of `file` in container `containerId`. */
+export async function textInContainer(
+  containerId: string,
+  file: string,
+): Promise<string> {
+  const {stdout} = await execFileAsync('docker', [
+    'exec',
+    containerId,
+    'cat',
+    file,
+  ]);
+  return stdout;
 }
 
 /** The environment a Feature recorded in the container, by variable. */

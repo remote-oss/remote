@@ -1,10 +1,8 @@
 import {deepStrictEqual} from 'node:assert';
 import type {LastResolve} from 'lib-authority';
-import {
-  FOLDER_HISTORY_KEY,
-  type HistoryMemento,
-  storedHistory,
-} from '../../src/companion/folder-history.ts';
+import type {HistoryStore} from '../../src/companion/folder-history.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
+import {windowOn} from './history-files.fixture.ts';
 import {
   entryOfWindow,
   recordOnFirstResolve,
@@ -26,19 +24,25 @@ function windowOf(
   return {workspaceFile: () => file, workspaceFolders: () => folders};
 }
 
-/** A memento keeping a JSON copy. */
-function memento(): HistoryMemento {
-  let stored: string | undefined;
-  return {
-    get: key =>
-      key === FOLDER_HISTORY_KEY && stored !== undefined
-        ? (JSON.parse(stored) as unknown)
-        : undefined,
-    update: (key, value) => {
-      stored = JSON.stringify(value);
-      return Promise.resolve();
+/** A window's store over files in memory. */
+function storeOf(): HistoryStore {
+  return windowOn(new MemoryFiles(), 'aaaa');
+}
+
+/** A store that counts the records it was asked for, and fails each when `failure` is given. */
+function counting(failure?: Error): HistoryStore & {records: number} {
+  const store = {
+    records: 0,
+    stored: () => [],
+    recordOpened: () => {
+      store.records += 1;
+      return failure === undefined
+        ? Promise.resolve()
+        : Promise.reject(failure);
     },
+    removeOpened: () => Promise.resolve(false),
   };
+  return store;
 }
 
 /** A resolve handle whose first-resolve listener is called `times` times when `fire` runs. */
@@ -50,7 +54,6 @@ function resolveOf(lastResolve: LastResolve, times = 1) {
         listeners.push(listener);
       },
       // The rows never start a resolve, so the start listener never runs.
-      onFirstResolveStarted: () => undefined,
       lastResolve: () => lastResolve,
     },
     fire: () => {
@@ -70,12 +73,12 @@ function settled(): Promise<void> {
 
 describe('the history recorder (card ssh-provider-02)', () => {
   it('F-2503 BR-2, AC-3: a single remote folder is recorded for its host once the first resolve succeeded', async () => {
-    const store = memento();
+    const store = storeOf();
     const resolve = resolveOf('succeeded');
     recordOnFirstResolve(resolve.handle, windowOf([uri('/home/u/f1')]), store);
     resolve.fire();
     await settled();
-    deepStrictEqual(storedHistory(store), [
+    deepStrictEqual(store.stored(), [
       {hostKey: 'host-a', entries: [{path: '/home/u/f1', kind: 'folder'}]},
     ]);
   });
@@ -120,60 +123,38 @@ describe('the history recorder (card ssh-provider-02)', () => {
   });
 
   it('F-2503 AC-28: a first resolve that failed records nothing', async () => {
-    const store = memento();
+    const store = storeOf();
     const resolve = resolveOf('failed');
     recordOnFirstResolve(resolve.handle, windowOf([uri('/home/u/f1')]), store);
     resolve.fire();
     await settled();
-    deepStrictEqual(storedHistory(store), []);
+    deepStrictEqual(store.stored(), []);
   });
 
   it('F-2503 BR-2: a window with nothing to record records nothing when the resolve succeeded', async () => {
-    const store = memento();
+    const store = storeOf();
     const resolve = resolveOf('succeeded');
     recordOnFirstResolve(resolve.handle, windowOf([]), store);
     resolve.fire();
     await settled();
-    deepStrictEqual(storedHistory(store), []);
+    deepStrictEqual(store.stored(), []);
   });
 
   it('F-2503 BR-2: a listener that fires twice records once', async () => {
-    let writes = 0;
-    const counting: HistoryMemento = {
-      get: () => undefined,
-      update: () => {
-        writes += 1;
-        return Promise.resolve();
-      },
-    };
+    const store = counting();
     const resolve = resolveOf('succeeded', 2);
-    recordOnFirstResolve(
-      resolve.handle,
-      windowOf([uri('/home/u/f1')]),
-      counting,
-    );
+    recordOnFirstResolve(resolve.handle, windowOf([uri('/home/u/f1')]), store);
     resolve.fire();
     await settled();
-    deepStrictEqual(writes, 1);
+    deepStrictEqual(store.records, 1);
   });
 
   it('F-3906 rule 5: a write that fails is attempted once and dropped, with no throw', async () => {
-    let attempts = 0;
-    const failing: HistoryMemento = {
-      get: () => undefined,
-      update: () => {
-        attempts += 1;
-        return Promise.reject(new Error('disk full'));
-      },
-    };
+    const store = counting(new Error('disk full'));
     const resolve = resolveOf('succeeded');
-    recordOnFirstResolve(
-      resolve.handle,
-      windowOf([uri('/home/u/f1')]),
-      failing,
-    );
+    recordOnFirstResolve(resolve.handle, windowOf([uri('/home/u/f1')]), store);
     resolve.fire();
     await settled();
-    deepStrictEqual(attempts, 1);
+    deepStrictEqual(store.records, 1);
   });
 });

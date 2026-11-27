@@ -1,5 +1,14 @@
 import {deepStrictEqual} from 'node:assert';
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {nodeClientFiles, sha256Of} from '../../src/index.ts';
@@ -93,6 +102,96 @@ describe('the client files on Node.js (V4)', () => {
         outcome.kind === 'failed' ? outcome.detail.includes('ENOENT') : outcome,
         true,
       );
+    });
+  });
+
+  it('F-2406 BR-7: stage copies the archive into a vsc_server_ folder of its own with a nine-byte marker, and leaves the source', async () => {
+    await inFolder(async folder => {
+      const source = path.join(folder, 'mine.tar.gz');
+      writeFileSync(source, 'archive bytes');
+      const staged = await nodeClientFiles.stage(source, folder);
+      if (staged.kind !== 'staged') {
+        throw new Error(`not staged: ${staged.detail}`);
+      }
+      deepStrictEqual(
+        {
+          folder: /^vsc_server_[0-9a-f-]{36}$/.test(
+            path.basename(path.dirname(staged.archive)),
+          ),
+          name: path.basename(staged.archive),
+          copy: readFileSync(staged.archive, 'utf8'),
+          marker: readFileSync(`${staged.archive}.done`, 'utf8'),
+          source: readFileSync(source, 'utf8'),
+        },
+        {
+          folder: true,
+          name: 'vscode-server.tar.gz',
+          copy: 'archive bytes',
+          marker: 'complete\n',
+          source: 'archive bytes',
+        },
+      );
+    });
+  });
+
+  it("F-2406 7.E2: stage of a file it cannot read fails with the file system's text", async () => {
+    await inFolder(async folder => {
+      const staged = await nodeClientFiles.stage(
+        path.join(folder, 'absent.tar.gz'),
+        folder,
+      );
+      deepStrictEqual(
+        staged.kind === 'failed' && staged.detail.includes('ENOENT'),
+        true,
+      );
+    });
+  });
+
+  it('F-2406 BR-4 (card #2949): anything at a path is an entry, a file, a folder or a link to a file, and a missing path is none', async () => {
+    await inFolder(async folder => {
+      const file = path.join(folder, 'archive');
+      const link = path.join(folder, 'link');
+      writeFileSync(file, 'x');
+      symlinkSync(file, link);
+      deepStrictEqual(
+        [
+          await nodeClientFiles.entryExists(file),
+          await nodeClientFiles.entryExists(folder),
+          await nodeClientFiles.entryExists(link),
+          await nodeClientFiles.entryExists(path.join(folder, 'missing')),
+        ],
+        [true, true, true, false],
+      );
+    });
+  });
+
+  it('F-2406 BR-4, 7.E3 (card #2949): stage of a folder gives an empty archive with its nine-byte marker', async () => {
+    await inFolder(async folder => {
+      const source = path.join(folder, 'vscode-server.tar.gz');
+      mkdirSync(source);
+      const staged = await nodeClientFiles.stage(source, folder);
+      if (staged.kind !== 'staged') {
+        throw new Error(`not staged: ${staged.detail}`);
+      }
+      deepStrictEqual(
+        {
+          size: statSync(staged.archive).size,
+          marker: statSync(`${staged.archive}.done`).size,
+        },
+        {size: 0, marker: 9},
+      );
+    });
+  });
+
+  it('F-2406 BR-4 (card #2949): stage of a named pipe gives an empty archive at once, without reading the pipe', async () => {
+    await inFolder(async folder => {
+      const source = path.join(folder, 'vscode-server.tar.gz');
+      spawnSync('mkfifo', [source]);
+      const staged = await nodeClientFiles.stage(source, folder);
+      if (staged.kind !== 'staged') {
+        throw new Error(`not staged: ${staged.detail}`);
+      }
+      deepStrictEqual(statSync(staged.archive).size, 0);
     });
   });
 });

@@ -94,7 +94,7 @@
       "lifecycle-more.test.ts": 1.7,
       "lifecycle-order.test.ts": 2.6,
       "mount-settings.test.ts": 1.5,
-      "multi-root.test.ts": 3.3,
+      "multi-root.test.ts": 12.2,
       "open-folder-dialog.test.ts": 0.1,
       "open-folder-failure.test.ts": 1.2,
       "open-folder-virtual.test.ts": 1.5,
@@ -287,17 +287,28 @@
     "explorer-trust-pickers": {"position.test.ts": 0.1},
     "extensionpack": {
       "cli.test.ts": 0,
+      "manage.test.ts": 0.1,
       "page.test.ts": 0.3,
       "smoke.test.ts": 0,
-      "states.test.ts": 0.1
+      "states.test.ts": 0.1,
+      "uninstall.test.ts": 0.2
     },
     "extensionpack-german": {"locale.test.ts": 0.1},
     "extensionpack-lp-de": {"language.test.ts": 0.1},
     "extensionpack-lp-hu": {"language.test.ts": 0.1},
+    "failure-download-offline": 0.2,
     "failure-i686": 0.2,
+    "failure-install-path-file": 0.2,
+    "failure-install-path-invalid": 0.2,
+    "failure-install-path-nocreate": 0.2,
+    "failure-install-path-readonly": 0.2,
+    "failure-install-path-root": 0.2,
+    "failure-manual-bootstrap": 0.2,
     "failure-nowhere": 0.2,
     "failure-platform-escape": 0.2,
     "failure-port-range-busy": 0.2,
+    "failure-proxy-invalid": 0.2,
+    "failure-proxy-refused": 0.2,
     "failure-readonly": 0.2,
     "failure-refused": 0.2,
     "failure-refused-shown": 0.2,
@@ -328,6 +339,8 @@
     "install-local-404-nocors": 0.2,
     "install-local-allow-false": 0.1,
     "install-local-always": 0.3,
+    "install-local-copy-fails": 0.3,
+    "install-local-exec-cli": 0.3,
     "install-local-auto-online": 0.3,
     "install-local-fallback": 0.3,
     "install-local-junk": 0.2,
@@ -357,7 +370,6 @@
     },
     "no-proposals": {"commands.test.ts": 0.1},
     "passphrase-input": {
-      "host-key-pick.test.ts": 1.1,
       "passphrase.test.ts": 3.7
     },
     "passphrase-late": 0.1,
@@ -417,21 +429,27 @@
     "ssh-askpass": {"failures.test.ts": 2.1, "login.test.ts": 9.4},
     "ssh-containers": {"configure-features.test.ts": 0.5},
     "ssh-core": {
+      "reconnect-loop.test.ts": 23,
+      "command-out-of-context.test.ts": 4.1,
+      "command-catalogue.test.ts": 2.6,
       "activation.test.ts": 0.9,
       "agent-forwarding-live.test.ts": 1.4,
       "agent-forwarding.test.ts": 5.6,
       "agent-setting.test.ts": 0,
       "agent-terminals.test.ts": 0.9,
+      "bootstrap-mode.test.ts": 1.4,
       "code-cli.test.ts": 0.5,
       "code-files.test.ts": 0.6,
       "connection-logs.test.ts": 0.4,
-      "current-window.test.ts": 2,
+      "current-window.test.ts": 2.6,
       "debug-tasks.test.ts": 0.1,
       "download-hints.test.ts": 0.3,
       "download-stalls.test.ts": 1.5,
       "exec-server.test.ts": 0.2,
       "forwarding-disabled.test.ts": 3.6,
       "kill-unsaved.test.ts": 0.6,
+      "lock-settings-log.test.ts": 1,
+      "open-entry-points.test.ts": 10.6,
       "pty.test.ts": 14.4,
       "remote-settings.test.ts": 0.7,
       "server-lifetime-long.test.ts": 5.4,
@@ -441,16 +459,49 @@
       "silent-flows.test.ts": 0.7,
       "terminal-lists.test.ts": 0.9,
       "terminal.test.ts": 0.3,
+      "install-hints.test.ts": 1,
+      "troubleshooting-mitigations.test.ts": 1,
       "troubleshooting.test.ts": 0.9,
       "tunnel-ranges.test.ts": 2.4,
       "tunnel-reconnect.test.ts": 1.5,
       "tunnel-refusals.test.ts": 6.8,
       "unparsable.test.ts": 0.1,
-      "x11.test.ts": 10.2
+      "x11.test.ts": 10.2,
+      "help-commands.test.ts": 1.1,
+      "host-key.test.ts": 1
     },
-    "ssh-newclient": 1.6,
+    "ssh-killed-12": {
+      "killed.test.ts": 6.4
+    },
+    "ssh-killed-13": {
+      "killed.test.ts": 9.2
+    },
+    "ssh-killed-14": {
+      "killed.test.ts": 5.5
+    },
+    "ssh-locks": {
+      "host-locks.test.ts": 12,
+      "session-locks.test.ts": 7
+    },
+    "ssh-downloaders": {
+      "manual-bootstrap.test.ts": 7,
+      "no-downloader.test.ts": 6
+    },
+    "ssh-newclient": {
+      "jump-hosts-new-wording.test.ts": 0.7,
+      "newer-keywords.test.ts": 1.6
+    },
+    "ssh-newclient-pickers": {
+      "jump-hosts-focus.test.ts": 0.4,
+      "maintenance-host-key.test.ts": 1.1
+    },
     "terminal": 0.3,
-    "terminal-login": {"chat-absence.test.ts": 0.7, "login.test.ts": 3.4},
+    "terminal-login": {
+      "chat-absence.test.ts": 0.7,
+      "login.test.ts": 3.4,
+      "preconnect-skip.test.ts": 1,
+      "progress-details.test.ts": 1.5
+    },
     "terminal-odd": {"ask.test.ts": 0.3},
     "terminal-pick": {
       "platform-pick.test.ts": 0.1,
@@ -458,7 +509,9 @@
     },
     "trust": {
       "agent-link.test.ts": 1.9,
+      "current-window-restricted.test.ts": 1.3,
       "new-window.test.ts": 0.2,
+      "preconnect-restricted.test.ts": 0.3,
       "restricted-activation.test.ts": 0.3,
       "restricted.test.ts": 0.2,
       "trust.test.ts": 0.4
@@ -477,6 +530,7 @@
       "forward-port.test.ts": 0.1,
       "fresh-window.test.ts": 0.1,
       "harness.test.ts": 0,
+      "helper-linger.test.ts": 4.3,
       "kill-current.test.ts": 1,
       "kill.test.ts": 3.7,
       "local-server-share.test.ts": 0.3,
@@ -485,12 +539,12 @@
       "platform-mute.test.ts": 0.5,
       "platform-pick.test.ts": 4.4,
       "platform-reuse.test.ts": 0.3,
-      "progress.test.ts": 0.4,
+      "progress.test.ts": 0.8,
       "proxy-check.test.ts": 0.9,
       "remote-log.test.ts": 0.4,
       "renderer.test.ts": 0,
       "resolve-log.test.ts": 0.8,
-      "server-cleanup.test.ts": 0.5,
+      "server-cleanup.test.ts": 1.6,
       "socket-mode.test.ts": 0.8,
       "socket-more.test.ts": 5.8,
       "socket-platform.test.ts": 0.5,

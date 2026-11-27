@@ -16,6 +16,7 @@ import {
   FOLDER,
   containerReadsFail,
   inputOf,
+  preparedAroundRegister,
   leaveRebuildIntent,
   PAYLOAD,
   READY,
@@ -25,10 +26,10 @@ import {
   type Scene,
 } from './connector.fixture.ts';
 import {noEngineProgramOf} from '../../src/connect/connector.ts';
-import {REBUILD_INTENTS_KEY} from '../../src/open/rebuild-intent.ts';
 import type {CliEvent} from '../../src/cli/cli-lines.ts';
 import type {RelayKind} from '../../src/relays/relay-host.ts';
 import {storePausedRetry} from '../../src/state/paused-retry.ts';
+import {handoffFolderOf} from './handoff-kinds.fixture.ts';
 
 function tick(): Promise<unknown> {
   return new Promise(resolve => setImmediate(resolve));
@@ -531,12 +532,12 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(
       [
         scene.prepared[0]?.rebuild,
-        scene.intentStore,
+        scene.files.names(handoffFolderOf('rebuild-intent')),
         messages(scene).includes(
           'the window asked for a rebuild (no cache: true)',
         ),
       ],
-      [{buildNoCache: true}, {}, true],
+      [{buildNoCache: true}, [], true],
     );
   });
 
@@ -548,8 +549,11 @@ describe('the container connector: the connect (card containers-08)', () => {
     scene.version = {status: 0, stderr: ''};
     await scene.connector.connect(inputOf(PAYLOAD, {attempt: 2}));
     deepStrictEqual(
-      [scene.intentStore, scene.prepared.map(request => request.rebuild)],
-      [{}, [undefined]],
+      [
+        scene.files.names(handoffFolderOf('rebuild-intent')),
+        scene.prepared.map(request => request.rebuild),
+      ],
+      [[], [undefined]],
     );
   });
 
@@ -560,10 +564,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     deepStrictEqual(
       [
         scene.prepared[0]?.rebuild,
-        REBUILD_INTENTS_KEY in {[REBUILD_INTENTS_KEY]: 1},
-        Object.keys(scene.intentStore as object).length,
+        scene.files.names(handoffFolderOf('rebuild-intent')).length,
       ],
-      [undefined, true, 1],
+      [undefined, 1],
     );
   });
 
@@ -605,9 +608,9 @@ describe('the container connector: the connect (card containers-08)', () => {
   /** The memento of a scene, as the connector's store. */
   function mementoOf(scene: Scene) {
     return {
-      get: () => scene.intentStore,
+      get: () => scene.retryStore,
       update: (key: string, value: unknown) => {
-        scene.intentStore = value;
+        scene.retryStore = value;
         return Promise.resolve();
       },
     };
@@ -638,9 +641,9 @@ describe('the container connector: the connect (card containers-08)', () => {
     const scene = sceneOf();
     await connected(scene);
     const retry = scene.prepared[0]?.pausedRetry;
-    scene.intentError = new Error('store gone');
+    scene.retryError = new Error('store gone');
     const broken = await retry?.('a'.repeat(64));
-    scene.intentError = 'quota' as unknown as Error;
+    scene.retryError = 'quota' as unknown as Error;
     const refused = await retry?.('a'.repeat(64));
     deepStrictEqual(
       [
@@ -1537,7 +1540,7 @@ describe('the container connector: the connect (card containers-08)', () => {
       'container c1c1c1c1c1c1 was newly started',
       'no extensions to install',
       'the environment probe (loginInteractiveShell) took 25 ms and gave 2 variables',
-      'Resolving Remote: 100 ms',
+      'Resolving Remote: 75 ms',
     ]);
   });
 
@@ -1556,7 +1559,7 @@ describe('the container connector: the connect (card containers-08)', () => {
     }
     deepStrictEqual(phaseLines(scene), [
       'Resolving Remote',
-      'Resolving Remote: 100 ms',
+      'Resolving Remote: 75 ms',
       'Reconnection attempt 1',
       'Reconnection attempt 1: 25 ms',
       'Reconnection attempt 2',
@@ -1581,7 +1584,7 @@ describe('the container connector: the connect (card containers-08)', () => {
           'Reconnection attempt 1',
           'Reconnection attempt 1: 25 ms',
           'Resolving Remote',
-          'Resolving Remote: 100 ms',
+          'Resolving Remote: 75 ms',
         ],
         ['Reconnection attempt 1', 'Reconnection attempt 1: 25 ms'],
       ],
@@ -2923,6 +2926,12 @@ describe('the container connector: the remote environment (card containers-45)',
       scene.probeScripts.map(script => script.includes(' -i -c ')),
       [true],
     );
+  });
+});
+
+describe('the container connector: the shutdown register before the lookup (card #2645)', () => {
+  it('F-0417 BR-5: a folder looks its container up only once the helper has answered its register', async () => {
+    deepStrictEqual(await preparedAroundRegister(sceneOf(), PAYLOAD), [0, 1]);
   });
 });
 

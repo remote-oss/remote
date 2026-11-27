@@ -8,6 +8,10 @@
       "types": "./.tsc/src/index.d.ts",
       "default": "./src/index.ts"
     },
+    "./testing/idle-leader": {
+      "types": "./.tsc/src/testing/idle-leader.d.ts",
+      "default": "./src/testing/idle-leader.ts"
+    },
     "./testing/recording-terminal": {
       "types": "./.tsc/src/testing/recording-terminal.d.ts",
       "default": "./src/testing/recording-terminal.ts"

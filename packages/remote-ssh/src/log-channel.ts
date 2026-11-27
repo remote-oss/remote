@@ -30,6 +30,8 @@ export interface LogChannel {
   reveal(preserveFocus?: boolean): void;
   /** How many lines the channel has been given so far. */
   mark(): number;
+  /** Writes the editor version, the extension and the platform, once per window; a second call writes nothing. */
+  writeWindowStart(): void;
   /** The lines the channel was given from the `from`-th on (from the first by default), one to a line. */
   text(from?: number): string;
   dispose(): void;
@@ -84,16 +86,27 @@ export function openLogChannel(
     },
     {minimumLevel: readLevel, clock},
   );
+  let windowStarted = false;
   logger.info(`Log level: ${readLevel()}`);
-  logger.info(`Editor version: ${environment.editorVersion}`);
-  logger.info(`${environment.extensionName} ${environment.extensionVersion}`);
-  logger.info(`Client: ${environment.platform} ${environment.architecture}`);
   return {
     logger,
     reveal: (preserveFocus = false) => {
       channel.show(preserveFocus);
     },
     mark: () => written.length,
+    writeWindowStart: () => {
+      if (windowStarted) {
+        return;
+      }
+      windowStarted = true;
+      logger.info(`Editor version: ${environment.editorVersion}`);
+      logger.info(
+        `${environment.extensionName} ${environment.extensionVersion}`,
+      );
+      logger.info(
+        `Client: ${environment.platform} ${environment.architecture}`,
+      );
+    },
     text: (from = 0) => written.slice(from).join('\n'),
     dispose: () => {
       channel.dispose();

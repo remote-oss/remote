@@ -52,6 +52,14 @@ export class LoginOwnership {
     this.finished = true;
   }
 
+  /** The login is to be made again, on a new session: the oldest live lease owns it, and none has given up. */
+  reopen(): void {
+    this.finished = false;
+    this.gaveUp.clear();
+    this.owner = undefined;
+    this.choose();
+  }
+
   private choose(): void {
     if (this.finished) {
       return;

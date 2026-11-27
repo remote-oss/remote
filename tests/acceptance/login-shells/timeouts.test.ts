@@ -5,7 +5,9 @@ import type {AppendedEntry} from '../../../tools/script-file.ts';
 import {
   appendScript,
   closeWindow,
+  connected,
   connectionLog,
+  editorProduct,
   emptyWindows,
   onHostAs,
   openWindow,
@@ -30,6 +32,12 @@ import {
 /** The dialog of a connect that timed out, as the window shows it. */
 const TIMED_OUT =
   'Could not establish connection to "harness-bash": Connecting with SSH timed out.';
+
+/**
+ * The harness-bash account spelt with its user: an authority of its own, as core counts authorities, that no connect that works uses,
+ * so the editor never holds a label of it and a failed connect shows the window as one that never connected.
+ */
+const NEVER_CONNECTED = 'harness-bash@harness-bash';
 
 /** The buttons of the failure dialog, in the order the editor lists them. */
 const BUTTONS = ['Close Remote', 'Retry', 'More Actions...'];
@@ -58,10 +66,32 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13, and the log names the cause', async () => {
+  it('F-2206 AC-28 (c1835-fish-probe): in the default mode with no platform stored, a fish host shows no platform pick and the connect fails with the timeout dialog once the connect timeout has passed', async () => {
+    await setting('remote.SSH.connectTimeout', 10);
+    await freshServer('harness-fish');
+    const failed = await failedOn('harness-fish', 'to-fish', 120_000);
+    deepStrictEqual(
+      [
+        recordLines('platformPick', 'to-fish'),
+        failed.dialog.question,
+        failed.dialog.buttons,
+        failed.dialog.sinceConnectStarted >= 10_000,
+      ],
+      [
+        [],
+        'Could not establish connection to "harness-fish": Connecting with SSH timed out.',
+        BUTTONS,
+        true,
+      ],
+    );
+  });
+
+  it('F-2704 AC-11 (ruling-1221-read): a .bash_profile that reads a line ends the connect within 5 s with the dialog of AC-13 (the criterion accepts it or the timeout dialog), the window does not connect, no server folder is created, and the log names the cause', async () => {
     const timeoutSeconds = 10;
+    const serverFolder = `/home/harness-bash/${editorProduct().serverDataFolderName}`;
     await setting('remote.SSH.connectTimeout', timeoutSeconds);
     await freshServer('harness-bash');
+    await onHostAs('harness-bash', 'rm', '-rf', serverFolder);
     await writeHomeFile('harness-bash', '.bash_profile', 'read answer\n');
     const mark = connectionLog().length;
     const failed = await failedOn('harness-bash', 'to-ac11-read', 60_000);
@@ -79,6 +109,15 @@ describe('login shells that do not finish or end early: the connect fails or wai
             'the SSH session ended before the host reported its platform',
           ),
         ),
+        connected: await connected('to-ac11-read'),
+        serverFolder: (
+          await onHostAs(
+            'harness-bash',
+            'sh',
+            '-c',
+            `if test -e '${serverFolder}'; then echo exists; else echo absent; fi`,
+          )
+        ).trim(),
       },
       {
         question: 'Could not establish connection to "harness-bash".',
@@ -86,6 +125,8 @@ describe('login shells that do not finish or end early: the connect fails or wai
         quick: true,
         beforeTimeout: true,
         logged: true,
+        connected: false,
+        serverFolder: 'absent',
       },
       `the dialog came ${String(failed.dialog.milliseconds)} ms after the window was asked for and ${String(failed.dialog.sinceConnectStarted)} ms after the connect started`,
     );
@@ -132,12 +173,19 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  /** Connects to a host whose .profile ends with exit 1, as window `window`, and gives the failure and what the window shows after it. */
-  async function exitedProfile(window: string) {
+  /**
+   * Connects to `authority`, whose .profile ends with exit 1, as window `window`, and gives the failure, and what the
+   * window shows after it once its indicator reads `indicator` when one is given.
+   */
+  async function exitedProfile(
+    window: string,
+    authority = 'harness-bash',
+    indicator?: string,
+  ) {
     await freshServer('harness-bash');
     await writeHomeFile('harness-bash', '.profile', 'exit 1\n');
     const mark = connectionLog().length;
-    const failed = await failedOn('harness-bash', window, 60_000);
+    const failed = await failedOn(authority, window, 60_000);
     return {
       failed,
       logged: logSince(mark).some(line =>
@@ -145,7 +193,10 @@ describe('login shells that do not finish or end early: the connect fails or wai
           'the SSH session ended before the host reported its platform',
         ),
       ),
-      face: await windowFace(window, 'Disconnected from SSH: harness-bash'),
+      face:
+        indicator === undefined
+          ? undefined
+          : await windowFace(window, indicator),
     };
   }
 
@@ -165,15 +216,19 @@ describe('login shells that do not finish or end early: the connect fails or wai
     );
   });
 
-  it('F-2704 AC-25 (ruling-1681-first-label): after the dialog of a .profile that ends with exit 1 the indicator reads Disconnected from SSH with the host, the title names the folder and the host, and the log says the session ended before the host reported its platform', async () => {
-    const {logged, face} = await exitedProfile('to-ac25');
+  it('F-2704 AC-25 (to-ac25): after the dialog of a .profile that ends with exit 1 the indicator reads Disconnected from SSH, the title names the folder with [SSH] alone, and the log says the session ended before the host reported its platform', async () => {
+    const {logged, face} = await exitedProfile(
+      'to-ac25',
+      NEVER_CONNECTED,
+      'Disconnected from SSH',
+    );
     deepStrictEqual(
       [logged, face],
       [
         true,
         {
-          title: '[to-ac25 [SSH: harness-bash]]',
-          indicator: 'Disconnected from SSH: harness-bash',
+          title: '[to-ac25 [SSH]]',
+          indicator: 'Disconnected from SSH',
           toasts: [],
         },
       ],
@@ -213,7 +268,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
     }
   });
 
-  it('F-2704 AC-23 (ruling-1681-first-label): Retry on the timeout dialog reloads the window, which reads Opening Remote... with the host in its title and the progress notification, and the same dialog comes again', async () => {
+  it('F-2704 AC-23 (to-ac23): Retry on the timeout dialog reloads the window, which reads Opening Remote... with the folder alone as its title and the progress notification, and the same dialog comes again', async () => {
     await setting('remote.SSH.connectTimeout', 10);
     await freshServer('harness-bash');
     await writeHomeFile('harness-bash', '.bash_profile', 'sleep 60\n');
@@ -227,7 +282,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
       },
       ...dismissals(window),
     ] satisfies AppendedEntry[]);
-    await openWindow('harness-bash', window);
+    await openWindow(NEVER_CONNECTED, window);
     await waitFor(
       'the dialog to come',
       () => recordLines('failureDialog', window).length >= 1,
@@ -244,7 +299,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
           return false;
         }
         return reloading.toasts.some(toast =>
-          toast.startsWith('Setting up SSH Host harness-bash'),
+          toast.startsWith('Setting up SSH Host '),
         );
       },
       9000,
@@ -263,7 +318,7 @@ describe('login shells that do not finish or end early: the connect fails or wai
           .map(line => [line.question, line.answer]),
       ],
       [
-        '[to-ac23 [SSH: harness-bash]]',
+        '[to-ac23]',
         'Opening Remote...',
         [
           [TIMED_OUT, 'Retry'],

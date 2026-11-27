@@ -11,6 +11,7 @@ import {
 } from '../../src/pipeline/connector.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
 import {
+  CLI_PLAN,
   endTunnel,
   INPUT,
   LINKED,
@@ -34,6 +35,9 @@ function connectorOptions(
     logger: options.logger,
     serve: options.serve,
     useExecServer: options.useExecServer,
+    manualBootstrap: false,
+    settingLines: options.settingLines,
+    writeWindowStart: options.writeWindowStart,
   };
 }
 
@@ -215,6 +219,128 @@ describe('the connector over the connect pipeline', () => {
     await connector.connect(HOST_INPUT);
     return heard;
   }
+
+  it('F-2502 5.0 step 3: a connect whose host reported tells the host-report listeners its target, and a removed listener hears nothing', async () => {
+    const {connector} = connectorFor();
+    const heard: unknown[] = [];
+    const removed: unknown[] = [];
+    connector.onHostReported(target => {
+      heard.push(target);
+    });
+    const stop = connector.onHostReported(target => {
+      removed.push(target);
+    });
+    stop();
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(
+      [heard, removed],
+      [
+        [
+          {
+            family: 'ssh-remote',
+            target: INPUT.target,
+            rawHostString: INPUT.rawHostString,
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  describe('F-2103 AC-4 (#3092): the window label is told with the plan, not with the host report', () => {
+    /** Connects with `changes` (given the connector, when a function), and gives the order in which the steps ran and the label was told. */
+    async function orderOf(
+      changes:
+        | Partial<ConnectSteps>
+        | ((given: SshConnector) => Partial<ConnectSteps>),
+      options: Partial<ConnectOptions> = {},
+    ): Promise<string[]> {
+      const order: string[] = [];
+      const {recording, options: base} = setup();
+      const connector: SshConnector = connectorOf({
+        stepsFor: () =>
+          steps(recording, {
+            start: () => {
+              order.push('server started');
+              return Promise.resolve(STARTED);
+            },
+            ...(typeof changes === 'function' ? changes(connector) : changes),
+          }),
+        terminalMode: () => false,
+        options: {...connectorOptions(base), ...options},
+        revealLog: () => undefined,
+        applyTerminalEnvironment: () => undefined,
+      });
+      connector.onHostReported(() => {
+        order.push('label told');
+      });
+      await connector.connect(HOST_INPUT);
+      return order;
+    }
+
+    /** The labels told by a connect whose window cancels it while its server start gives `outcome`. */
+    function toldWhenCancelledStart(
+      outcome: Awaited<ReturnType<ConnectSteps['start']>>,
+    ): Promise<string[]> {
+      return orderOf(given => ({
+        start: () => {
+          given.cancel();
+          return Promise.resolve(outcome);
+        },
+      }));
+    }
+
+    it('a connect whose plan installs the server directly tells the label after the server started, once the resolve succeeded', async () => {
+      deepStrictEqual(await orderOf({}), ['server started', 'label told']);
+    });
+
+    it('a connect whose plan is the CLI path tells the label as soon as the plan is made, before the server is ready', async () => {
+      deepStrictEqual(
+        await orderOf({
+          plan: () => ({plan: CLI_PLAN}),
+          gate: () => {
+            return Promise.resolve({kind: 'cancelled'});
+          },
+        }),
+        ['label told'],
+      );
+    });
+
+    it('a connect with the setting on and no CLI source, whose plan is a direct install, holds the label until it is connected', async () => {
+      deepStrictEqual(await orderOf({}, {useExecServer: true}), [
+        'server started',
+        'label told',
+      ]);
+    });
+
+    it('a direct install whose resolve fails after the host reported tells the label at the resolve’s end', async () => {
+      deepStrictEqual(await orderOf({openTunnel: tunnelFails}), [
+        'server started',
+        'label told',
+      ]);
+    });
+
+    it('a direct install cancelled by the window while its server start fails for another reason tells no label', async () => {
+      deepStrictEqual(
+        await toldWhenCancelledStart({
+          kind: 'failed',
+          failure: {kind: 'serverStart'},
+        }),
+        [],
+      );
+    });
+
+    it('a direct install whose connect a step ends as cancelled, with no abort, tells no label', async () => {
+      deepStrictEqual(
+        await orderOf({gate: () => Promise.resolve({kind: 'cancelled'})}),
+        [],
+      );
+    });
+
+    it('a direct install whose resolve is cancelled after the host reported tells no label', async () => {
+      deepStrictEqual(await toldWhenCancelledStart(STARTED), []);
+    });
+  });
 
   it('F-2304: the stages of the connect reach the phase listeners', async () => {
     deepStrictEqual((await phasesHeard({kind: 'downloading'})).slice(0, 3), [
@@ -469,6 +595,56 @@ describe('the connector over the connect pipeline', () => {
     await connector.connect(HOST_INPUT);
     await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
     deepStrictEqual(recording.releases, 1);
+  });
+
+  it('F-2505 AC-25: the first reconnection attempt asks the held connection whether its session answers, before it gives the connection back, and says what it found', async () => {
+    const {connector, recording, logged} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect({...HOST_INPUT, attempt: 2, isReconnection: true});
+    deepStrictEqual(
+      [
+        recording.releasesAtCheck,
+        recording.releases,
+        logged().filter(line => line.startsWith('the held connection was')),
+      ],
+      [[0], 1, ['the held connection was checked: its session answers']],
+    );
+  });
+
+  it('F-2505 AC-25: a connect that is not a reconnection asks nothing', async () => {
+    const {connector, recording} = connectorFor();
+    await connector.connect(HOST_INPUT);
+    await connector.connect(HOST_INPUT);
+    deepStrictEqual(recording.releasesAtCheck, []);
+  });
+
+  it('F-2505 AC-25: a session that did not answer is said to have been ended, and a connection that cannot be checked is said so and the attempt goes on as before', async () => {
+    const seen: string[][] = [];
+    for (const found of ['ended', 'unchecked'] as const) {
+      const {connector, recording, logged} = connectorFor();
+      recording.sessionCheck = found;
+      await connector.connect(HOST_INPUT);
+      const result = await connector.connect({
+        ...HOST_INPUT,
+        attempt: 2,
+        isReconnection: true,
+      });
+      seen.push([
+        'connectionToken' in result ? 'connected' : 'failed',
+        ...logged().filter(line => line.startsWith('the held connection was')),
+        ...logged().filter(line => line.includes('could not be checked')),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [
+        'connected',
+        'the held connection was checked: no live session answered: it did not within the bound and was ended, or there was none',
+      ],
+      [
+        'connected',
+        'the held connection could not be checked: its helper did not answer the check',
+      ],
+    ]);
   });
 
   /** Which transport listeners hear `notice` sent through the lease of a connection that worked. */

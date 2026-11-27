@@ -14,7 +14,13 @@ import {
   CLI_EDITOR_FOLDER,
   CLI_TEMPLATE_PATH,
   cliSourceEditorOf,
+  commitOfEditor,
   productFileOf,
+  applicationNameOf,
+  standInNameProblem,
+  STAND_IN_CLI_NAME,
+  STAND_IN_CLI_SCRIPT,
+  STAND_IN_CLI_TRACE,
   withCliTemplate,
 } from './acceptance-cli-editor.ts';
 import {type CommandResult, runCommand} from './command-runner.ts';
@@ -53,11 +59,69 @@ describe('the CLI-source editor', () => {
     ];
   }
 
-  it('tooling-111: the template is the download host’s /cli/ path, with only the os and the arch left', () => {
+  it('tooling-111, #2735: the template is the download host’s /cli/ path, with only the os, the arch and the commit left', () => {
     deepStrictEqual(
       CLI_TEMPLATE_PATH,
-      '/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+      '/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
     );
+  });
+
+  it('#2735: the commit of an editor is its product’s, and none when the product has none, names an empty one or is not there', () => {
+    const commit = '0123456789abcdef0123456789abcdef01234567';
+    const outcomes: unknown[] = [];
+    for (const product of [{commit}, {commit: ''}, {}]) {
+      writeFileSync(productFileOf(executable), JSON.stringify(product));
+      outcomes.push(commitOfEditor(executable));
+    }
+    writeFileSync(productFileOf(executable), 'not json');
+    outcomes.push(commitOfEditor(executable));
+    outcomes.push(commitOfEditor(path.join(base, 'elsewhere', 'codium')));
+    deepStrictEqual(outcomes, [
+      commit,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('#2735: the stand-in CLI is a script that writes the path it was run as to its trace on the host and fails', () => {
+    deepStrictEqual(
+      [STAND_IN_CLI_TRACE, STAND_IN_CLI_SCRIPT.split('\n')],
+      [
+        '/tmp/stand-in-cli-ran',
+        [
+          '#!/bin/sh',
+          '# the stand-in CLI of the acceptance run',
+          'echo "$0" > /tmp/stand-in-cli-ran',
+          'exit 1',
+          '',
+        ],
+      ],
+    );
+  });
+
+  it('#2735: the stand-in CLI’s file is named by the product’s applicationName, and an editor whose product names another is a problem', () => {
+    const outcomes: unknown[] = [];
+    for (const product of [
+      {applicationName: STAND_IN_CLI_NAME},
+      {applicationName: 'code-insiders'},
+      {},
+    ]) {
+      writeFileSync(productFileOf(executable), JSON.stringify(product));
+      outcomes.push([
+        applicationNameOf(executable),
+        standInNameProblem(executable),
+      ]);
+    }
+    deepStrictEqual(outcomes, [
+      [STAND_IN_CLI_NAME, undefined],
+      [
+        'code-insiders',
+        `the editor's applicationName is code-insiders, and the stand-in CLI's file is named ${STAND_IN_CLI_NAME}: the install unpacks the CLI by the product's name`,
+      ],
+      [undefined, undefined],
+    ]);
   });
 
   it('tooling-111: the product gains the template and keeps every other field, a template it had replaced', () => {

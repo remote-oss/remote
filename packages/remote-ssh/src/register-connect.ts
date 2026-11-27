@@ -40,9 +40,7 @@ import type {Translate} from './surfaces/strings.ts';
 import {openWebUiHandler} from './surfaces/web-ui-command.ts';
 import type {Logger} from 'lib-log';
 import {clearHintsHandler} from './diagnostics/clear-hints-command.ts';
-import type {HintStore} from './diagnostics/hint-store.ts';
-import {hintStoreKeyOf} from './diagnostics/hint-store-key.ts';
-import {type ConfirmedState, timerDelay} from './state/confirmed-update.ts';
+import type {HintEvents} from './diagnostics/hint-store.ts';
 
 /** What the connect's registration needs of the editor. */
 export interface ConnectRegistrationHost {
@@ -56,8 +54,8 @@ export interface ConnectRegistrationHost {
   /** Opens an address outside the editor. */
   openExternal(address: string): PromiseLike<boolean>;
   translate: Translate;
-  /** The extension's global state, where the hint store's key lives. */
-  globalState: ConfirmedState<HintStore>;
+  /** The window's hint events, which the clear command writes its clear to. */
+  hintEvents: HintEvents;
   /** The window's log the clear command writes to. */
   logger: Logger;
   /** The non-modal notices the maintenance commands show. */
@@ -131,7 +129,7 @@ export async function registerConnect(
   const label =
     resolver === undefined
       ? undefined
-      : registerWindowLabel(resolver, host.labels, host.translate);
+      : registerWindowLabel(assembly.connector, host.labels, host.translate);
   if (resolver !== undefined) {
     enablePortsViewWhenConnected(resolver, host.portsView, host.logger);
   }
@@ -166,9 +164,9 @@ export async function registerConnect(
     },
     {
       ...(resolversGranted
-        ? connectCommandHandlers(host.connectEditor, connection)
+        ? connectCommandHandlers(host.connectEditor, connection, host.logger)
         : windowlessHandlers(
-            connectCommandHandlers(host.connectEditor, connection),
+            connectCommandHandlers(host.connectEditor, connection, host.logger),
             host.logger,
           )),
       addNewSshHost: addNewSshHostHandler({
@@ -202,10 +200,7 @@ export async function registerConnect(
         openExternal: address => host.openExternal(address),
       }),
       clearAllSessionHints: clearHintsHandler(
-        hintStoreKeyOf(host.globalState, {
-          delay: timerDelay,
-          logger: host.logger,
-        }),
+        host.hintEvents,
         () => new Date(),
         host.logger,
       ),

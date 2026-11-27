@@ -141,6 +141,7 @@ describe('the shutdown handler (card containers-68)', () => {
       kind: 'delayedCheckAfterLastLease',
       milliseconds: 10_000,
       action: 'drain',
+      actionBound: 12_000,
     });
   });
 });

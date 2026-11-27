@@ -54,10 +54,14 @@
         "default-ports/*.test.ts",
         "ssh-core/*.test.ts",
         "ssh-newclient/*.test.ts",
+        "ssh-newclient-pickers/*.test.ts",
         "ssh-agents/*.test.ts",
         "ssh-askpass/*.test.ts",
         "ssh-askpass-env/*.test.ts",
         "ssh-askpass-space/*.test.ts",
+        "ssh-killed/*.test.ts",
+        "ssh-locks/*.test.ts",
+        "ssh-downloaders/*.test.ts",
         "ssh-containers/*.test.ts",
         "terminal-pick/*.test.ts",
         "preconnect/*.test.ts",
@@ -65,6 +69,7 @@
         "explorer-alone/*.test.ts",
         "wsl/*.test.ts",
         "windows-host/*.test.ts",
+        "containers-wsl/*.test.ts",
         "explorer-trust/*.test.ts",
         "explorer-trust-pickers/*.test.ts",
         "explorer-home/*.test.ts",
@@ -130,6 +135,15 @@
       "includeEntryExports": false,
     },
     // Each package's entry points are the ones tools/build.ts bundles; its tests are entries of their own.
+    // A service, not an extension: its entry starts it (layout.md, the service kind).
+    "packages/tunnel-agent": {
+      "entry": ["src/main.ts!", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
+    },
+    "packages/tunnel-relay": {
+      "entry": ["src/main.ts!", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts!", "test/**/*.ts"],
+    },
     "packages/*": {
       "entry": [
         "src/extension.ts!",
@@ -153,6 +167,7 @@
   },
   // System tools the tests and checks run, which no package provides.
   "ignoreBinaries": [
+    "mkfifo",
     "pwsh",
     "shellcheck",
     "ssh-add",

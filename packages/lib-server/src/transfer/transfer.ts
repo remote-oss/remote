@@ -17,6 +17,7 @@ import type {Logger} from 'lib-log';
 import {redirectAllows} from 'lib-product';
 import type {Plan} from '../install/plan.ts';
 import {runStep, type StepRun} from '../lifecycle/run-step.ts';
+import {releaseSessionLock, sessionLockPath} from '../locks/session-lock.ts';
 import {
   exhaustedFailure,
   type HostLockLoop,
@@ -90,6 +91,11 @@ export interface TransferInput {
   verification: readonly Verification[];
   /** The host's temporary folder, where a copied archive lands. */
   hostFolder: string;
+  /**
+   * The user's own server archive on the client, for a manual bootstrap: staged in `clientFolder` and copied to the
+   * host instead of any download, and put into the install folder by the install itself.
+   */
+  bootstrapArchive?: string;
   cancellation: AbortSignal;
   /** The most the deletion of a copied archive may wait, after which the leftover is logged; see the default above. */
   discardDeadlineMilliseconds: number;
@@ -106,6 +112,11 @@ export interface TransferDependencies {
   onPhase: (phase: TransferPhase) => void;
   /** Whether the program an archive is copied to the host with can be started; none means it always can. */
   copyAvailable?: () => Promise<boolean>;
+  /**
+   * Whether the channel's shell lives as long as the connection's session, so that a `flock` install lock lasts the
+   * session: an install that has to install then has the shell hold the host lock.
+   */
+  sessionLock?: boolean;
 }
 
 /** Why the server is not installed. */
@@ -125,7 +136,12 @@ export type TransferFailure =
     }
   | {kind: 'downloadTimeout'; reason: 'deadline' | 'stalled'}
   | {kind: 'verification'; mismatch: 'checksum' | 'length'}
-  | {kind: 'unpack'}
+  | {kind: 'unpack'; missing?: string}
+  /** A manual bootstrap's archive is not at its path, or could not be staged; `detail` is the file system's text. */
+  | {kind: 'localBootstrap'; cause: 'missing'; path: string}
+  | {kind: 'localBootstrap'; cause: 'unreadable'; detail: string}
+  /** A manual bootstrap was asked for a Windows host, which it does not serve. */
+  | {kind: 'localBootstrap'; cause: 'windowsHost'}
   | {kind: 'copy'; failure: ChannelFailure}
   | {kind: 'copyToolMissing'}
   | {kind: 'copyStalled'}
@@ -154,10 +170,11 @@ export type TransferOutcome =
 /** Where the archive is downloaded. */
 type Source = 'host' | 'client';
 
-/** Where the archive is, and whether the install deletes it. */
+/** Where the archive is, whether the install deletes it, and whether it goes into the install folder first. */
 interface Delivery {
   archivePath: string;
   removeArchive: boolean;
+  archiveIntoInstall?: boolean;
 }
 
 function failed(failure: TransferFailure): TransferOutcome {
@@ -216,6 +233,14 @@ function outcomeOf(
       return failed({kind: 'serverDownload', cause: 'noDownloader'});
     case 'UnpackFailed':
       return failed({kind: 'unpack'});
+    case 'CommandMissing': {
+      // The program `tar` or `gzip` the unpack needs, which the script found missing before it unpacked.
+      const {missing} = block.installFacts;
+      return failed({
+        kind: 'unpack',
+        ...(missing === undefined ? {} : {missing}),
+      });
+    }
     default:
       return failed(scriptFailure(block));
   }
@@ -306,6 +331,14 @@ async function install(
     archiveUrl: input.plan.address,
     ...delivery,
   };
+  const lockPath =
+    dependencies.sessionLock === true
+      ? await sessionLockPath(
+          dependencies.channel,
+          parameters,
+          input.cancellation,
+        )
+      : undefined;
   const stepRun = await dependencies.lockLoop(
     () =>
       runStep(
@@ -320,12 +353,23 @@ async function install(
               dependencies.onPhase({kind: 'progress', ...progress});
             }
           },
+          ...(lockPath === undefined
+            ? {}
+            : {sessionLock: {path: lockPath, action: 'open'}}),
         },
       ),
     input.cancellation,
   );
   logIdentityRewrite(stepRun, parameters, dependencies.logger);
-  return outcomeOf(stepRun, input.plan);
+  const outcome = outcomeOf(stepRun, input.plan);
+  // The session keeps the lock only when the script took it: an install that failed, was cancelled or found the
+  // server installed takes none, and what the shell made for it goes.
+  const held =
+    stepRun.kind === 'result' && stepRun.block.serverFacts.lockHeld === 'yes';
+  if (lockPath !== undefined && !(outcome.kind === 'transferred' && held)) {
+    await releaseSessionLock(dependencies.channel, lockPath);
+  }
+  return outcome;
 }
 
 /** Runs the install step without an archive of its own: for an install the host already has, the step answers at once. */
@@ -385,12 +429,14 @@ async function deliver(
   dependencies: TransferDependencies,
   localFile: string,
 ): Promise<TransferOutcome> {
+  const intoInstall = input.bootstrapArchive !== undefined;
   const direct = await hostPathOf(dependencies.channel, localFile);
   if (direct !== undefined) {
     dependencies.onPhase({kind: 'installing'});
     return install(input, dependencies, {
       archivePath: direct,
       removeArchive: false,
+      archiveIntoInstall: intoInstall,
     });
   }
   if (
@@ -418,6 +464,7 @@ async function deliver(
   const outcome = await install(input, dependencies, {
     archivePath: remotePath,
     removeArchive: true,
+    archiveIntoInstall: intoInstall,
   });
   if (leftArchive(outcome)) {
     await discardCopy(input, dependencies, remotePath);
@@ -734,6 +781,30 @@ function unpackFailed(outcome: TransferOutcome): boolean {
 }
 
 /**
+ * A manual bootstrap: the user's archive at `file` is staged in the client's temporary folder and delivered, with no
+ * download on either side; nothing at the path, or a file that cannot be staged, ends the transfer before any copy.
+ * Whatever is at the path is staged unchecked, a folder too.
+ */
+async function viaBootstrap(
+  input: TransferInput,
+  dependencies: TransferDependencies,
+  file: string,
+): Promise<TransferOutcome> {
+  if (!(await dependencies.files.entryExists(file))) {
+    return failed({kind: 'localBootstrap', cause: 'missing', path: file});
+  }
+  const staged = await dependencies.files.stage(file, input.clientFolder);
+  if (staged.kind === 'failed') {
+    return failed({
+      kind: 'localBootstrap',
+      cause: 'unreadable',
+      detail: staged.detail,
+    });
+  }
+  return deliver(input, dependencies, staged.archive);
+}
+
+/**
  * The client downloads the archive, or finds it in the cache. A download goes to a temporary file, is checked, and
  * then either becomes the cache entry by a rename or is deleted when the transfer ends. An entry that was found and
  * that the host cannot unpack is deleted and downloaded once more, so a bad entry does not fail every later connect.
@@ -742,6 +813,9 @@ async function viaClient(
   input: TransferInput,
   dependencies: TransferDependencies,
 ): Promise<TransferOutcome> {
+  if (input.bootstrapArchive !== undefined) {
+    return viaBootstrap(input, dependencies, input.bootstrapArchive);
+  }
   const {cache} = input;
   if (
     cache.kind === 'kept' &&
@@ -754,10 +828,12 @@ async function viaClient(
     await removeQuietly(dependencies.files, cache.archivePath);
   }
   dependencies.onPhase({kind: 'downloadingLocally'});
+  // The download's name differs from the host copy's: on a host that is the client itself, the two folders can be the
+  // same one, and a copy onto its own source would destroy it.
   const temporary =
     cache.kind === 'kept'
       ? `${cache.archivePath}_${uniqueSuffix(input)}`
-      : path.join(input.clientFolder, archiveName(input));
+      : path.join(input.clientFolder, `download-${archiveName(input)}`);
   try {
     const failure = await fetchVerified(input, dependencies, temporary);
     if (failure !== undefined) {

@@ -34,6 +34,17 @@ export interface ChannelFailure {
 export type ScriptInput =
   {kind: 'text'; text: string} | {kind: 'file'; localFile: string};
 
+/**
+ * The host lock a run takes for the whole session of the shell it runs on: `open` has the session shell open the lock
+ * file on descriptor 9 before the script, so the script locks it and the lock lasts as long as the shell; `release`
+ * is a run of its own that gives the descriptor up, and the file with it when the session held the lock. A channel
+ * with no long-lived shell ignores it.
+ */
+export interface SessionLock {
+  path: string;
+  action: 'open' | 'release';
+}
+
 /** A script to run on the remote side. */
 export interface ScriptRequest {
   script: string;
@@ -47,6 +58,8 @@ export interface ScriptRequest {
   secretVariables?: readonly string[];
   /** A local file that does not exist fails the run with `spawnFailed`, naming the file, before anything runs. */
   input: ScriptInput;
+  /** The session-wide host lock of this run; absent for a run that takes none. */
+  sessionLock?: SessionLock;
   cancellation: AbortSignal;
 }
 
@@ -87,7 +100,16 @@ export type CopyOutcome = FileCopied | OperationFailed;
 
 /**
  * The narrow interface between the server lifecycle and a transport. A channel never interprets a script's
- * output and never retries an operation by itself.
+ * output and never retries an operation by itself. Every channel keeps three rules, which `testing/channel-contract.ts`
+ * checks:
+ * - A cancel ends the script's whole process tree: the shell and each descendant still parented under it, TERM first
+ *   and KILL after 5 s, before the run reports `cancelled`. A process that left the tree by being re-parented, such as
+ *   a server started on purpose to outlive its script, is untouched. A remote channel runs `TREE_KILL_SCRIPT` for the
+ *   shell's pid; a local one may signal the script's own process group.
+ * - The script's lines are its standard output and standard error as one stream, in order: `JOINED_ERRORS` leads the
+ *   shell's program.
+ * - A line with no line end yet holds at most `LONGEST_PENDING_LINE` characters before it is told as a line
+ *   (`BoundedLines`), and writes wait for the transport to drain where it has a drain signal.
  */
 export interface HostChannel {
   /**
@@ -146,4 +168,16 @@ export async function hostPathOf(
     // A channel that cannot answer has no direct path; the caller copies the file instead.
     return undefined;
   }
+}
+
+/** The output lines of `request` run on `channel`, when it ran and ended with status 0; undefined when it did not. */
+export async function linesOfScript(
+  channel: Pick<HostChannel, 'runScript'>,
+  request: ScriptRequest,
+): Promise<string[] | undefined> {
+  const lines: string[] = [];
+  const outcome = await channel.runScript(request, line => {
+    lines.push(line);
+  });
+  return outcome.kind === 'failed' || outcome.status !== 0 ? undefined : lines;
 }

@@ -123,18 +123,44 @@ export async function iconOf(
   }
 }
 
-/** Waits until the row labelled `label` of window `name` has the icon `icon`, or none when `icon` is undefined. */
-export function iconReaches(
+/** The containers of the engine whose name or folder label holds `text`, each as its id, name, status and folder; what a row that missed its icon is explained by. */
+async function containersLike(text: string): Promise<string[]> {
+  try {
+    const {stdout} = await promisify(execFile)('docker', [
+      'ps',
+      '--all',
+      '--format',
+      '{{.ID}} {{.Names}} {{.Status}} {{.Label "devcontainer.local_folder"}}',
+    ]);
+    return stdout.split('\n').filter(line => line.includes(text));
+  } catch (caught) {
+    return [`docker ps failed: ${String(caught)}`];
+  }
+}
+
+/**
+ * Waits until the row labelled `label` of window `name` has the icon `icon`, or none when `icon` is undefined. A wait
+ * that ends names the icon the row has then and the containers the engine holds for it, so that a red run says whether
+ * the container was not running or the list had not caught up.
+ */
+export async function iconReaches(
   name: string,
   label: string,
   icon: string | undefined,
   milliseconds = 30_000,
 ): Promise<void> {
-  return waitFor(
-    `the row ${label} to have the icon ${String(icon)}`,
-    async () => (await iconOf(name, label)) === icon,
-    milliseconds,
-  );
+  try {
+    await waitFor(
+      `the row ${label} to have the icon ${String(icon)}`,
+      async () => (await iconOf(name, label)) === icon,
+      milliseconds,
+    );
+  } catch (caught) {
+    throw new Error(
+      `${String(caught)}; the row has the icon ${String(await iconOf(name, label))} now, and the engine holds ${JSON.stringify(await containersLike(label))}`,
+      {cause: caught},
+    );
+  }
 }
 
 /** What the open dialog of window `name` says. */

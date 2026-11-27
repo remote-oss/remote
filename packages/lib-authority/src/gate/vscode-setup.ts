@@ -4,14 +4,38 @@
  */
 
 import path from 'node:path';
+import {handoffStoreOf, NODE_EVENT_FILES} from 'lib-state';
 import type * as vscode from 'vscode';
 import {windowClaimOf} from './claim.ts';
 import {probeApiOf} from './vscode-api.ts';
 import type {
+  AttemptHandoff,
   GateEditor,
   GateNotices,
   InstalledExtension,
 } from './setup-ports.ts';
+
+/** The folder under the extension's storage that holds the handoffs of the gate, and the one name of its handoff. */
+const ATTEMPT_FOLDER = path.join('handoffs', 'gate-attempt');
+const ATTEMPT_KEY = 'attempt';
+
+/** The handoff of a failed attempt in the extension's storage folder `storageFolder`, on the clock `now`. */
+export function attemptHandoffOf(
+  storageFolder: string,
+  now: () => number,
+): AttemptHandoff {
+  const store = handoffStoreOf({
+    folder: path.join(storageFolder, ATTEMPT_FOLDER),
+    files: NODE_EVENT_FILES,
+    now,
+    isValue: (value): value is true => value === true,
+  });
+  return {
+    pending: () => store.peek(ATTEMPT_KEY) !== undefined,
+    leave: () => store.leave(ATTEMPT_KEY, true),
+    take: () => store.take(ATTEMPT_KEY) !== undefined,
+  };
+}
 
 /** The prefix of the ids of the family's extensions, whose manifests the setup reads from their files. */
 const FAMILY_ID_PREFIX = 'remote-oss.';
@@ -71,7 +95,9 @@ async function installedFrom(
 /** The setup's view of the editor. `subscriptions` is the extension's list of things released on deactivation. */
 export function gateEditorOf(
   editor: typeof vscode,
-  context: Pick<vscode.ExtensionContext, 'globalState' | 'subscriptions'>,
+  context: Pick<vscode.ExtensionContext, 'globalState' | 'subscriptions'> & {
+    globalStorageUri: Pick<vscode.Uri, 'fsPath'>;
+  },
   readFile: (filePath: string) => Promise<string | undefined>,
   logFailure: (message: string) => void,
   notices: GateNotices,
@@ -84,6 +110,7 @@ export function gateEditorOf(
       read: key => context.globalState.get<boolean>(key),
       update: (key, value) => context.globalState.update(key, value),
     },
+    attempt: attemptHandoffOf(context.globalStorageUri.fsPath, Date.now),
     documents: {
       onSaved: listener =>
         editor.workspace.onDidSaveTextDocument(document => {

@@ -25,7 +25,7 @@ import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import type {DownloadProgressPort} from '../../src/cli/server-download-progress.ts';
 import type {AgentLinkPlan} from '../../src/environment/agent-link.ts';
 import type {ForwardingPlans} from '../../src/environment/forwarding.ts';
-import type {ConnectionNotice, SharedRecord} from 'lib-ssh';
+import type {ConnectionNotice, SessionCheck, SharedRecord} from 'lib-ssh';
 import type {ConnectOptions, PhaseEvent} from '../../src/pipeline/connect.ts';
 import type {PromptEditor} from '../../src/surfaces/prompt-surface.ts';
 import type {
@@ -120,6 +120,10 @@ export interface Recording {
   tunnelClosed?: (detail: string) => void;
   calls: string[];
   releases: number;
+  /** What the lease answers to a session check, `alive` unless a test says otherwise. */
+  sessionCheck?: SessionCheck;
+  /** How many leases had been released each time the session was checked. */
+  releasesAtCheck: number[];
   tunnelCloses: number;
   records: SharedRecord[];
   phases: PhaseEvent[];
@@ -133,6 +137,8 @@ export interface Recording {
   secrets: number;
   /** The agent link plans the connect started a link for, in order. */
   links: AgentLinkPlan[];
+  /** The client lock's hold and release, each with the step called last before it. */
+  clientLock: string[];
 }
 
 /** The plans of a connect whose session forwards an agent and a display. */
@@ -258,6 +264,7 @@ export function leaseOf(recording: Recording): ConnectionLease {
     socksPort: 1080,
     startedLogin: true,
     storedRecord: undefined,
+    startedHelper: true,
     storeSharedRecord: record => {
       recording.records.push(record);
       return Promise.resolve(true);
@@ -270,6 +277,10 @@ export function leaseOf(recording: Recording): ConnectionLease {
     },
     answer: () => Promise.resolve(false),
     refuse: () => Promise.resolve(false),
+    checkSession: () => {
+      recording.releasesAtCheck.push(recording.releases);
+      return Promise.resolve(recording.sessionCheck ?? 'alive');
+    },
     release: () => {
       recording.releases += 1;
     },
@@ -287,6 +298,8 @@ export function steps(
     return value;
   }
   return {
+    migrateLegacySettings: () => Promise.resolve(),
+    warnOfDownloadMode: () => undefined,
     checkConfigFile: () =>
       note('checkConfigFile', {kind: 'done', value: undefined}),
     checkStartSettings: () =>
@@ -303,6 +316,19 @@ export function steps(
     holdLookupFailure: failure => Promise.resolve(failure),
     decideTerms: () =>
       Promise.resolve(note('decideTerms', {kind: 'done', value: TERMS})),
+    holdClientLock: () => {
+      recording.clientLock.push(`held after ${String(recording.calls.at(-1))}`);
+      return Promise.resolve({
+        kind: 'done',
+        value: {
+          release: () => {
+            recording.clientLock.push(
+              `released after ${String(recording.calls.at(-1))}`,
+            );
+          },
+        },
+      });
+    },
     openConnection: () =>
       Promise.resolve(note('openConnection', {kind: 'done', value: lease})),
     probe: () => Promise.resolve(note('probe', {kind: 'probed', host: HOST})),
@@ -351,6 +377,8 @@ export function steps(
           onLost: listener => {
             recording.bridgeLost = listener;
           },
+          firstServe: () =>
+            Promise.resolve(note('firstServe', {kind: 'serving'} as const)),
           close: () => {
             recording.calls.push('closeBridge');
           },
@@ -367,10 +395,14 @@ export function steps(
       note(action, undefined);
       return Promise.resolve({kind: 'done'});
     },
+    heldServer: () =>
+      note('heldServer', Promise.resolve({kind: 'alive', port: 4321})),
+    certainlyDirect: () => true,
     installExtensions: () => {
       note('installExtensions', undefined);
       return Promise.resolve();
     },
+    serverAnswers: () => note('serverAnswers', Promise.resolve(true)),
     tunnelPath: () => 'socks',
     openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
       onSettingUp?.();
@@ -397,12 +429,14 @@ export function emptyRecording(): Recording {
   return {
     calls: [],
     releases: 0,
+    releasesAtCheck: [],
     tunnelCloses: 0,
     records: [],
     phases: [],
     presented: [],
     secrets: 0,
     links: [],
+    clientLock: [],
   };
 }
 
@@ -427,6 +461,9 @@ export function setup(level: Level = 'info'): {
       logger: createLogger(logSink, {minimumLevel: () => level}),
       serve: {commit: 'c1', quality: 'insider'},
       useExecServer: true,
+      manualBootstrap: false,
+      settingLines: [],
+      writeWindowStart: () => undefined,
     },
   };
 }

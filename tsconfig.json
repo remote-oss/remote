@@ -17,6 +17,12 @@
       "path": "packages/lib-standdown/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-state"
+    },
+    {
+      "path": "packages/lib-state/tsconfig.test.json"
+    },
+    {
       "path": "packages/remote-containers"
     },
     {
@@ -75,6 +81,18 @@
     },
     {
       "path": "packages/lib-log/tsconfig.test.json"
+    },
+    {
+      "path": "packages/tunnel-agent"
+    },
+    {
+      "path": "packages/tunnel-agent/tsconfig.test.json"
+    },
+    {
+      "path": "packages/tunnel-relay"
+    },
+    {
+      "path": "packages/tunnel-relay/tsconfig.test.json"
     },
     {
       "path": "packages/lib-product"
@@ -155,6 +173,9 @@
       "path": "tests/acceptance/ssh-newclient"
     },
     {
+      "path": "tests/acceptance/ssh-newclient-pickers"
+    },
+    {
       "path": "tests/acceptance/ssh-agents"
     },
     {
@@ -165,6 +186,15 @@
     },
     {
       "path": "tests/acceptance/ssh-askpass-space"
+    },
+    {
+      "path": "tests/acceptance/ssh-killed"
+    },
+    {
+      "path": "tests/acceptance/ssh-locks"
+    },
+    {
+      "path": "tests/acceptance/ssh-downloaders"
     },
     {
       "path": "tests/acceptance/ssh-containers"
@@ -183,6 +213,9 @@
     },
     {
       "path": "tests/acceptance/windows-host"
+    },
+    {
+      "path": "tests/acceptance/containers-wsl"
     },
     {
       "path": "tests/acceptance/explorer-alone"

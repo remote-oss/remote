@@ -5,9 +5,11 @@
  */
 
 import type {PlainData} from 'lib-helper';
+import {ABSOLUTE_HOST_PATH, type SessionLock} from 'lib-host';
 import type {FailureHint, FailureReason} from '../diagnostics/classify.ts';
 import type {FailureKind} from '../diagnostics/rules.ts';
 import type {SpawnFailure} from '../process/session.ts';
+import type {DetectedPlatform} from './platform-probe.ts';
 
 /** The agent link a connection's first window planned: none and why, or the link's path and its target. */
 export type StoredAgentLink =
@@ -30,7 +32,12 @@ export interface SharedRecord {
   agentLink?: StoredAgentLink;
   /** The first window's display plan, which a later window of the connection keeps. */
   display?: StoredDisplay;
+  /** The data folder the held server was installed in: a later window checks the server and prunes old installs there. */
+  dataFolder?: string;
 }
+
+/** How long the shared session has to answer the probe of a session check, in milliseconds. */
+export const SESSION_PROBE_MILLISECONDS = 3000;
 
 /** What a window asks of the helper. */
 export type ConnectionRequest =
@@ -49,8 +56,11 @@ export type ConnectionRequest =
       inputBase64: string | null;
       /** How long the run may take once it has started, in milliseconds. */
       deadlineMilliseconds: number;
+      /** The session-wide host lock of this run; absent for a run that takes none. */
+      sessionLock?: SessionLock;
     }
-  | {type: 'kill'};
+  | {type: 'kill'}
+  | {type: 'checkSession'};
 
 /** Why a script did not run to its end. */
 export type ScriptFailureReason = 'notConnected' | 'channelClosed' | 'timeout';
@@ -63,10 +73,18 @@ export type ConnectionReply =
   | {type: 'accepted'}
   | {type: 'refused'; reason: Refusal}
   | {type: 'questionRefused'; accepted: boolean}
-  | {type: 'sharedRecord'; record: SharedRecord | null}
+  | {
+      type: 'sharedRecord';
+      record: SharedRecord | null;
+      /** What the session's opening found when the host's platform was unknown; null when it was known. */
+      detectedPlatform: DetectedPlatform | null;
+      /** The pid of the ssh the helper runs, known once the connection is set up; absent from an earlier build. */
+      sshProcessId?: number;
+    }
   | {type: 'answered'; accepted: boolean}
   | {type: 'scriptEnded'; status: number}
-  | {type: 'scriptFailed'; reason: ScriptFailureReason; detail: string};
+  | {type: 'scriptFailed'; reason: ScriptFailureReason; detail: string}
+  | {type: 'sessionChecked'; alive: boolean};
 
 /** The kind of question `ssh` asked. */
 export type PromptSurface =
@@ -83,7 +101,12 @@ export type ConnectionEvent =
   | {type: 'promptClosed'; promptId: number}
   | {type: 'ownerChanged'; owner: number}
   | {type: 'waitingForOtherWindow'}
-  | {type: 'connected'; socksPort: number}
+  | {
+      type: 'connected';
+      socksPort: number;
+      /** The pid of the ssh the helper runs, which the helper knows once the connection is set up; absent from an earlier build. */
+      sshProcessId?: number;
+    }
   | {
       type: 'loginFailed';
       kind: FailureKind;
@@ -106,6 +129,19 @@ type Fields = Record<string, unknown>;
 
 function isFields(value: unknown): value is Fields {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Whether `value` is a session lock: a non-empty path and one of the two actions. */
+function isSessionLock(value: unknown): value is SessionLock {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const {path, action} = value as Record<string, unknown>;
+  return (
+    typeof path === 'string' &&
+    path !== '' &&
+    (action === 'open' || action === 'release')
+  );
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -149,6 +185,31 @@ function readDisplay(value: unknown): StoredDisplay | undefined {
     : undefined;
 }
 
+/** A Windows drive with no folder on it. */
+const BARE_DRIVE = /^[A-Za-z]:$/;
+
+/**
+ * A data folder a record names, when the host can hold a server there: an absolute path, POSIX or Windows, with a
+ * folder above its last name, and a last name that is a folder's own. Its reader splits it at its last `/` into the
+ * install root and the folder's name, and the scripts read an empty install root as the home folder; so a value with
+ * no `/`, a folder right under `/` or right on a drive, an empty last name, `.` or `..` gives a folder that isn't the
+ * one the record was written for.
+ */
+function readDataFolder(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !ABSOLUTE_HOST_PATH.test(value)) {
+    return undefined;
+  }
+  const split = value.lastIndexOf('/');
+  const name = value.slice(split + 1);
+  return split <= 0 ||
+    BARE_DRIVE.test(value.slice(0, split)) ||
+    name === '' ||
+    name === '.' ||
+    name === '..'
+    ? undefined
+    : value;
+}
+
 function readSharedRecord(value: unknown): SharedRecord | undefined {
   if (!isFields(value)) {
     return undefined;
@@ -171,6 +232,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
   }
   const agentLink = readAgentLink(value.agentLink);
   const display = readDisplay(value.display);
+  const dataFolder = readDataFolder(value.dataFolder);
   return {
     remotePort,
     operatingSystem,
@@ -179,6 +241,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
     connectionToken,
     ...(agentLink === undefined ? {} : {agentLink}),
     ...(display === undefined ? {} : {display}),
+    ...(dataFolder === undefined ? {} : {dataFolder}),
   };
 }
 
@@ -193,6 +256,7 @@ export function readConnectionRequest(
     case 'connect':
     case 'sharedRecord':
     case 'kill':
+    case 'checkSession':
       return {type: body.type};
     case 'setSharedRecord': {
       const record = readSharedRecord(body.record);
@@ -214,7 +278,8 @@ export function readConnectionRequest(
         isStringRecord(body.environment) &&
         (body.inputBase64 === null || typeof body.inputBase64 === 'string') &&
         typeof body.deadlineMilliseconds === 'number' &&
-        body.deadlineMilliseconds > 0
+        body.deadlineMilliseconds > 0 &&
+        (body.sessionLock === undefined || isSessionLock(body.sessionLock))
         ? {
             type: 'runScript',
             runId: body.runId,
@@ -222,6 +287,9 @@ export function readConnectionRequest(
             environment: body.environment,
             inputBase64: body.inputBase64,
             deadlineMilliseconds: body.deadlineMilliseconds,
+            ...(body.sessionLock === undefined
+              ? {}
+              : {sessionLock: body.sessionLock}),
           }
         : undefined;
     default:
@@ -234,6 +302,8 @@ const REFUSALS: readonly string[] = [
   'alreadyConnecting',
   'alreadyConnected',
 ];
+
+const DETECTED_PLATFORMS: readonly DetectedPlatform[] = ['windows', 'posix'];
 
 const SCRIPT_FAILURES: readonly string[] = [
   'notConnected',
@@ -266,11 +336,28 @@ export function readConnectionReply(
         ? {type: 'questionRefused', accepted: body.accepted}
         : undefined;
     case 'sharedRecord': {
-      if (body.record === null) {
-        return {type: 'sharedRecord', record: null};
+      const detectedPlatform = DETECTED_PLATFORMS.find(
+        each => each === body.detectedPlatform,
+      );
+      if (
+        body.detectedPlatform !== undefined &&
+        body.detectedPlatform !== null &&
+        detectedPlatform === undefined
+      ) {
+        return undefined;
       }
-      const record = readSharedRecord(body.record);
-      return record === undefined ? undefined : {type: 'sharedRecord', record};
+      const record =
+        body.record === null ? null : readSharedRecord(body.record);
+      const sshProcessId =
+        typeof body.sshProcessId === 'number' ? body.sshProcessId : undefined;
+      return record === undefined
+        ? undefined
+        : {
+            type: 'sharedRecord',
+            record,
+            detectedPlatform: detectedPlatform ?? null,
+            ...(sshProcessId === undefined ? {} : {sshProcessId}),
+          };
     }
     case 'answered':
       return typeof body.accepted === 'boolean'
@@ -289,6 +376,10 @@ export function readConnectionReply(
             reason: body.reason as ScriptFailureReason,
             detail: body.detail,
           }
+        : undefined;
+    case 'sessionChecked':
+      return typeof body.alive === 'boolean'
+        ? {type: 'sessionChecked', alive: body.alive}
         : undefined;
     default:
       return undefined;
@@ -323,10 +414,18 @@ export function readConnectionEvent(
       return typeof body.owner === 'number'
         ? {type: 'ownerChanged', owner: body.owner}
         : undefined;
-    case 'connected':
-      return typeof body.socksPort === 'number'
-        ? {type: 'connected', socksPort: body.socksPort}
-        : undefined;
+    case 'connected': {
+      if (typeof body.socksPort !== 'number') {
+        return undefined;
+      }
+      const sshProcessId =
+        typeof body.sshProcessId === 'number' ? body.sshProcessId : undefined;
+      return {
+        type: 'connected',
+        socksPort: body.socksPort,
+        ...(sshProcessId === undefined ? {} : {sshProcessId}),
+      };
+    }
     case 'loginFailed':
       return readLoginFailed(body);
     case 'spawnFailed':

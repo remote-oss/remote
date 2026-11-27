@@ -393,9 +393,6 @@ function probeFailure(
         failure.libc === 'musl' ? 'S031' : 'S359',
         failure.reported,
       );
-    case 'prerequisiteMissing':
-      logger.info(`the container lacks: ${failure.missing.join(', ')}`);
-      return serverFailed();
     case 'channelFailed':
       return failure.failure.kind === 'cancelled'
         ? cancelled()

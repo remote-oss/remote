@@ -31,7 +31,7 @@ lib-host, lib-product, and the pure parts of lib-ssh (S2, S5, S6, S4's parser an
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (`ScriptInput`: `text` with its text sent as UTF-8, or `file` with a local file streamed byte for byte to standard input), cancellation | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
+| `runScript` | script text, interpreter (`posixShell`, `powershell`), environment additions, input (`ScriptInput`: `text` with its text sent as UTF-8, or `file` with a local file streamed byte for byte to standard input), cancellation, optionally `sessionLock {path, action: 'open' | 'release'}`: `open` has a channel whose shell lives as long as the session open `path` on descriptor 9 before the script, so a `flock` the script takes lasts the session; `release` gives the descriptor up, and removes the file when the shell held the lock; a channel with no long-lived shell ignores it (ruling-2820-flock-session) | output lines as a stream, then the exit status | `channelClosed`, `spawnFailed`, `timeout`, `cancelled` |
 | `copyToHost` | local file, remote path, cancellation | done | `copyToolMissing`, `copyFailed` (with the tool's message), `channelClosed`, `cancelled` |
 | `identity` | none | the key that names the host in locks and records (SSH: the host string as written; containers: the container id; WSL: the distro name) | none |
 | `platformHint` | none | `linux`, `macOS`, `windows` or `unknown` | none |
@@ -142,7 +142,17 @@ The argument rules:
   the host sets none (F-2105; `scp` passes `-o` to its `ssh`, ruled on #253 Q13: without it a copy to an unreachable
   address waits for the system's limit). Never a `ServerAlive*` option.
 - The shared connection's `ssh` runs the bootstrap's fixed `sh -c` program and writes the prelude to its standard input; in
-  terminal mode the remote program is `sh` (F-2105, F-2704). **When `remoteCommandInEffect` is true, every connection
+  terminal mode the remote program is `sh` (F-2105, F-2704). For a host whose platform is decided as `windows`, the
+  remote program is instead the fixed PowerShell session loop, `powershell -EncodedCommand <loop>` (athena on #1835,
+  option (i); `reading-1835-loop-length`): it prints `LAYER1-READY` and reads framed runs on standard input, each run's
+  environment, script and input reaching a child PowerShell on its standard input only (S10). With
+  `remoteCommandInEffect` the loop's command line goes first on standard input without `exec`. For a host whose
+  platform is unknown, the shared connection's `ssh` has no remote program: once ssh reports `Entering interactive
+  session.`, the host's own login shell reads the platform probe on standard input (echo lines carrying a
+  per-connection nonce). A whole line of cmd's `%OS%` answer or of a drive-path `$HOME` means Windows and starts the
+  PowerShell session loop; otherwise the shell is POSIX and is handed over with `exec sh -c '<reader>'` once the
+  hand-over line has come back (athena on #1835, part 2b). A login shell that runs none of its piped input (fish) never
+  answers, and the connect fails at the connect wait (F-2206 7.E5, AC-28). **When `remoteCommandInEffect` is true, every connection
   `ssh`, the shared connection's and terminal mode's, gets no remote program on its command line**, since ssh refuses one beside the host's `RemoteCommand`. The program
   goes first on standard input as `exec <program>`, read by the shell the `RemoteCommand` starts, and the prelude
   follows unchanged; no TTY, the same markers and bounds (athena on #1221, F-2704 6.7, AC-30).
@@ -179,7 +189,7 @@ Never: add `ControlMaster`, `ControlPath`, `ControlPersist`, host-key, identity 
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose; the connection mode (`shared` or `terminal`) | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `brokenPipe`, `unknown`), the reason, and hints (message, status, mitigations, resources) | none |
+| `classify` | ssh's error lines of one run, in order; the run's exit status; the purpose; the connection mode (`shared` or `terminal`) | a failure kind (`unreachable`, `timeout`, `authentication`, `hostKeyChanged`, `hostKeyRejected`, `forwardingDisabled`, `channelClosed`, `brokenPipe`, `unknown`), the reason, and hints (message, status, mitigations, resources, and the ranges of the setting-key links in the message and the mitigations, F-2602 3.4) | none |
 
 The rules are the specs' tables, by reference:
 - the network reasons, their substring and case rule, and their priority when several lines match (F-2603);
@@ -281,6 +291,7 @@ Rules:
   askpass, and stops at the first setup report (F-2105, F-2308 BR-5). The maximum for `ConnectTimeout 0` is an R-79
   bound: `unboundedWaitSeconds`, a policy value the package passes in, and it is the final limit (no +2 s margin;
   ruled 2026-10-08).
+- **One process group per session (POSIX clients).** S3 starts `ssh` as the leader of a process group of its own. Ending a session (`kill`, an attempt's end, or the spawned `ssh`'s own exit) signals that group: SIGTERM, then SIGKILL after 2 s to what is left, so ProxyCommand and ProxyJump children never outlive their attempt (F-2310 7.E9, AC-32). In terminal mode the terminal adapter ends the group the same way on dispose. A process that has left the group by itself, such as OpenSSH's `ControlPersist` master, is the user's and is never ended (F-2102 6.8 step 3, BR-11). On Windows clients, which have no process groups, `kill` ends the session's process tree (`taskkill /PID <ssh> /T /F`) while `ssh` still runs; nothing more is promised there until it is measured on windows-2025.
 - Remote - SSH's start values (ruled on #253 Q8, 2026-10-12):
   - `settings.connectTimeout` is the setting through F-2105 BR-1's fallback (absent, not a number, negative or
     fractional → 15); the setting's own 0 stays 0 (F-2105 BR-4, AC-9: ssh gets 0, the extension waits 2 s).
@@ -335,12 +346,16 @@ Rules:
 
 Rulings of 2026-10-08 for S9 and S10 (the process side):
 - Secrets never touch the registry file: lib-helper's record carries only endpoint, nonce, process id and the SOCKS
-  port; the shared record of F-2102 (remote port, OS, architecture, temp folder, connection token) lives in the
+  port; the shared record of F-2102 (remote port, OS, architecture, temp folder, connection token, and `dataFolder`:
+  the data folder the held server was installed in, where a later window's `heldServer` check and legacy clean-up
+  run; a record without it is stale, ruling-2995-takeup-cleanup) lives in the
   helper's memory, set once after the connection completes, and reaches a later lease through a `sharedRecord`
-  request after its hello. This satisfies "written only after the connection completes".
+  request after its hello. The `sharedRecord` reply also carries `detectedPlatform` (`windows`, `posix`, or null when
+  the platform was known or not yet found), which a window whose platform is unknown uses to build its channel; a
+  missing field reads as null (#1835, part 2b), and the `ssh`'s process id when the helper has one. This satisfies "written only after the connection completes".
 - Helper messages are plain data over lib-helper's channel: requests `connect` (owner only), `sharedRecord`,
-  `setSharedRecord`, `answer {promptId, text}`, `kill`; events `prompt {promptId, surface, text}`, `promptClosed`,
-  `ownerChanged`, `connected {socksPort}`, `loginFailed {kind, reason?, hints, exitStatus?, detail?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64; `detail`: the helper's own log line for a login shell that timed out or ended early, which the window logs with the failure (F-2704 AC-25); absent from an earlier helper and from any other failure; it is one of two fixed sentences with a number in them, so nothing of the host's output or of the user's secrets is in it),
+  `setSharedRecord`, `answer {promptId, text}`, `kill`, `checkSession` (a window that lost its transport, at its first reconnection attempt: one probe of the shared session with a 3 s deadline (a SOCKS connect through the helper's dynamic forward to the host's loopback port 22: within the deadline, any data after the connect request, or ssh closing the socket after it, means alive, since ssh gives its SOCKS reply only once the host has answered the channel open and closes the socket when the host refuses it, which a runner showed for OpenSSH 9.6 with the host paused; silence means not alive; any port works, since a refused connect is the host sshd's channel-open failure, which only a live session carries back; on the host the probe is one short connection from its own sshd to 127.0.0.1:22 per reconnection, closed as soon as the host answers, which the host's sshd log shows as a pre-authentication connection when sshd listens there); `alive` when it answers, otherwise the helper ends the session, which ends ssh by S3's group rule, sends `transportLost` to every lease and replies `ended`; with no live session `ended` at once; concurrent checks share one probe; F-2505 AC-25, ruling-2751-session-check); events `prompt {promptId, surface, text}`, `promptClosed`,
+  `ownerChanged`, `connected {socksPort, sshProcessId?}` (`sshProcessId`: the process id of the helper's `ssh`; absent from an earlier helper), `loginFailed {kind, reason?, hints, exitStatus?, detail?}` (`exitStatus`: ssh's exit status, `null` when it ended on a signal, absent from an earlier helper; connect-64; `detail`: the helper's own log line for a login shell that timed out or ended early, which the window logs with the failure (F-2704 AC-25); absent from an earlier helper and from any other failure; it is one of two fixed sentences with a number in them, so nothing of the host's output or of the user's secrets is in it),
   `spawnFailed {cause, detail}` (the `ssh` program could not be started: `clientVanished` or `spawnFailed`),
   `transportLost`, `waitingForOtherWindow`, and `sshLines {lines}` (ssh's error-stream lines, in order: batches of at most
   200 lines, sent at most every 100 ms, from ssh's start until the helper ends, and flushed before `connected` and
@@ -459,7 +474,7 @@ denied (publickey,password,keyboard-interactive).`) instead of hanging. That int
 must not ship. No ControlMaster or ControlPath is ever added (the S2 rule
 stands, POSIX and Windows alike). The lease exposes the session through the helper's request channel (a
 `runScript` request whose reply streams lines and ends with the result block) beside the SOCKS port and the shared
-record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle.
+record; after `start` the session stays as the forward's carrier and later runs (kill, cleanup) use it when idle. The request carries H1's `sessionLock` unchanged. The helper's session shell applies it, holds the descriptor only for the run that opens it, and, once a script reports `server.lockHeld=yes`, removes the file on its orderly end (`EXIT`, `HUP`); a killed session leaves it (F-2408 BR-4).
 Rulings from the build (2026-10-08, #183): a run's script goes to the session's stdin as `sh -c '<quoted>'` between
 two marker lines carrying an unguessable per-run nonce, its input as a base64 here-document (bounded by the policy's
 `maximumInputBytes`; a larger input fails as `spawnFailed`, and a caller with such an input uses `copyToHost`
@@ -513,7 +528,7 @@ setting at run time are filled in by the extension's adapter before the call.
 
 | Field | Values | remote-ssh | remote-containers | remote-wsl |
 |---|---|---|---|---|
-| `downloadPlacement` | `hostFirst` with `auto`, `always` or `off`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
+| `downloadPlacement` | `hostFirst` with `auto`, `always`, `off` or `manualBootstrap`; `clientFirstThenHost`; `clientOnly` | `hostFirst`, from `remote.SSH.localServerDownload` (F-2405) | `clientOnly`: the client machine downloads and copies into the container (F-1402) | `clientFirstThenHost`: a silent `wget` fallback in the distro (F-6301 BR-1, BR-7) |
 | `cache` | `none`; `kept` | `none` (F-3902 rule 6) | `kept` (F-0503 host cache) | `kept`, shared per user across windows and editor instances (F-6301 BR-4, BR-5, BR-14) |
 | `verification` | ordered list from `headerHash`, `lengthOnly`, `none` | `none` until the room names one | `none` until the room names one (athena, containers contracts §5) | `headerHash`, then `lengthOnly` (F-6301 BR-6, Q3) |
 | `environmentSetup` | a host path to source before install and start, never on reuse; or none | none | none | the distro's server-env-setup (F-6303 BR-1 to BR-5) |
@@ -528,8 +543,9 @@ setting at run time are filled in by the extension's adapter before the call.
 
 Rulings of 2026-10-08 for the script parameters: a profile without `serverDataFolderName` gets the derived
 `.<applicationName>-server` from lib-product's `serverDataFolderNameOrDefault(profile)` (product-scoped, never
-`~/.vscode-server`; an adaptation); the host lock file is `remote-lock.<user>.<commit>` in the lock folder, `<user>`
-from the effective ssh config (interop with the reference's name is not a goal); the proxy variable text of F-2404
+`~/.vscode-server`; an adaptation); the host lock file is `vscode-remote-lock.<user>.<commit>` (with the `.target` second name under `ln`) in the lock
+folder, `<user>` from the effective ssh config, so that windows of the reference and of ours exclude each other
+(F-2408 BR-1, ruling-2818-host-lock-name); the proxy variable text of F-2404
 BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server's pure `proxyVariableText`.
 
 ### V1 bootstrap-scripts
@@ -541,7 +557,12 @@ BR-5 (empty path → "/", host lower-cased, `$` encoded) is built by lib-server'
 
 Statuses: `LockBusy`, `NoDownloaderAvailable`, `UnpackFailed`, `ServerDownloadFailed`, `CreateInstallDirFailed`,
 `UnsupportedArch`, `UnsupportedPlatform`, `LinuxPrereqs`, `NoBash` (only while a spec still requires bash),
-`ServerFailedToStart`.
+`ServerFailedToStart`, `CommandMissing` (POSIX only: the host has no `tar` or no `gzip` on the login `PATH`, found right
+before a `tar` archive is unpacked; the script writes the fact `install.missing <program>`, `tar` checked first, and
+removes the downloaded archive as every other ending does; F-2402 7.E3, #2856). The transfer maps it to the `unpack`
+failure with `missing: <program>`, so `"auto"` still falls back to the client's copy, and remote-ssh keeps the dialog
+reason of the unpack (STR:S075) and stores a hint with the status `CommandMissing`. Every other missing utility stays
+as the reference has it (7.E5), and a zip archive is not checked.
 
 Rules inside the scripts:
 - `wget` is preferred, then `curl`, and their configuration files are skipped unless
@@ -574,7 +595,7 @@ Rules inside the scripts:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `probe` | H1, platform hint, requirements-check policy | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `prerequisiteMissing` (F-2401, F-2402, F-2703), channel failures |
+| `probe` | H1, platform hint | host facts: OS, architecture token, libc family, release id, temp folder, login shell, tools, `SSH_AUTH_SOCK`, `DISPLAY` | `unsupportedPlatform`, `unsupportedArch`, `probeFailed`, `unreadableFacts`, `noResultBlock`, channel failures (F-2401, F-2703); a host without `tar` is probed, with `tar` absent from its tools, and the unpack fails with `UnpackFailed` (F-2402 BR-5, `ruling-2854-required-commands`) |
 
 Rule (from server-08's acceptance run, 2026-10-08): the probe script never depends on a command that fails when a
 glob has no match (`ls a b` under BusyBox); libc detection must report `musl` on Alpine, and the acceptance suite
@@ -597,11 +618,12 @@ Rules:
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `cancelled` |
+| `transfer` | plan, H1, a download port (the editor's network stack), UI phase sink; for a manual bootstrap, `bootstrapArchive`, the user's archive on the client | the archive unpacked into `bin/<client commit>/`, with its commit checked and rewritten when needed | `serverDownload` (STR:S043), `localDownload` (STR:S071 with its detail), `unpack` (STR:S075), `copy` (from H1), `localBootstrap` (`missing` with its path, `unreadable` with the file system's text, `windowsHost`), `cancelled` |
 
 Rules:
 - Placement follows the record. For `hostFirst`: `auto` falls back to the client, `always` uses the client, `off`
-  never does (F-2405).
+  never does (F-2405), and `manualBootstrap` downloads on neither side: the client delivers the user's own archive
+  (F-2406 BR-6).
 - The archive reaches the host by `clientPathOnHost` when it returns a path, else by `copyToHost`, or as the streamed
   input of the unpack step.
 - With `cache` `none` the client copy is a temporary file, deleted afterwards (F-3902 rule 6). With `kept` the
@@ -646,7 +668,18 @@ Rules:
   `stallMilliseconds` (no bytes for that long ends it) and `maximumBytes` (the content length when known, else the
   library's default ceiling, 1 GiB; the values are lib-server's named defaults, ruled on #253 Q7), plus cancellation; the port implements them and the library proves them with a fake port
   that stalls, overruns and never answers. A connect never hangs on a download.
-- Manual bootstrap reads the fixed file and shows STR:S088 on every attempt (F-2406).
+- Manual bootstrap (`remote.SSH.localServerDownload` `manual-bootstrap`, undeclared in the manifest; F-2406,
+  ruling-2878-manual-bootstrap): the extension shows STR:S088 at the start of every attempt of a window and plans the
+  direct install (the CLI mode's `manualBootstrap` input). When the host needs the server, the transfer's
+  `bootstrapArchive` source replaces any download: the file `<home>/vscode-remote-ssh-bootstrap/vscode-server.tar.gz`
+  (`os.homedir()`) must exist (`localBootstrap` `missing`, the dialog's STR:S069), and the client port's `stage`
+  copies it into a new `vsc_server_<uuid>/` folder of the client's temporary folder with the nine-byte marker
+  `vscode-server.tar.gz.done` (`complete` and a line end; `unreadable` when the copy fails). The staged copy reaches
+  the host as any client archive does. The install step (`archiveIntoInstall`) then puts it, under the host lock only,
+  into `bin/<commit>/vscode-server.tar.gz` with its marker, by a rename (or a copy and a rename of a file the host reads
+  in place), and unpacks it only while the marker is there. A good unpack removes both; a failed one keeps the archive
+  and drops the marker. A Windows host is refused first (`windowsHost`, STR:S161). The client-side failures record the
+  `LocalBootstrapFailed` hint (STR:S087 with the reason, the six mitigations of F-2406 7.E1).
 - The commit is rewritten by editing the unpacked `product.json` only (F-3902 rule 9, pending the room's
   confirmation).
 
@@ -659,9 +692,14 @@ Rules:
 
 Rules (F-2408 as revised):
 - A client lock whose owner died is not free. A waiter takes it over only when the file is at least 4 minutes old,
-  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. It removes the file
-  on a clean end and relies on the age rule otherwise.
-- The lock id is any stable 8-hex value per host identity; interop with the reference is not a goal (BR-6).
+  polling about every 0.5 s and giving up after 2 minutes. The holder never refreshes the file. A takeover runs under
+  a ticket, `<lock>.takeover`, created exclusively: one takeover at a time, the lock's age read again under it, and a
+  ticket older than 10 s broken. A holder's release removes the lock file only while it is still its own: the file's
+  modification time is the one the holder read when it created it. It removes the file on a clean end and relies on
+  the age rule otherwise.
+- The client lock is `vscode-remote-ssh-<id>-install.lock` in the editor's temp folder, `<id>` 8 hex digits of the SHA-256
+  of the alias's connection key: stable per alias, different for two aliases of one host (BR-6). It is taken in both
+  install modes (BR-9) and shows S157 while a window waits (BR-11).
 - Settings are read once per attempt sequence (AC-36).
 - The host lock wait is bounded at 30 attempts, so it needs no R-79 rule.
 
@@ -687,7 +725,7 @@ Never: accept for the user.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
+| `startOrReuse` | H1, installed server, options (bind host, port range, socket mode, grace time, default extensions, licence accepted, extra start options from the record's allow-list, environment setup, `sessionLock` (true only where the channel's shell lives as long as the session: remote-ssh over S9 and in terminal mode; Dev Containers passes none): the start asks the host for the lock's place with the script's own lock functions, runs with `sessionLock open`, and releases it when the start ends without a running server; `ln` and Windows hosts take no session lock); in `flock` mode the host lock held by a session means that this commit's install is in use and only its holder installs it: an install that finds the server installed takes no lock, and an install repeats its check under the lock; a launch takes its own step-scoped lock, `<data folder>/.<commit>.start.lock`, and repeats its running-server check under it; Kill VS Code Server on Host and the uninstall take no host lock; the clean-up keeps an install whose lock is held, asking each install's own lock file; the session's lock is checked to be the file at the path, and its exit removes the path only while it still is (ruling-2913-lock-one-meaning) | port or socket, connection token, process id, remote environment additions | `serverStart` (STR:S135 at the end of the start wait), `invalidPortRange` (before any ssh), `cancelled` |
 | `serverPort` | the connection | the TCP port the running server listens on at the host's loopback, or `none` in socket mode or when no server runs; it never contacts the host (F-2509 option (a), ruled by the lead 2026-10-06, for B's Open Web UI) | none |
 | `installExtensions` | H1, server, ids filtered by F-2506 BR-2, a deadline (the library's named default of 120 s unless the caller passes one) | done with one result per id, or `notRun` with its reason (`cancelled` is the caller's, `deadline` the step's); failures are logged per id (F-2506 Q1 (b)); no host lock, so a second window never waits on it (ruled 2026-10-08, #151) | none raised |
 
@@ -853,11 +891,12 @@ or the extension that asked, shows the cause once.
 
 | Case | When | What serves it | Failure |
 |---|---|---|---|
-| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
+| The SSH window | the connector holds the window's connection | `execServerOf(control)` over the control connection the window's bridge rides on, wrapped by `watchedExecServer`; one per held connection, made on the first request | `EXEC_SERVER_MANUAL_BOOTSTRAP`, `EXEC_SERVER_SETTING_OFF` or `EXEC_SERVER_NO_CLI` (in that order, by `directInstallRefusal`) when the window installed its server directly; `EXEC_SERVER_LOST` after its transport was lost |
 | A nested window | the connector holds none | its own connect, by `connectControl`: the same steps up to the authenticated control connection (host key, authentication with the window's prompts, install, start, tunnel to the control port, token check), then no `serve` and no window tunnel; the control connection is held for the window's life | the same refusals; `execServerUnavailable` with a reason when the program could not be set up; the failures of the steps |
 
-**Direct mode.** `remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the
-failure kind `execServerUnavailable` and a reason of its own (the setting, or the platform). No second route over plain
+**Direct mode.** The manual bootstrap (F-2406 BR-2: the effective `remote.SSH.useExecServer` is false while it is on),
+`remote.SSH.useExecServer` off, or no command-line program for the host's platform, refuses with the failure kind
+`execServerUnavailable` and a reason of its own (the mode, the setting, or the platform). No second route over plain
 ssh channels exists, and no direct install is made for an exec server.
 
 **The lost transport.** The returned exec server is a `WatchedExecServer`: `ExecServer` plus the owner's
@@ -883,9 +922,14 @@ host through core's API. `spawn`'s environment is its own parameter, never in th
 | `kill` | H1, data folder | done; the caller then drops S9's record | the channel failure (B shows STR:S076) |
 | `uninstall` | H1, data folder | done, silently | the channel failure |
 | `cleanup` | H1, data folder | done | none raised |
+| `heldServer` | H1, data folder, commit | `alive` with the port its log last named, or `notAlive` with the reason | none raised: every failure is `notAlive` |
 
 Rules:
 - `kill` stops this data folder's server process tree and removes `bin/` (F-2411).
+- `heldServer` reads, for a window that takes up a running connection server's server, whether the process this data
+  folder's commit recorded still runs and the port its log last named (facts `server.alive`, `server.port`). It
+  starts nothing, takes no lock and changes nothing, and only the take-up uses it, with the data folder of S9's
+  record, never the setting's (ruling-2995-held-server).
 - `uninstall` deletes exactly `<home>/<serverDataFolderName>` (F-2412).
 - `cleanup` follows the record's policy: `keepNewest(5)` for SSH on every resolve (F-2413 BR-9 as revised). It
   deletes an older install only when its F-2408 lock can be taken, always keeps the current one, follows
@@ -1098,7 +1142,8 @@ Rules:
   (F-2003), never into `Failed.reason`. A reason is an id: one from the spec's string table, or our own named entry,
   set per kind where the spec places it. `serverDownload` carries **S043** (`Downloading VS Code Server failed. Please
   try again later.`, F-2403 7.E1, POST-4), `serverInstall` carries **S075** (`Failed to install the VS Code Server`,
-  F-2403 7.E2/7.E3), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
+  F-2403 7.E2/7.E3), except a host that could not create its install folder (the script status `CreateInstallDirFailed`),
+  which carries **S070** (`Failed to create the remote server's install directory`, F-2407 7.E2), and a kind with no placement in the spec has no reason (S030). ssh's own failure lines still
   reach the dialog through S5's `classify`: they are ssh's words, which F-2601 shows.
 - Every recorded hang becomes a bound wait followed by F-2601's dialog (R-79). This covers:
   - F-2103 Q1, F-2104 Q1, F-2304 Q2, F-2308 7.E2, 7.E8, BR-6 and BR-11 (the former Q3 and Q4), F-2405 Q3;
@@ -1211,25 +1256,30 @@ The WSL listener rendezvous (area D, D5) is a candidate if D chooses it.
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `acquire` | registry folder (per profile from global storage, per user, or per instance as `{instanceOf: <the caller's globalStorageUri.fsPath>}`; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters, and optionally `leaveStarterTree` with the bundled launcher script, see **The start**), end policy, cancellation | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed` (a launcher that exits other than 0 included), `endpointUnreachable` (after replacing a stale record once), `cancelled`, `registryUnresolved` (an instance folder that X3 can't find, returned before any record is read or claimed) |
+| `acquire` | registry folder (per profile from global storage, per user, or per instance as `{instanceOf: <the caller's globalStorageUri.fsPath>}`; the caller chooses), namespace (extension and kind), recordKey, start specification (the bundled helper script and its parameters, and optionally `leaveStarterTree` with the bundled launcher script, see **The start**), end policy, cancellation, optionally `onStaleReplaced` (called once when this acquire replaces a stale record, before it starts the helper) | a lease: the helper's endpoint, its record payload, `startedByMe`, and the lease's position in the oldest-first list | `spawnFailed` (a launcher that exits other than 0 included), `endpointUnreachable` (after replacing a stale record once), `cancelled`, `registryUnresolved` (an instance folder that X3 can't find, returned before any record is read or claimed); an `ending` reply is not a failure: `acquire` waits for that helper's endpoint to close (bounded by the hello limit plus the end policy's `actionBound`), then claims and starts a fresh helper once, as for a stale record |
 | `release` | lease | none; closing the lease's connection has the same effect, so a crashed extension host releases by itself | none |
 | `request` | lease, message (plain data) | reply (plain data) | `helperGone`, `timeout` (the caller's limit) |
 | `events` | lease | helper messages, `leaseListChanged`, `helperGone` | none |
-| `stop` | registry folder (the same three forms), namespace, recordKey | done, also when nothing runs, and at once for an instance folder that can't be found. When it returns, the stopped helper's record is gone, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532 and #597: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). A helper that answers removes its own record before it closes its endpoint (X2), and `stop` waits for that close, bounded by the hello limit. `stop` removes the record itself only when the helper doesn't answer or doesn't end in time, and only while the file holds the stopped helper's nonce: a record a new helper wrote (another nonce) stays | none |
+| `stop` | registry folder (the same three forms), namespace, recordKey | `found` or `none` (whether a record was looked up), also when nothing runs, and at once for an instance folder that can't be found. When it returns, the stopped helper's record is gone, so nothing it stored for the key outlives the call (ruled 2026-10-13, #532 and #597: F-2412 BR-7 and POST-3, F-2411 6.1 step 2). A helper that answers removes its own record before it closes its endpoint (X2), and `stop` waits for that close, bounded by the hello limit. `stop` removes the record itself only when the helper doesn't answer or doesn't end in time, and only while the file holds the stopped helper's nonce: a record a new helper wrote (another nonce) stays | none |
+
+- A hello names the replies its client understands (`understands: ['ending']`). A helper sends `ending` only to a hello that names it and closes any other hello unanswered, which an older client reads as no welcome.
 
 ### X2 helper-runtime (bundled into each helper script)
 
 | Operation | Inputs | Output | Failures |
 |---|---|---|---|
-| `serve` | endpoint, record payload and record path, end policy, message handler | runs until the end policy fires or `stop` arrives. On either orderly end the helper removes its own record, when the file still holds its nonce, **before** it closes its endpoint (ruled 2026-10-13, #597). While it still answers, no acquire may replace its record (a joiner never replaces a live record), so this removal can't delete a newer helper's record, and the windows it served reconnect only after it is gone | none raised; the helper logs to its own file and exits |
+| `serve` | endpoint, record payload and record path, end policy, message handler | runs until the end policy fires or `stop` arrives. On either orderly end the helper removes its own record, when the file still holds its nonce, **before** it closes its endpoint (ruled 2026-10-13, #597). While it still answers, no acquire may replace its record (a joiner never replaces a live record), so this removal can't delete a newer helper's record, and the windows it served reconnect only after it is gone. From the moment its end policy fires or `stop` arrives, the helper has committed to ending: it answers every new hello with `ending` (no `welcome`, no lease) and accepts no request on a lease opened after that moment. The commit and the lease table are one event-loop turn, so a lease either cancels the policy (it came first) or is refused (it came after), never both (ruling-2687-ending-refuses, #2687) | none raised; the helper logs to its own file and exits |
 
 End policies (data, no per-consumer branches). The policy is armed at start as if a lease had just closed, so a
 helper that never receives a lease ends by the same rule (ruled 2026-10-08); a joiner never replaces a still-starting
 helper's record (the claim is atomic and the starter's hello window counts as alive):
 - `graceAfterLastLease(ms)`: end this long after the last lease closes. A new lease within the grace cancels it. SSH
   uses 2 to 4 s (F-2102 BR-3), and the value must also carry a reload.
-- `delayedCheckAfterLastLease(ms, action)`: after the last lease closes, wait, check again, then run the consumer's
-  action (for example "stop these containers") and end. Area C uses about 10 s (F-0417 AC-43).
+- `delayedCheckAfterLastLease(ms, action, actionBound)`: after the last lease closes, wait, check again, then run the
+  consumer's action (for example "stop these containers") and end. The helper commits to ending when the check decides to
+  run the action, before the action, so a hello during it is answered `ending`. `actionBound` is the longest the action
+  may take. Area C uses about 10 s and an `actionBound` of 12 s, the register answer's bound (F-0417 AC-43,
+  ruling-2645-register-reply). `graceAfterLastLease` and `idleAfterLastLease` have no action: their bound is 0.
 - `idleAfterLastLease(ms)`: as the grace, for the relay's 30 to 60 s (F-8103 BR-6).
 
 ### X3 registry (pure decisions, file access through a port)

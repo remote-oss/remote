@@ -13,13 +13,29 @@ const RECORD: SharedRecord = {
   connectionToken: 'token-value',
 };
 
+/** The data folder a stored record keeps when it is sent with `dataFolder`. */
+function folderOf(dataFolder: string | number): unknown {
+  const request = readConnectionRequest({
+    type: 'setSharedRecord',
+    record: {...RECORD, dataFolder},
+  });
+  return request?.type === 'setSharedRecord'
+    ? request.record.dataFolder
+    : 'unread';
+}
+
 describe('connection requests (contracts §4 S9)', () => {
   it('reads the requests that carry nothing', () => {
     deepStrictEqual(
-      ['connect', 'sharedRecord', 'kill'].map(type =>
+      ['connect', 'sharedRecord', 'kill', 'checkSession'].map(type =>
         readConnectionRequest({type}),
       ),
-      [{type: 'connect'}, {type: 'sharedRecord'}, {type: 'kill'}],
+      [
+        {type: 'connect'},
+        {type: 'sharedRecord'},
+        {type: 'kill'},
+        {type: 'checkSession'},
+      ],
     );
   });
 
@@ -30,6 +46,62 @@ describe('connection requests (contracts §4 S9)', () => {
         type: 'setSharedRecord',
         record: RECORD,
       },
+    );
+  });
+
+  it("ruling-2995-takeup-cleanup: reads a record's data folder, and drops one that is empty or no text", () => {
+    deepStrictEqual(
+      [folderOf('/home/u/.server'), folderOf(''), folderOf(7)],
+      ['/home/u/.server', undefined, undefined],
+    );
+  });
+
+  it('drops a data folder that the split at its last slash cannot read as an absolute root, POSIX or Windows, above a folder of its own name', () => {
+    deepStrictEqual(
+      [
+        '/a/.server',
+        '/home/u/.server',
+        '/.server',
+        '.server',
+        'home/u/.server',
+        '/',
+        '/home/u/',
+        '/home/u/.',
+        '/home/u/..',
+        '/home/u/..server',
+        'C:\\Users\\u/.vscode-server',
+        'C:/.vscode-server',
+        'C:\\Users\\u\\.vscode-server',
+        'C:foo/.vscode-server',
+        'c:/Users/u/.vscode-server',
+      ].map(folderOf),
+      [
+        '/a/.server',
+        '/home/u/.server',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        '/home/u/..server',
+        'C:\\Users\\u/.vscode-server',
+        undefined,
+        undefined,
+        undefined,
+        'c:/Users/u/.vscode-server',
+      ],
+    );
+  });
+
+  it('reads a shared reply whose record holds a data folder the split cannot read as no data folder', () => {
+    deepStrictEqual(
+      readConnectionReply({
+        type: 'sharedRecord',
+        record: {...RECORD, dataFolder: 'relative/.server'},
+      }),
+      readConnectionReply({type: 'sharedRecord', record: {...RECORD}}),
     );
   });
 
@@ -71,6 +143,23 @@ describe('connection requests (contracts §4 S9)', () => {
         undefined,
         undefined,
         {type: 'refused', reason: 'notOwner'},
+        undefined,
+      ],
+    );
+  });
+
+  it('F-2505 AC-25: reads the answer of a session check, and nothing from one without its flag', () => {
+    deepStrictEqual(
+      [
+        readConnectionReply({type: 'sessionChecked', alive: true}),
+        readConnectionReply({type: 'sessionChecked', alive: false}),
+        readConnectionReply({type: 'sessionChecked'}),
+        readConnectionReply({type: 'sessionChecked', alive: 'yes'}),
+      ],
+      [
+        {type: 'sessionChecked', alive: true},
+        {type: 'sessionChecked', alive: false},
+        undefined,
         undefined,
       ],
     );
@@ -185,6 +274,48 @@ describe('connection requests (contracts §4 S9)', () => {
     deepStrictEqual(
       bodies.map(body => readConnectionRequest(body)),
       bodies,
+    );
+  });
+
+  it('F-2408 BR-4: reads the session lock of a script, open or release, and none when there is none', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    const bodies = [
+      {...complete, sessionLock: {path: '/tmp/lock', action: 'open'}},
+      {...complete, sessionLock: {path: '/tmp/lock', action: 'release'}},
+      complete,
+    ];
+    deepStrictEqual(
+      bodies.map(body => readConnectionRequest(body)),
+      bodies,
+    );
+  });
+
+  it('F-2408 BR-4: reads nothing from a script request whose session lock has no path, another action, or is not an object', () => {
+    const complete = {
+      type: 'runScript',
+      runId: 1,
+      script: 'x',
+      environment: {},
+      inputBase64: null,
+      deadlineMilliseconds: 1000,
+    };
+    deepStrictEqual(
+      [
+        {path: '', action: 'open'},
+        {path: '/tmp/lock', action: 'take'},
+        {path: 5, action: 'open'},
+        {action: 'open'},
+        'open',
+        null,
+      ].map(sessionLock => readConnectionRequest({...complete, sessionLock})),
+      [undefined, undefined, undefined, undefined, undefined, undefined],
     );
   });
 

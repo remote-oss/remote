@@ -6,17 +6,21 @@
 
 import {deepStrictEqual} from 'node:assert';
 import {spawnSync} from 'node:child_process';
-import {readFileSync, readdirSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {
   connectedWithin,
+  onHostAs,
   openWindow,
   readUserSettings,
   restoreUserSettings,
   userSettings,
   variable,
 } from '../windows/harness.ts';
+import {labelsWithin} from '../windows/labels-wait.ts';
 import {authorityHex} from './authority-hex.ts';
+import {scanStored} from './stored-scan.ts';
 import {
   answerDialog,
   chooseQuickPickRow,
@@ -45,6 +49,15 @@ async function labelsOf(
   };
 }
 
+/** The labels of `window` once its indicator reads `indicatorText` and its title `titleText`, within the bound of `labels-wait.ts`. */
+function labelsShowing(
+  window: string,
+  indicatorText: string,
+  titleText: string,
+): Promise<{indicator: string; title: string; reads: string}> {
+  return labelsWithin(() => labelsOf(window), window, indicatorText, titleText);
+}
+
 /** The lines of `file`. */
 function linesOf(file: string): string[] {
   return readFileSync(file, 'utf8')
@@ -71,13 +84,18 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
     await openWindow(ALIAS, 'f2008-alias-window');
     try {
       await connectedWithin('f2008-alias-window', 90_000);
-      const shown = await labelsOf('f2008-alias-window');
+      const shown = await labelsShowing(
+        'f2008-alias-window',
+        `SSH: ${ALIAS}`,
+        `[SSH: ${ALIAS}]`,
+      );
       deepStrictEqual(
         {
           indicator: shown.indicator.includes(`SSH: ${ALIAS}`),
           title: shown.title.includes(`[SSH: ${ALIAS}]`),
         },
         {indicator: true, title: true},
+        `the labels of f2008-alias-window, the last reads: ${shown.reads}`,
       );
     } finally {
       await closeQuietly('f2008-alias-window');
@@ -92,13 +110,18 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
     );
     try {
       await connectedWithin('f2008-hex-alias', 90_000);
-      const shown = await labelsOf('f2008-hex-alias');
+      const shown = await labelsShowing(
+        'f2008-hex-alias',
+        'SSH: harness',
+        '[SSH: harness]',
+      );
       deepStrictEqual(
         {
           indicator: shown.indicator.includes('SSH: harness'),
           title: shown.title.includes('[SSH: harness]'),
         },
         {indicator: true, title: true},
+        `the labels of f2008-hex-alias, the last reads: ${shown.reads}`,
       );
     } finally {
       await closeQuietly('f2008-hex-alias');
@@ -129,7 +152,11 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
       }
       await chooseQuickPickRow('f2008-hex-address', accept);
       await connectedWithin('f2008-hex-address', 90_000);
-      const shown = await labelsOf('f2008-hex-address');
+      const shown = await labelsShowing(
+        'f2008-hex-address',
+        `SSH: ${label}`,
+        `[SSH: ${label}]`,
+      );
       const found = spawnSync(
         'ssh-keygen',
         [
@@ -144,26 +171,52 @@ describe('the authorities of core’s "Open in Editor" (card #2500, F-2008)', fu
         variable('HARNESS_USER_DATA'),
         'User/globalStorage/remote-oss.remote-ssh',
       );
-      const stored = (() => {
-        try {
-          return readdirSync(storage).filter(name =>
-            readFileSync(path.join(storage, name), 'utf8').includes(
-              block.hostName,
-            ),
-          );
-        } catch {
-          return [];
-        }
-      })();
+      // A trust store is a store of host keys (the criterion's trust store), so the scan looks for the host's key, not for its
+      // name or its fingerprint: a hint that names its host, or quotes ssh's prompt with the fingerprint, is no trust store.
+      const hostKey = (
+        await onHostAs('harness', 'cat', '/etc/ssh/ssh_host_ed25519_key.pub')
+      )
+        .trim()
+        .split(/\s+/)[1];
+      const keyTexts = [hostKey ?? ''];
+      const scan = scanStored(storage, keyTexts);
+      console.log(
+        `f2008-hex-address: the trust-store scan of the storage folder read ${JSON.stringify(scan.read)}`,
+      );
+      const scratch = mkdtempSync(path.join(tmpdir(), 'f2008-control-'));
+      writeFileSync(
+        path.join(scratch, 'planted.json'),
+        `[${block.hostName}]:${String(block.port)} ssh-ed25519 ${hostKey ?? ''}`,
+      );
+      writeFileSync(
+        path.join(scratch, 'hint.json'),
+        JSON.stringify({
+          host: block.hostName,
+          prompt: 'ED25519 key fingerprint is SHA256:abcdef',
+        }),
+      );
+      const control = scanStored(scratch, keyTexts).holding;
+      rmSync(scratch, {recursive: true, force: true});
       deepStrictEqual(
         {
           indicator: shown.indicator.includes(`SSH: ${label}`),
           title: shown.title.includes(`[SSH: ${label}]`),
           newLines: linesOf(files.knownHosts).length - linesBefore,
           found: found.status,
-          stored,
+          scanned: scan.read.length > 0,
+          stored: scan.holding,
+          control,
         },
-        {indicator: true, title: true, newLines: 1, found: 0, stored: []},
+        {
+          indicator: true,
+          title: true,
+          newLines: 1,
+          found: 0,
+          scanned: true,
+          stored: [],
+          control: ['planted.json'],
+        },
+        `the labels of f2008-hex-address, the last reads: ${shown.reads}`,
       );
     } finally {
       await closeQuietly('f2008-hex-address');

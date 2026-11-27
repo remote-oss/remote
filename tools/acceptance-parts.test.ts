@@ -155,7 +155,7 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it('tooling-159, tooling-168, #2355: host cases pack by their minutes like any group, a primer stays with its case, and a launch of the CLI-source editor or with WSL distros is left out', () => {
+  it('tooling-159, tooling-168, #2355, #3203: host cases pack by their minutes like any group, a primer stays with its case, a launch of the CLI-source editor packs like any other, and one with WSL distros is left out', () => {
     const launches: Launch[] = [
       {label: 'case-one', runner: 'runner-remote', suite: 'suite-ports'},
       {label: 'case-two-prime', runner: 'runner-remote', suite: 'suite-ports'},
@@ -191,6 +191,7 @@ describe('acceptance-parts (card tooling-159)', () => {
           launches: 'case-two-prime,case-two',
           minutes: limitOf(15),
         },
+        {name: 'ssh 1/1', launches: 'cli-copy', minutes: limitOf(1)},
       ],
     );
   });
@@ -296,7 +297,7 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it("tooling-159, #2355: the repository's parts make every launch but the genuine ones, cli-path, wsl and windows-host, each test file of a split launch exactly once, the same parts each time", () => {
+  it("tooling-159, #2355, #3203: the repository's parts make every launch but the genuine ones, wsl, windows-host and containers-wsl, cli-path among them, each test file of a split launch exactly once, the same parts each time", () => {
     const launches = launchesOf(REPOSITORY_ROOT);
     const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
     const parts = partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT));
@@ -320,9 +321,10 @@ describe('acceptance-parts (card tooling-159)', () => {
       '@hosts',
       '@explorer',
       '@containers',
-      '!cli-path',
+      'cli-path',
       '!wsl',
       '!windows-host',
+      '!containers-wsl',
     ]);
     deepStrictEqual(
       [

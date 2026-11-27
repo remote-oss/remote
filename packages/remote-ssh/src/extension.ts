@@ -15,6 +15,7 @@ import {
 import {readFile} from 'node:fs/promises';
 import {homedir, tmpdir} from 'node:os';
 import path from 'node:path';
+import {confirmationFilesOf} from './preconnect/confirmation-files.ts';
 import * as vscode from 'vscode';
 import {
   familySetupPortsOf,
@@ -60,6 +61,9 @@ import {
   serveSliceEndpoints,
 } from './companion/slice-endpoints.ts';
 import {pushActiveFolders} from './companion/active-folders.ts';
+import {historyStoreOf} from './companion/folder-history.ts';
+import {type HintEvents, hintEventsOf} from './diagnostics/hint-store.ts';
+import {newSession, NODE_EVENT_FILES} from 'lib-state';
 import {serveHistoryEndpoints} from './companion/history-endpoints.ts';
 import {signalHostsChanged} from './companion/hosts-changed.ts';
 import {
@@ -302,6 +306,17 @@ export async function activate(
       result.dispose();
     },
   });
+  if (vscode.env.remoteName !== 'ssh-remote') {
+    result.writeWindowStart();
+  }
+  const session = newSession();
+  const hintEvents = hintEventsOf({
+    folder: path.join(context.globalStorageUri.fsPath, 'connection-hints'),
+    session,
+    files: NODE_EVENT_FILES,
+    earlier: context.globalState,
+    now: Date.now,
+  });
   const connect = await registerConnectOf(
     context,
     manifest,
@@ -311,6 +326,9 @@ export async function activate(
         result.revealLog(preserveFocus);
       },
       logMark: () => result.logMark(),
+      writeWindowStart: () => {
+        result.writeWindowStart();
+      },
       logText: from => result.logText(from),
       logger: result.logger,
       help: helpHandlers(help, helpLinksOf(manifest), extension),
@@ -319,6 +337,7 @@ export async function activate(
       hostsChanged,
     },
     adapters,
+    hintEvents,
   );
   context.subscriptions.push({
     dispose: () => {
@@ -336,14 +355,21 @@ export async function activate(
   hostsSignal.send = () => {
     signalHostsChanged(companion);
   };
-  const history = serveHistoryEndpoints(companion, context.globalState);
+  const historyStore = historyStoreOf({
+    folder: path.join(context.globalStorageUri.fsPath, 'folder-history'),
+    session,
+    files: NODE_EVENT_FILES,
+    legacy: context.globalState,
+    now: Date.now,
+  });
+  const history = serveHistoryEndpoints(companion, historyStore);
   const firstResolve = {
     onFirstResolveSettled: (listener: () => void) => {
       connect.onFirstResolveSettled(listener);
     },
     lastResolve: () => connect.activeConnection()?.lastResolve ?? 'none',
   } as const;
-  recordOnFirstResolve(firstResolve, workspaceOf(vscode), context.globalState);
+  recordOnFirstResolve(firstResolve, workspaceOf(vscode), historyStore);
   pushActiveFolders({
     hasWorkspace: () =>
       vscode.workspace.workspaceFile !== undefined ||
@@ -429,6 +455,8 @@ interface ServedActivation {
   revealLog(preserveFocus?: boolean): void;
   /** How many lines the log holds now. */
   logMark(): number;
+  /** Writes the editor version, the extension and the platform to the log, once. */
+  writeWindowStart(): void;
   /** The log's text from its `from`-th line on. */
   logText(from: number): string;
   logger: Logger;
@@ -447,6 +475,7 @@ async function registerConnectOf(
   host: ReturnType<typeof identifierHost>,
   served: ServedActivation,
   adapters: EditorAdapters,
+  hintEvents: HintEvents,
 ): Promise<ConnectRegistration> {
   const window = {alias: (): string => ''};
   const troubleshootingEditor = troubleshootingEditorOf(vscode, () => {
@@ -479,8 +508,11 @@ async function registerConnectOf(
         displayName: manifest.displayName,
       },
       acceptanceState: context.globalState,
+      confirmationCopies: confirmationFilesOf(
+        path.join(context.globalStorageUri.fsPath, 'preconnect-confirmations'),
+      ),
       noticeState: context.globalState,
-      hintState: context.globalState,
+      hintEvents,
       documentation: () => helpLinksOf(manifest).documentation,
       troubleshooting: {
         enabled: () =>
@@ -516,6 +548,9 @@ async function registerConnectOf(
           }),
         ),
       logMark: () => served.logMark(),
+      writeWindowStart: () => {
+        served.writeWindowStart();
+      },
       logText: from => served.logText(from),
       logger: served.logger,
       applyTerminalEnvironment: terminalEnvironmentOf(
@@ -557,6 +592,16 @@ async function registerConnectOf(
       workingDirectory: process.cwd(),
     },
   );
+  context.subscriptions.push({
+    dispose: () => {
+      machine.clientLocks.releaseAll();
+    },
+  });
+  // The extension host can end without the extension's deactivation (a closed window, a signal); the process's end
+  // still removes the client locks it holds, as the deactivation would.
+  process.once('exit', () => {
+    machine.clientLocks.releaseAll();
+  });
   const registration = await registerConnect(
     {
       resolverEditor: acceptanceResolverEditorOf(
@@ -584,7 +629,7 @@ async function registerConnectOf(
       openExternal: address =>
         vscode.env.openExternal(vscode.Uri.parse(address)),
       translate,
-      globalState: context.globalState,
+      hintEvents,
       logger: served.logger,
       notice: adapters.notice,
       addHost: {

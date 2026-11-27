@@ -16,8 +16,18 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {scriptFor, type ScriptParameters} from '../../src/index.ts';
-import {type FakeHost, parametersFor, runScript, single} from './fake-host.ts';
-import {installHostHooks, statusOf} from './bootstrap-script.fixture.ts';
+import {
+  callsOf,
+  type FakeHost,
+  parametersFor,
+  runScript,
+  single,
+} from './fake-host.ts';
+import {
+  installHostHooks,
+  serverFactsOf,
+  statusOf,
+} from './bootstrap-script.fixture.ts';
 
 /** Whether the process is still running after up to 5 s: a signal returns before the process has exited. */
 async function stillRunning(processId: number): Promise<boolean> {
@@ -54,6 +64,27 @@ describe('the POSIX bootstrap script', () => {
     rmSync(pidFile);
     return serverPid;
   }
+
+  describe('the held server check', () => {
+    it('ruling-2995-held-server: a started server is alive on the port its log names, a killed one is not, and the check starts nothing', () => {
+      runScript(host, single('install'), parametersFor());
+      const started = serverFactsOf(host, single('start'), parametersFor());
+      const whileRunning = serverFactsOf(
+        host,
+        single('heldServer'),
+        parametersFor(),
+      );
+      runScript(host, single('kill'), parametersFor());
+      deepStrictEqual(
+        [
+          whileRunning,
+          serverFactsOf(host, single('heldServer'), parametersFor()),
+          serverFactsOf(host, single('heldServer'), parametersFor()),
+        ],
+        [{alive: 'yes', port: started.port}, {alive: 'no'}, {alive: 'no'}],
+      );
+    });
+  });
 
   describe('kill, uninstall and cleanup', () => {
     it('F-2411.BR-3: kill stops the server and removes bin/', () => {
@@ -218,6 +249,7 @@ describe('the POSIX bootstrap script', () => {
       names: readonly string[],
       parameters: ScriptParameters,
       heldLock?: string,
+      freshNames: readonly string[] = [],
     ): string[] {
       const binFolder = path.join(host.home, '.server-data', 'bin');
       mkdirSync(binFolder, {recursive: true});
@@ -236,27 +268,31 @@ describe('the POSIX bootstrap script', () => {
       }
       names.forEach((name, index) => {
         const seconds = 1_700_000_000 - index * 100;
-        utimesSync(path.join(binFolder, name), seconds, seconds);
+        // A fresh folder keeps the time it was made: now.
+        if (!freshNames.includes(name)) {
+          utimesSync(path.join(binFolder, name), seconds, seconds);
+        }
       });
       runScript(host, single('cleanup'), parameters);
       return readdirSync(binFolder).sort();
     }
+
+    /** Commit-like names, which the policy that keeps the newest ranks. */
+    const NEW1 = '1'.repeat(40);
+    const NEW2 = '2'.repeat(40);
+    const OLD2 = 'd'.repeat(40);
+    const OLD3 = '3'.repeat(40);
+    const OLD4 = '4'.repeat(40);
 
     it('F-2413.BR-9: cleanup keeps the newest installs and the current one', () => {
       const parameters = parametersFor();
       parameters.cleanup = {kind: 'keepNewest', count: 2};
       deepStrictEqual(
         binAfter(
-          [
-            'new1',
-            'new2',
-            'old3',
-            'old4',
-            'abc1230000000000000000000000000000000000',
-          ],
+          [NEW1, NEW2, OLD3, OLD4, 'abc1230000000000000000000000000000000000'],
           parameters,
         ),
-        ['abc1230000000000000000000000000000000000', 'new1', 'new2'],
+        ['abc1230000000000000000000000000000000000', NEW1, NEW2].sort(),
       );
     });
 
@@ -264,11 +300,11 @@ describe('the POSIX bootstrap script', () => {
       const parameters = parametersFor();
       parameters.cleanup = {kind: 'keepNewest', count: 1};
       binAfter(
-        ['new1', 'old2', 'abc1230000000000000000000000000000000000'],
+        [NEW1, OLD2, 'abc1230000000000000000000000000000000000'],
         parameters,
       );
       deepStrictEqual(
-        existsSync(path.join(host.home, '.server-data', '.old2.log')),
+        existsSync(path.join(host.home, '.server-data', `.${OLD2}.log`)),
         false,
       );
     });
@@ -279,15 +315,18 @@ describe('the POSIX bootstrap script', () => {
       const dataFolder = path.join(host.home, '.server-data');
       mkdirSync(dataFolder, {recursive: true});
       for (const extension of ['log', 'pid', 'token']) {
-        writeFileSync(path.join(dataFolder, `.old2.socket.${extension}`), '');
+        writeFileSync(
+          path.join(dataFolder, `.${OLD2}.socket.${extension}`),
+          '',
+        );
       }
       binAfter(
-        ['new1', 'old2', 'abc1230000000000000000000000000000000000'],
+        [NEW1, OLD2, 'abc1230000000000000000000000000000000000'],
         parameters,
       );
       deepStrictEqual(
         ['log', 'pid', 'token'].map(extension =>
-          existsSync(path.join(dataFolder, `.old2.socket.${extension}`)),
+          existsSync(path.join(dataFolder, `.${OLD2}.socket.${extension}`)),
         ),
         [false, false, false],
       );
@@ -298,16 +337,106 @@ describe('the POSIX bootstrap script', () => {
       parameters.cleanup = {kind: 'keepNewest', count: 1};
       deepStrictEqual(
         binAfter(
-          ['new1', 'old2', 'abc1230000000000000000000000000000000000'],
+          [NEW1, OLD2, 'abc1230000000000000000000000000000000000'],
           parameters,
-          'old2',
+          OLD2,
         ),
-        ['abc1230000000000000000000000000000000000', 'new1', 'old2'],
+        ['abc1230000000000000000000000000000000000', NEW1, OLD2].sort(),
+      );
+    });
+
+    it('ruling-2913-lock-one-meaning: the uninstall and Kill VS Code Server take no host lock, even where it is busy', () => {
+      runScript(host, single('install'), parametersFor());
+      const before = callsOf(host).filter(call =>
+        call.startsWith('flock '),
+      ).length;
+      const busy = {STUB_FLOCK_BUSY: 'yes'};
+      const kill = statusOf(host, single('kill'), parametersFor(), {
+        environment: busy,
+      });
+      const uninstall = statusOf(host, single('uninstall'), parametersFor(), {
+        environment: busy,
+      });
+      deepStrictEqual(
+        [
+          kill,
+          uninstall,
+          callsOf(host).filter(call => call.startsWith('flock ')).length -
+            before,
+        ],
+        ['Ok', 'Ok', 0],
       );
     });
 
     const FORTY = 'a'.repeat(40);
     const OTHER_COMMIT = 'b'.repeat(40);
+
+    it('F-2413 6.4 step 2: cleanup ranks only the commits, removes a leftover wherever it stands and leaves another folder alone', () => {
+      const parameters = parametersFor();
+      parameters.cleanup = {kind: 'keepNewest', count: 4};
+      function commit(digit: string): string {
+        return digit.repeat(40);
+      }
+      const leftover = `${commit('9')}-1700000000`;
+      deepStrictEqual(
+        binAfter(
+          [
+            commit('1'),
+            'notes',
+            commit('2'),
+            leftover,
+            commit('3'),
+            'abc1230000000000000000000000000000000000',
+            commit('4'),
+            commit('5'),
+            commit('6'),
+          ],
+          parameters,
+        ),
+        [
+          commit('1'),
+          commit('2'),
+          commit('3'),
+          'abc1230000000000000000000000000000000000',
+          'notes',
+        ].sort(),
+      );
+    });
+
+    it('F-2413 6.4: cleanup removes a leftover that has not been modified for two hours', () => {
+      const parameters = parametersFor();
+      parameters.cleanup = {kind: 'keepNewest', count: 5};
+      const leftover = `${'9'.repeat(40)}-1700000000`;
+      const binFolder = path.join(host.home, '.server-data', 'bin');
+      mkdirSync(path.join(binFolder, leftover), {recursive: true});
+      const twoHoursAgo = (Date.now() - 2 * 3_600_000) / 1000;
+      utimesSync(path.join(binFolder, leftover), twoHoursAgo, twoHoursAgo);
+      runScript(host, single('cleanup'), parameters);
+      deepStrictEqual(existsSync(path.join(binFolder, leftover)), false);
+    });
+
+    it('F-2413 6.4: cleanup leaves a leftover that was modified just now, which may be an install in progress, and does not count it', () => {
+      const parameters = parametersFor();
+      parameters.cleanup = {kind: 'keepNewest', count: 1};
+      const leftover = `${'9'.repeat(40)}-1700000000`;
+      deepStrictEqual(
+        binAfter(
+          [
+            leftover,
+            '1'.repeat(40),
+            'abc1230000000000000000000000000000000000',
+          ],
+          parameters,
+          undefined,
+          [leftover],
+        ),
+        [
+          leftover,
+          '1'.repeat(40),
+          'abc1230000000000000000000000000000000000',
+        ].sort(),
+      );
+    });
 
     it('F-6304.BR-8: onlyCurrentRemoveLeftovers removes other commits and leftovers', () => {
       const parameters = parametersFor();

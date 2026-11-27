@@ -14,6 +14,7 @@ import type {
   Scheduler,
 } from 'lib-helper';
 import {AskpassEndpoint} from 'lib-helper';
+import type {Interpreter} from 'lib-host';
 import {classifyPrompt} from '../prompts/classify.ts';
 import type {PromptSurface} from './messages.ts';
 import type {Invocation} from '../arguments/invocation.ts';
@@ -28,18 +29,30 @@ import {LineSplitter} from '../process/line-splitter.ts';
 import type {ProcessSpawner} from '../process/ports.ts';
 import {spawnSession, type SshSession} from '../process/session.ts';
 import {SshLineFeed} from './ssh-line-feed.ts';
+import type {SocksProbe} from './socks-probe.ts';
 import {
   type ConnectionEvent,
   type ConnectionReply,
   type ConnectionRequest,
   readConnectionRequest,
+  SESSION_PROBE_MILLISECONDS,
   type SharedRecord,
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
 import {
+  type DetectedPlatform,
+  isProbeAnswer,
+  isProbeExecLine,
+  isSessionEntered,
+  platformProbeInput,
+  PlatformProbeReader,
+  probeHandOverLine,
+} from './platform-probe.ts';
+import {
   type BootstrapEvent,
   bootstrapEventOf,
   bootstrapLogLine,
+  type SessionOpening,
 } from './session-bootstrap.ts';
 import {ShellRuns} from './shell-runs.ts';
 
@@ -54,8 +67,8 @@ export interface ConnectionHandlerOptions {
   askpassEnvironment: Readonly<Record<string, string>>;
   editorEnvironment: Readonly<Record<string, string | undefined>>;
   waitSettings: ConnectWaitSettings;
-  /** Written to the session's standard input once, before any run's commands: the session bootstrap. */
-  sessionPrelude: string;
+  /** How the session opens: the bootstrap written once, before any run's commands, or the platform's detection first. */
+  opening: SessionOpening;
   scheduler: Scheduler;
   /** What the askpass endpoint needs: the nonce its program presents, the host's name and its first-message deadline. */
   askpass: {
@@ -66,9 +79,17 @@ export interface ConnectionHandlerOptions {
   /** A marker for the commands of one script run on the session; unguessable and new on every call. */
   newMarker: () => string;
   logLine: (line: string) => void;
+  /** The probe of the shared session over its SOCKS forward. */
+  socksProbe: SocksProbe;
 }
 
 type ConnectionState = 'idle' | 'connecting' | 'connected';
+
+/** ssh's own exit status for a failure of its own; any other status is the remote command's or the host shell's. */
+const SSH_OWN_FAILURE = 255;
+
+/** The port on the host's loopback the session check connects to: the host's own sshd. */
+const PROBE_TARGET_PORT = 22;
 
 /** The events and requests of one shared connection. */
 export class ConnectionHandler implements MessageHandler {
@@ -83,7 +104,11 @@ export class ConnectionHandler implements MessageHandler {
   private session: SshSession | undefined;
   private feed: SshLineFeed | undefined;
   private sharedRecord: SharedRecord | null = null;
+  private detected: DetectedPlatform | null = null;
   private killed = false;
+  /** The session a check is probing, until the check has ended it or found it alive. */
+  private probing: SshSession | undefined;
+  private probe: Promise<boolean> | undefined;
 
   /** A handler with no connection yet. */
   constructor(options: ConnectionHandlerOptions) {
@@ -156,6 +181,10 @@ export class ConnectionHandler implements MessageHandler {
         return {
           type: 'sharedRecord',
           record: this.sharedRecord && {...this.sharedRecord},
+          detectedPlatform: this.detected,
+          ...(this.session?.processId === undefined
+            ? {}
+            : {sshProcessId: this.session.processId}),
         };
       case 'setSharedRecord':
         if (this.state !== 'connected') {
@@ -173,9 +202,57 @@ export class ConnectionHandler implements MessageHandler {
         this.close();
         this.control.stop();
         return {type: 'accepted'};
+      case 'checkSession':
+        return {type: 'sessionChecked', alive: await this.sessionAnswers()};
       default:
         throw new Error('not a connection request');
     }
+  }
+
+  /**
+   * Whether the shared session answers one trivial run within the probe's bound. A session that does not is ended,
+   * which ends `ssh`, and the windows are told its transport is lost; the helper and its leases stay, so the next
+   * connect starts a fresh session. With no session set up there is nothing to answer. Checks that come while a probe
+   * is running share it.
+   */
+  private sessionAnswers(): Promise<boolean> {
+    if (this.state !== 'connected') {
+      return Promise.resolve(false);
+    }
+    this.probe ??= this.probeSession(this.session).finally(() => {
+      this.probe = undefined;
+    });
+    return this.probe;
+  }
+
+  private async probeSession(
+    session: SshSession | undefined,
+  ): Promise<boolean> {
+    this.probing = session;
+    // A connect through the forward to the host's own sshd, which never waits for a run on the session: a run of S10
+    // would queue behind the one that is active, and a healthy session busy with another window's long run would
+    // answer late.
+    const alive = await this.options.socksProbe({
+      socksPort: this.options.socksPort,
+      targetPort: PROBE_TARGET_PORT,
+      deadlineMilliseconds: SESSION_PROBE_MILLISECONDS,
+    });
+    if (alive) {
+      this.probing = undefined;
+      return true;
+    }
+    session?.kill();
+    await session?.exit();
+    this.probing = undefined;
+    return false;
+  }
+
+  /** The session of a check ended: its windows are told, and the login is to be made again by the oldest lease. */
+  private sessionEnded(): void {
+    this.state = 'idle';
+    this.session = undefined;
+    this.tell({type: 'transportLost'});
+    this.ownership.reopen();
   }
 
   private async runScript(
@@ -282,22 +359,29 @@ export class ConnectionHandler implements MessageHandler {
       },
     );
     this.wait = wait;
-    const runs = new ShellRuns({
-      write: text => {
-        void session.write(text);
-      },
-      scheduler: this.options.scheduler,
-      newMarker: this.options.newMarker,
-      onWedged: () => {
-        session.kill();
-      },
-    });
-    this.runs = runs;
+    const startRuns = (interpreter: Interpreter): void => {
+      this.runs = new ShellRuns({
+        write: text => {
+          void session.write(text);
+        },
+        scheduler: this.options.scheduler,
+        newMarker: this.options.newMarker,
+        interpreter,
+        onWedged: () => {
+          session.kill();
+        },
+      });
+    };
+    const {opening} = this.options;
+    const opened = this.opened(opening, session, startRuns);
     let ready = false;
     let early: Exclude<BootstrapEvent, {kind: 'ready'}> | undefined;
     const commandLog = new LocalCommandLog();
     let bootstrapped = false;
     const output = new LineSplitter(line => {
+      if (opened.hear(line)) {
+        return;
+      }
       const event = ready ? undefined : bootstrapEventOf(line);
       if (event !== undefined) {
         bootstrapped = true;
@@ -307,7 +391,7 @@ export class ConnectionHandler implements MessageHandler {
         if (logged !== undefined) {
           this.tell({type: 'localCommandLines', lines: [logged]});
         }
-        runs.hear(line);
+        this.runs?.hear(line);
       } else if (event.kind === 'ready') {
         ready = true;
         if (this.state === 'connecting') {
@@ -316,7 +400,13 @@ export class ConnectionHandler implements MessageHandler {
           feed.flush();
           this.state = 'connected';
           this.ownership.finish();
-          this.tell({type: 'connected', socksPort: this.options.socksPort});
+          this.tell({
+            type: 'connected',
+            socksPort: this.options.socksPort,
+            ...(session.processId === undefined
+              ? {}
+              : {sshProcessId: session.processId}),
+          });
         }
       } else {
         early = event;
@@ -332,8 +422,11 @@ export class ConnectionHandler implements MessageHandler {
     const lines = new LineSplitter(line => {
       if (!preludeWritten && setupMarkerOf(line) === 'authenticated') {
         preludeWritten = true;
-        void session.write(this.options.sessionPrelude);
+        opened.authenticated();
       }
+      opened.sshLine(line, () => {
+        output.flush();
+      });
       feed.push(line);
       if (this.state === 'connecting') {
         errorLines.push(line);
@@ -344,7 +437,7 @@ export class ConnectionHandler implements MessageHandler {
     });
     wait.start();
     void session.exit().then(status => {
-      runs.end();
+      this.runs?.end();
       wait.stop();
       this.askpass.closeAll();
       lines.flush();
@@ -354,12 +447,104 @@ export class ConnectionHandler implements MessageHandler {
         return;
       }
       if (this.state === 'connected') {
+        if (session === this.probing) {
+          this.sessionEnded();
+          return;
+        }
         this.tell({type: 'transportLost'});
         this.control.stop();
         return;
       }
+      if (
+        early === undefined &&
+        !timedOut &&
+        status !== undefined &&
+        status !== SSH_OWN_FAILURE &&
+        opened.inOpening()
+      ) {
+        early = {kind: 'exited', status};
+        this.options.logLine(bootstrapLogLine(early));
+      }
       this.loginFailed(errorLines, status, timedOut, early);
     });
+  }
+
+  /**
+   * The opening of `session`: what is written once ssh reports the login, and the reader of the output lines that belong
+   * to the opening rather than to the bootstrap. A known platform writes its prelude and starts the runs at once; an
+   * unknown one writes the probe, takes the output lines until the answers end, then writes the platform's line, and on
+   * POSIX the prelude once the shell has handed over. Until ssh says it entered the session, or a line of the
+   * connection's nonce on the output shows it did first, the output is a LocalCommand's, which ssh runs to its end
+   * first, its last words with no line end included; after that the lines it takes are the host shell's banner,
+   * prompts, echoes and answers, so none of them is a LocalCommand's output or a run's.
+   */
+  private opened(
+    opening: SessionOpening,
+    session: SshSession,
+    startRuns: (interpreter: Interpreter) => void,
+  ): {
+    authenticated(): void;
+    sshLine(line: string, endLocal: () => void): void;
+    hear(line: string): boolean;
+    inOpening(): boolean;
+  } {
+    if (opening.kind === 'known') {
+      startRuns(opening.interpreter);
+      return {
+        authenticated: () => {
+          void session.write(opening.prelude);
+        },
+        sshLine: () => undefined,
+        hear: () => false,
+        inOpening: () => false,
+      };
+    }
+    const nonce = this.options.newMarker();
+    const probe = new PlatformProbeReader(nonce);
+    let phase: 'local' | 'probing' | 'handing' | 'open' = 'local';
+    return {
+      authenticated: () => {
+        void session.write(platformProbeInput(nonce));
+      },
+      inOpening: () => phase !== 'open',
+      sshLine: (line, endLocal) => {
+        if (phase === 'local' && isSessionEntered(line)) {
+          endLocal();
+          phase = 'probing';
+        }
+      },
+      hear: line => {
+        if (phase === 'local') {
+          if (!isProbeAnswer(line, nonce)) {
+            return false;
+          }
+          phase = 'probing';
+        }
+        if (phase === 'probing') {
+          const found = probe.hear(line);
+          if (found === 'windows') {
+            this.detected = found;
+            startRuns('powershell');
+            phase = 'open';
+            void session.write(opening.windows.line);
+          } else if (found === 'posix') {
+            this.detected = found;
+            phase = 'handing';
+            void session.write(probeHandOverLine(nonce, opening.posix.program));
+          }
+          return true;
+        }
+        if (phase === 'handing') {
+          if (isProbeExecLine(line, nonce)) {
+            startRuns('posixShell');
+            phase = 'open';
+            void session.write(opening.posix.prelude);
+          }
+          return true;
+        }
+        return false;
+      },
+    };
   }
 
   private loginFailed(

@@ -21,7 +21,7 @@ describe('a question the extension does not recognise, on the account harness-od
     await setUserSetting('remote.SSH.showLoginTerminal', true);
   });
 
-  it('F-2308 AC-12 (ruling-299-question-bound): with the login terminal hidden and a question the extension does not recognise left unanswered, the failure dialog appears after the connect wait, well before the server drops the login', async () => {
+  it('F-2308 AC-12 (ruling-2716-question-no-reason): with the login terminal hidden and a question the extension does not recognise left unanswered, the failure dialog, with no reason part, appears after the connect wait, well before the server drops the login', async () => {
     await setUserSetting('remote.SSH.showLoginTerminal', false);
     const name = 'c82-odd-dropped';
     await openWindow('ask-odd', name, 'harness-odd');
@@ -85,8 +85,7 @@ describe('a question the extension does not recognise, on the account harness-od
             dialog: undefined,
             toasts: ['Setting up SSH Host'],
           },
-          details:
-            'Could not establish connection to "ask-odd": Connecting with SSH timed out.',
+          details: 'Could not establish connection to "ask-odd".',
           buttons: ['Close Remote', 'More Actions...', 'Retry'],
           afterTheConnectWait: true,
           seconds,

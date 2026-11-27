@@ -139,7 +139,7 @@ F-2007	17	remote-ssh	feature	spec:reviewed	E20	Companions installed with the ext
 F-2008	18	remote-ssh	feature	spec:reviewed	E20	Boundary with VS Code core's own SSH features	A	ssh.core-boundary	lib-authority	16	7	True	6	9	0	0	ssh-remote+<alias>;ssh-remote+<host name>;ssh-remote+<hex JSON>	resolvers	VS Code CLI / server install script;agent-host supervisor	editor-cli;openssh	14
 F-2101	19	remote-ssh	feature	spec:reviewed	E21	Finding and running the local ssh client	A	ssh.client-locator	lib-ssh	30	5	False	0	2	0	0	ssh-remote	resolvers	ssh;ssh -V;Git for Windows ssh.exe	openssh	14
 F-2102	20	remote-ssh	feature	spec:reviewed	E21	Connection sharing: local connection server and Kill Local Connection Server	A	ssh.local-connection-server	lib-ssh	40	10	False	1	1	0	1	ssh-remote	resolvers	ssh;detached local helper process;SSH_ASKPASS helper	openssh	20
-F-2103	21	remote-ssh	feature	spec:reviewed	E21	Exec server bootstrap mode	A	ssh.exec-bootstrap	lib-server	35	6	False	0	1	0	0	ssh-remote	resolvers (resolveExecServer, workspace.getRemoteExecServer)	VS Code CLI on host;bash;curl;wget;scp;ssh	editor-cli;openssh	19
+F-2103	21	remote-ssh	feature	spec:reviewed	E21	Exec server bootstrap mode	A	ssh.exec-bootstrap	lib-server	33	6	False	0	1	0	0	ssh-remote	resolvers (resolveExecServer, workspace.getRemoteExecServer)	VS Code CLI on host;bash;curl;wget;scp;ssh	editor-cli;openssh	19
 F-2104	22	remote-ssh	feature	spec:draft	E21	SSH tunnel to the server, dynamic forwarding and local port range	A	ssh.tunnel-manager	lib-forwarding	48	13	False	0	2	0	0	ssh-remote	resolvers (ResolvedAuthority, tunnel factory)	ssh (SOCKS dynamic forward);second ssh with local forward	openssh	21
 F-2105	23	remote-ssh	feature	spec:reviewed	E21	Connection timeouts	A	ssh.timeout-policy	lib-ssh	32	8	False	0	1	0	0	ssh-remote	resolvers	ssh	openssh	18
 F-2106	24	remote-ssh	feature	spec:draft	E21	PTY allocation	A	ssh.pty-flag	lib-ssh	17	4	False	0	1	0	0	ssh-remote		ssh (-T flag)	openssh	12
@@ -164,11 +164,11 @@ F-2309	42	remote-ssh	feature	spec:reviewed	E23	External SSH_ASKPASS	A	ssh.askpas
 F-2310	43	remote-ssh	feature	spec:reviewed	E23	Jump hosts and proxy commands	A	ssh.hop-prompt-relay	lib-ssh	36	9	True	0	0	0	0	ssh-remote	resolvers	ssh;scp;nc;ssh -W	openssh	25
 F-2311	44	remote-ssh	feature	spec:reviewed	E23	SSH agent forwarding into the remote environment	A	ssh.agent-env-fixer	lib-ssh	26	8	True	0	2	0	0	ssh-remote	resolvers	ssh;sshd;ssh-add;remote hidden terminal process creating symlink	openssh	16
 F-2312	45	remote-ssh	feature	spec:draft	E23	X11 forwarding into the remote environment	A	ssh.display-env-fixer	lib-ssh	33	6	True	0	1	0	0	ssh-remote	resolvers	ssh;sshd;xauth;xdpyinfo	openssh	16
-F-2401	46	remote-ssh	feature	spec:draft	E24	Host prerequisites: glibc, libstdc++, architecture and legacy servers	A	ssh.host-prereq-check	lib-server	21	12	True	0	0	0	0	ssh-remote	resolvers	uname;ldd;getconf	openssh	14
+F-2401	46	remote-ssh	feature	spec:draft	E24	Host prerequisites: glibc, libstdc++, architecture and legacy servers	A	ssh.host-prereq-check	lib-server	23	12	True	0	0	0	0	ssh-remote	resolvers	uname;ldd;getconf	openssh	14
 F-2402	47	remote-ssh	feature	spec:reviewed	E24	Required commands on the host (curl/wget, tar and others)	A	ssh.host-tool-probe	lib-server	28	8	True	0	0	0	0	ssh-remote	resolvers	curl;wget;tar;gzip;sh;bash;ln;flock;getconf;ldd;uname	openssh	18
 F-2403	48	remote-ssh	feature	spec:draft	E24	Server download and install on the host	A	ssh.server-installer	lib-server	27	9	True	0	1	0	0	ssh-remote	resolvers	curl;wget;tar;code	openssh;editor-cli	24
 F-2404	49	remote-ssh	feature	spec:reviewed	E24	HTTP(S) proxy for the server install and launch	A	ssh.proxy-env	lib-server	39	8	True	0	3	0	0	ssh-remote	resolvers	curl;wget	openssh	15
-F-2405	50	remote-ssh	feature	spec:draft	E24	Client-side download and transfer with scp	A	ssh.local-download-transfer	lib-server	29	12	True	0	5	0	0	ssh-remote		scp;ssh	openssh	21
+F-2405	50	remote-ssh	feature	spec:draft	E24	Client-side download and transfer with scp	A	ssh.local-download-transfer	lib-server	28	12	True	0	5	0	0	ssh-remote		scp;ssh	openssh	21
 F-2406	51	remote-ssh	feature	spec:reviewed	E24	Manual local bootstrap of the server	A	ssh.manual-bootstrap	lib-server	30	7	True	0	3	0	0	ssh-remote	resolvers	scp	openssh	22
 F-2407	52	remote-ssh	feature	spec:reviewed	E24	Server install location: remote.SSH.serverInstallPath	A	ssh.install-path-resolver	lib-server	23	5	True	0	1	0	0	ssh-remote	resolvers	ssh		21
 F-2408	53	remote-ssh	feature	spec:reviewed	E24	Install lock files and concurrent connects	A	ssh.install-lock	lib-server	40	9	True	0	4	0	0	ssh-remote	resolvers	flock;ln;ssh	openssh	23
@@ -215,16 +215,35 @@ F-4203	13	remote-ssh-edit	feature	spec:reviewed	E42	Completion in other contexts
 F-4204	15	remote-ssh-edit	feature	spec:reviewed	E42	Authoring aids the reference does not provide	B	ssh-edit.no-aids-contract	none	21	6	True	0	9	0	0					9
 F-4901	6	remote-ssh-edit	decision	spec:reviewed	E49	Decision: extension identity and reference identifiers	B	ssh-edit.identity-manifest	lib-identifiers	0	0	False	0	0	0	0					9
 F-4902	7	remote-ssh-edit	decision	spec:reviewed	E49	Decision: which OpenSSH keyword list the reimplementation follows	B	ssh-edit.keyword-catalogue	none	0	0	False	0	0	0	0				openssh	3
-F-6001	12	remote-wsl	feature	spec:needs-revision	E60	Activation, platforms, the web and workspace trust	D	wsl.activation-gate	lib-standdown	29	7	False	11	6	1	9	wsl	resolvers;contribRemoteHelp;contribViewsRemote	wsl.exe (presence check, owned elsewhere)		18
-F-6002	13	remote-wsl	feature	spec:needs-revision	E60	The WSL log and debug logging	D	wsl.log-terminal	lib-log	25	4	False	1	2	0	0	wsl	resolvers (progress link caller)			13
-F-6003	14	remote-wsl	feature	spec:needs-revision	E60	Help, feedback and issue reporting	B	wsl.help-contrib	lib-identifiers	19	4	True	3	0	1	3		contribRemoteHelp			10
-F-6201	20	remote-wsl	feature	spec:needs-revision	E62	The wsl authority, resolver and connection lifecycle	A	wsl.resolver	lib-authority	26	9	False	1	6	0	0	wsl+<distro>;wsl+ (default distro);nested wsl+x@outer	resolvers	wsl.exe --list --verbose;wsl.exe -d <distro> (probe, start, relay per connection);VS Code Server in distro	wsl.exe;openssh (nested route only)	12
-F-6203	22	remote-wsl	feature	spec:needs-revision	E62	Open Folder in WSL	D	wsl.open-folder	none	22	7	False	1	4	0	2	wsl+<distro>		wsl.exe --list --verbose	editor-cli (core openFolder)	13
-F-6204	23	remote-wsl	feature	spec:needs-revision	E62	Reopen Folder in WSL and Reopen Folder in Windows	D	wsl.reopen-translate	none	32	10	False	2	3	0	4	wsl+<distro>		wsl.exe -d <distro>;wslpath	wslpath	15
-F-6205	24	remote-wsl	feature	spec:needs-revision	E62	Window title, remote indicator and resource labels	D	wsl.label-formatters	lib-authority	20	3	True	0	2	0	0	wsl+*;wsl+<distro>	resolvers (registerResourceLabelFormatter);contribLabelFormatterWorkspaceTooltip (not needed)	wsl.exe --list --verbose		7
-F-6208	27	remote-wsl	feature	spec:needs-revision	E62	Connection failures and recovery	A	wsl.failure-dialog	lib-standdown	30	9	False	1	4	0	0		resolvers (RemoteAuthorityResolverError.NotAvailable)	wsl.exe start step in distro		16
-F-6301	28	remote-wsl	feature	spec:needs-revision	E63	Server download and install	A	wsl.server-installer	lib-server	24	9	False	1	4	0	0	wsl		wsl.exe -d <distro>;wget (in distro, fallback);tar (in distro);wslpath	wsl.exe;wget;tar	15
-F-6303	30	remote-wsl	feature	spec:needs-revision	E63	Server environment	A	wsl.server-env	lib-server	28	7	False	1	4	0	0			sh (reads server-env-setup);wsl.exe -d <distro>;interactive login shell probe (core)	openssh (SSH room has equivalent script)	14
-F-6401	32	remote-wsl	feature	spec:needs-revision	E64	The code command in a WSL shell	D	wsl.shell-handoff	lib-server	35	9	True	0	3	0	0	wsl+<distro>	resolvers	code launcher (Windows);code server CLI in distro;wget;check-requirements.sh;wsl.exe	editor-cli;openssh	15
-F-6503	36	remote-wsl	feature	spec:needs-revision	E65	Recent folders in the WSL Targets view	B	wsl.explorer-recent-folders	none	22	5	True	3	3	1	1	wsl+<distro>			editor-cli	9
-F-7901	11	remote-wsl	decision	spec:needs-revision	E79	Decision: extension identity and reference identifiers	B	wsl.identity-manifest	lib-identifiers	0	0	False	1	8	1	4	wsl				23
+F-6001	12	remote-wsl	feature	spec:reviewed	E60	Activation, platforms, the web and workspace trust	D	wsl.activation-gate	lib-standdown	47	7	False	11	6	1	9	wsl	resolvers;contribRemoteHelp;contribViewsRemote	wsl.exe (presence check, owned elsewhere)		18
+F-6002	13	remote-wsl	feature	spec:reviewed	E60	The WSL log and debug logging	D	wsl.log-terminal	lib-log	31	4	False	1	2	0	0	wsl	resolvers (progress link caller)			13
+F-6003	14	remote-wsl	feature	spec:reviewed	E60	Help, feedback and issue reporting	B	wsl.help-contrib	lib-identifiers	22	4	True	3	0	1	3		contribRemoteHelp			10
+F-6004	15	remote-wsl	feature	spec:reviewed	E60	Get Started walkthrough				29											
+F-6005	16	remote-wsl	feature	spec:reviewed	E60	Package identity, localization, documentation and telemetry names				14											
+F-6101	17	remote-wsl	feature	spec:pending	E61	WSL presence, version checks and distro enumeration				0											
+F-6102	18	remote-wsl	feature	spec:reviewed	E61	Adding a distro				24											
+F-6103	19	remote-wsl	feature	spec:reviewed	E61	Default distro on old WSL builds				11											
+F-6201	20	remote-wsl	feature	spec:reviewed	E62	The wsl authority, resolver and connection lifecycle	A	wsl.resolver	lib-authority	29	9	False	1	6	0	0	wsl+<distro>;wsl+ (default distro);nested wsl+x@outer	resolvers	wsl.exe --list --verbose;wsl.exe -d <distro> (probe, start, relay per connection);VS Code Server in distro	wsl.exe;openssh (nested route only)	12
+F-6202	21	remote-wsl	feature	spec:pending	E62	Connect to WSL and the distro picker				0											
+F-6203	22	remote-wsl	feature	spec:reviewed	E62	Open Folder in WSL	D	wsl.open-folder	none	24	7	False	1	4	0	2	wsl+<distro>		wsl.exe --list --verbose	editor-cli (core openFolder)	13
+F-6204	23	remote-wsl	feature	spec:reviewed	E62	Reopen Folder in WSL and Reopen Folder in Windows	D	wsl.reopen-translate	none	40	10	False	2	3	0	4	wsl+<distro>		wsl.exe -d <distro>;wslpath	wslpath	15
+F-6205	24	remote-wsl	feature	spec:reviewed	E62	Window title, remote indicator and resource labels	D	wsl.label-formatters	lib-authority	21	3	True	0	2	0	0	wsl+*;wsl+<distro>	resolvers (registerResourceLabelFormatter);contribLabelFormatterWorkspaceTooltip (not needed)	wsl.exe --list --verbose		7
+F-6206	25	remote-wsl	feature	spec:reviewed	E62	Recommendations: open in WSL, WSL file system, WSL 2				26											
+F-6207	26	remote-wsl	feature	spec:reviewed	E62	Reveal in File Explorer				26											
+F-6208	27	remote-wsl	feature	spec:reviewed	E62	Connection failures and recovery	A	wsl.failure-dialog	lib-standdown	32	9	False	1	4	0	0		resolvers (RemoteAuthorityResolverError.NotAvailable)	wsl.exe start step in distro		16
+F-6301	28	remote-wsl	feature	spec:reviewed	E63	Server download and install	A	wsl.server-installer	lib-server	25	9	False	1	4	0	0	wsl		wsl.exe -d <distro>;wget (in distro, fallback);tar (in distro);wslpath	wsl.exe;wget;tar	15
+F-6302	29	remote-wsl	feature	spec:reviewed	E63	Server prerequisites and supported distros				19											
+F-6303	30	remote-wsl	feature	spec:reviewed	E63	Server environment	A	wsl.server-env	lib-server	29	7	False	1	4	0	0			sh (reads server-env-setup);wsl.exe -d <distro>;interactive login shell probe (core)	openssh (SSH room has equivalent script)	14
+F-6304	31	remote-wsl	feature	spec:reviewed	E63	Server start methods				25											
+F-6401	32	remote-wsl	feature	spec:reviewed	E64	The code command in a WSL shell	D	wsl.shell-handoff	lib-server	45	9	True	0	3	0	0	wsl+<distro>	resolvers	code launcher (Windows);code server CLI in distro;wget;check-requirements.sh;wsl.exe	editor-cli;openssh	15
+F-6402	33	remote-wsl	feature	spec:reviewed	E64	Opening WSL windows from the Windows command line				34											
+F-6501	34	remote-wsl	feature	spec:pending	E65	WSL Targets view				0											
+F-6502	35	remote-wsl	feature	spec:pending	E65	Distro actions in the WSL Targets view				0											
+F-6503	36	remote-wsl	feature	spec:reviewed	E65	Recent folders in the WSL Targets view	B	wsl.explorer-recent-folders	none	27	5	True	3	3	1	1	wsl+<distro>			editor-cli	9
+F-6601	37	remote-wsl	feature	spec:reviewed	E66	File watching in WSL				17											
+F-6602	38	remote-wsl	feature	spec:reviewed	E66	VS Code core behaviour in a WSL window				27											
+F-6701	39	remote-wsl	feature	spec:reviewed	E67	Interop: WSL over SSH and dev containers from a WSL window				35											
+F-7901	11	remote-wsl	decision	spec:reviewed	E79	Decision: extension identity and reference identifiers	B	wsl.identity-manifest	lib-identifiers	0	0	False	1	8	1	4	wsl				23
+F-7902	41	remote-wsl	decision	spec:reviewed	E79	Decision: where the server comes from for WSL distros				34											
+F-7903	42	remote-wsl	decision	spec:reviewed	E79	Decision: proposed APIs				0											
+F-7904	43	remote-wsl	decision	spec:reviewed	E79	Decision: companions, dependencies, marketplaces and pre-release channel				0											

@@ -5,7 +5,7 @@
 
 import type {LastResolve} from 'lib-authority';
 import {hostKeyOfAuthority, type HistoryEntry} from 'lib-companion';
-import {type HistoryMemento, recordOpened} from './folder-history.ts';
+import type {HistoryStore} from './folder-history.ts';
 
 /** A URI as the recorder reads it. */
 interface WindowUri {
@@ -55,7 +55,7 @@ export function recordOnFirstResolve(
     lastResolve(): LastResolve;
   },
   workspace: WindowWorkspace,
-  memento: HistoryMemento,
+  store: HistoryStore,
 ): void {
   let recorded = false;
   resolve.onFirstResolveSettled(() => {
@@ -65,8 +65,8 @@ export function recordOnFirstResolve(
     }
     recorded = true;
     // The history is a convenience: a write that fails is dropped, with no notice and no log line.
-    void recordOpened(memento, record.hostKey, record.entry).catch(
-      () => undefined,
-    );
+    void store
+      .recordOpened(record.hostKey, record.entry)
+      .catch(() => undefined);
   });
 }

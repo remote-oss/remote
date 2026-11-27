@@ -23,6 +23,7 @@ import {
   PromptReader,
   type SessionRunner,
   connectionStart,
+  interpreterOfPlatform,
   sessionStartFor,
   setupMarkerOf,
   type SshRequest,
@@ -33,11 +34,13 @@ import {
   LocalCommandLog,
   bootstrapEventOf,
 } from 'lib-ssh';
+import {sshStartedLine} from '../diagnostics/log-content.ts';
 import {goesOnAfterLoginTimeout} from './connection-request.ts';
 import {
   clientRefusal,
   CONNECT_WAIT_TIMEOUT,
   ofClassification,
+  UNANSWERED_QUESTION,
 } from './failure.ts';
 import {
   isForwardingLine,
@@ -127,6 +130,7 @@ export function openTerminalConnectionStep(
       dependencies.terminalName(),
       revealed,
     );
+    dependencies.logger.info(sshStartedLine());
     return new Promise<StepResult<ConnectionLease>>(settle => {
       const lines: string[] = [];
       const waitSettings = dependencies.connectWait();
@@ -189,7 +193,7 @@ export function openTerminalConnectionStep(
             asking.questions?.onQuestion(text);
           },
           onUnreachable: () => {
-            fail(CONNECT_WAIT_TIMEOUT);
+            fail(UNANSWERED_QUESTION);
           },
         },
       );
@@ -208,8 +212,9 @@ export function openTerminalConnectionStep(
         // the bound waits for the script's start as well.
         wait.start(goesOn ? 2 : 1);
         const {prelude} = connectionStart(
-          sessionStartFor(waitSettings, goesOn),
+          sessionStartFor(waitSettings, goesOn, terms.platform),
           terms.remoteCommandInEffect,
+          terms.platform,
         );
         for (const typed of prelude.split('\n')) {
           typedLines.add(typed.trim());
@@ -219,6 +224,7 @@ export function openTerminalConnectionStep(
           scheduler: dependencies.scheduler,
           prelude,
           newMarker: () => dependencies.newMarker(),
+          interpreter: interpreterOfPlatform(terms.platform),
           onBootstrap: event => {
             hearBootstrap(event, runner);
           },
@@ -272,6 +278,7 @@ export function openTerminalConnectionStep(
             socksPort: socksPort ?? 0,
             startedLogin: true,
             storedRecord: undefined,
+            startedHelper: true,
             storeSharedRecord: () => Promise.resolve(false),
             onNotice: listener => {
               noticeListeners.push(listener);
@@ -280,6 +287,7 @@ export function openTerminalConnectionStep(
               };
             },
             answer: () => Promise.resolve(false),
+            checkSession: () => Promise.resolve('unchecked'),
             refuse: () => Promise.resolve(false),
             release: disposeTerminal,
           },

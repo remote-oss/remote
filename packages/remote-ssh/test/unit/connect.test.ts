@@ -1,5 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {MemorySink} from 'lib-log/testing/memory-sink';
+import type {SessionCheck} from 'lib-ssh';
 import type {
   ProbedHost,
   StartOutcome,
@@ -14,6 +15,7 @@ import {
 } from '../../src/pipeline/connect.ts';
 import type {
   ConnectionLease,
+  ConnectionTerms,
   ConnectSteps,
   StepFailure,
   StepResult,
@@ -41,6 +43,7 @@ import {
   WAITS,
   waitsOf,
 } from './pipeline.fixture.ts';
+import {LOCAL_LOCK_TIMEOUT} from '../../src/pipeline/failure.ts';
 
 describe('the connect pipeline, when it works', () => {
   it('runs the steps in the order of the contract, transferring a server that is not there', async () => {
@@ -61,10 +64,45 @@ describe('the connect pipeline, when it works', () => {
       'gate',
       'transfer',
       'start',
+      'cleanup',
       'openTunnel',
       'rememberPlatform',
       'applyDefaults',
     ]);
+  });
+
+  it('F-2502 5.0 step 3: the host is reported once, when the connection step opens and before the probe', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), {
+      ...options,
+      onHostReported: () => {
+        recording.calls.push('hostReported');
+      },
+    });
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['openConnection', 'hostReported', 'probe'].includes(call),
+      ),
+      ['openConnection', 'hostReported', 'probe'],
+    );
+  });
+
+  it('F-2502 7.E1: a connection step that fails reports no host', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () =>
+          Promise.resolve({kind: 'failed', failure: {kind: 'cancelled'}}),
+      }),
+      {
+        ...options,
+        onHostReported: () => {
+          recording.calls.push('hostReported');
+        },
+      },
+    );
+    deepStrictEqual(recording.calls.includes('hostReported'), false);
   });
 
   it('F-2206 §9: the probed platform is logged after the probe', async () => {
@@ -76,6 +114,45 @@ describe('the connect pipeline, when it works', () => {
         .filter(message => message.startsWith('Host platform:')),
       ['Host platform: linux x64'],
     );
+  });
+
+  /** The `Platform:` lines of a connect whose terms name `platform` and whose probe reports `operatingSystem`. */
+  async function platformLines(
+    platform: ConnectionTerms['platform'],
+    operatingSystem: 'linux' | 'darwin' | 'win32',
+  ): Promise<string[]> {
+    const {recording, options, logSink} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        decideTerms: () =>
+          Promise.resolve({kind: 'done', value: {...TERMS, platform}}),
+        probe: () =>
+          Promise.resolve({
+            kind: 'probed',
+            host: {...HOST, operatingSystem},
+          }),
+      }),
+      options,
+    );
+    return logSink.lines
+      .map(line => line.message)
+      .filter(message => message.startsWith('Platform: '));
+  }
+
+  it('F-2206 5.1 step 2 (#1835): with the platform unknown the log names the probed platform in words, once', async () => {
+    deepStrictEqual(
+      [
+        await platformLines('unknown', 'linux'),
+        await platformLines('unknown', 'darwin'),
+        await platformLines('unknown', 'win32'),
+      ],
+      [['Platform: linux'], ['Platform: macOS'], ['Platform: windows']],
+    );
+  });
+
+  it('#1835: with the platform known from the settings there is no Platform line', async () => {
+    deepStrictEqual(await platformLines('linux', 'linux'), []);
   });
 
   /** The login shell lines a connect writes, with the probe's host given by `loginShell` or the fixture's. */
@@ -159,6 +236,112 @@ describe('the connect pipeline, when it works', () => {
         ['gate', 'transfer', 'start'].includes(call),
       ),
       ['gate', 'start'],
+    );
+  });
+
+  it('F-2003 BR-6 item 2: the settings listing follows the resolver line at every resolve, a reconnection included', async () => {
+    const first = setup();
+    first.options.settingLines = [
+      'remote.SSH.lockfilesInTmp = false',
+      'remote.SSH.useFlock = true',
+    ];
+    await connect(INPUT, steps(first.recording), first.options);
+    const again = setup();
+    again.options.settingLines = ['remote.SSH.useFlock = true'];
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(again.recording),
+      again.options,
+    );
+    function lines(sink: typeof first.logSink): string[] {
+      return sink.lines.map(line => line.message).slice(0, 3);
+    }
+    deepStrictEqual(
+      [lines(first.logSink), lines(again.logSink)],
+      [
+        [
+          'Resolving ssh-remote+dev, attempt 1',
+          'remote.SSH.lockfilesInTmp = false',
+          'remote.SSH.useFlock = true',
+        ],
+        [
+          'Resolving ssh-remote+dev, attempt 2, reconnection',
+          'remote.SSH.useFlock = true',
+          'Host platform: linux x64',
+        ],
+      ],
+    );
+  });
+
+  it('F-2003 BR-5: the window start follows the settings listing at the resolve', async () => {
+    const {recording, options, logSink} = setup();
+    options.settingLines = ['remote.SSH.useFlock = true'];
+    options.writeWindowStart = () => {
+      options.logger.info('window start');
+    };
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(logSink.lines.map(line => line.message).slice(1, 3), [
+      'remote.SSH.useFlock = true',
+      'window start',
+    ]);
+  });
+
+  it('F-2506 BR-10: moves the legacy settings first at every resolve of a window, a reconnection included', async () => {
+    const {recording, options} = setup();
+    const moves: string[] = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        migrateLegacySettings: () => {
+          moves.push(`after ${recording.calls.join(',') || 'nothing'}`);
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      steps(recording, {
+        migrateLegacySettings: () => {
+          moves.push('again');
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(moves, ['after nothing', 'again']);
+  });
+
+  it('F-2506 BR-10: does not wait for the legacy settings move, and logs one that fails', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        migrateLegacySettings: () => never(),
+      }),
+      options,
+    );
+    const failing = setup();
+    await connect(
+      INPUT,
+      steps(failing.recording, {
+        migrateLegacySettings: () => Promise.reject(new Error('no settings')),
+      }),
+      failing.options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines.some(line => line.message.includes('did not work')),
+        failing.logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('legacy settings move')),
+      ],
+      [
+        true,
+        false,
+        ['the legacy settings move did not work: Error: no settings'],
+      ],
     );
   });
 
@@ -324,6 +507,423 @@ describe('the connect pipeline, when it works', () => {
       {kind: 'settingUpTunnel'},
       {kind: 'waitingForForwarding'},
     ]);
+  });
+});
+
+describe('the connect pipeline, on a connection server another window started (card #2995, ruling-2995-shared-reuse, F-2407 6.4, F-2102 5.1)', () => {
+  /** A record an earlier connection server wrote, without the held server's data folder. */
+  const HELD_EARLIER = {
+    remotePort: 4321,
+    operatingSystem: 'linux',
+    architecture: 'x64',
+    temporaryFolder: '/tmp',
+    connectionToken: 'held-token',
+  };
+  const HELD = {...HELD_EARLIER, dataFolder: '/srv/held/.server'};
+  const SETUP_STEPS = ['checkInstallFolder', 'plan', 'transfer', 'start'];
+
+  /**
+   * A connect in shared mode over a lease with `lease`'s fields, with the steps' changes `changesOf` makes, in exec
+   * mode unless `legacy`.
+   */
+  async function sharedConnect(
+    lease: Partial<ConnectionLease>,
+    changesOf: (recording: Recording) => Partial<ConnectSteps> = () => ({}),
+    legacy = false,
+  ) {
+    const {recording, options: defaults, logSink} = setup();
+    const options = legacy ? {...defaults, useExecServer: false} : defaults;
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        lookupBeforeConnection: () => false,
+        openConnection: () =>
+          Promise.resolve({
+            kind: 'done',
+            value: {...leaseOf(recording), waits: WAITS, ...lease},
+          }),
+        ...changesOf(recording),
+      }),
+      options,
+    );
+    return {result, recording, logSink};
+  }
+
+  /** What a connect did about the held server: whether it connected, checked the host, asked the server, and set up. */
+  function takeUpOf(
+    result: Awaited<ReturnType<typeof sharedConnect>>['result'],
+    recording: {calls: readonly string[]},
+  ) {
+    return {
+      connected: 'connected' in result,
+      checked: recording.calls.includes('heldServer'),
+      asked: recording.calls.includes('serverAnswers'),
+      setup: setupStepsOf(recording),
+    };
+  }
+
+  /** A connect that took up nothing: it connected over the full setup, and never checked or asked a held server. */
+  const NO_TAKE_UP = {
+    connected: true,
+    checked: false,
+    asked: false,
+    setup: SETUP_STEPS,
+  };
+
+  /** The setup steps among the calls `recording` holds, in order. */
+  function setupStepsOf(recording: {calls: readonly string[]}): string[] {
+    return recording.calls.filter(call => SETUP_STEPS.includes(call));
+  }
+
+  it('F-2407 AC-15, 6.4 step 2: a held server that answers with its token is used as it is: no folder check, plan, install or start, and the window gets its token', async () => {
+    const {result, recording} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD,
+    });
+    deepStrictEqual(
+      {
+        token:
+          'connected' in result ? result.connected.connectionToken : undefined,
+        port: 'serverPort' in result ? result.serverPort : undefined,
+        setup: setupStepsOf(recording),
+        asked: recording.calls.includes('serverAnswers'),
+      },
+      {token: 'held-token', port: 4321, setup: [], asked: true},
+    );
+  });
+
+  it('F-2407 6.4 step 3: a held server that does not answer with its token is dropped: its tunnel closes, and the folder check, the plan, the install and the start run at the current settings', async () => {
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      () => ({serverAnswers: () => Promise.resolve(false)}),
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        setup: setupStepsOf(recording),
+        closes: recording.tunnelCloses,
+      },
+      {connected: true, setup: SETUP_STEPS, closes: 1},
+    );
+  });
+
+  it('F-2407 6.4 step 3: a held server whose tunnel does not open is dropped the same way', async () => {
+    let tries = 0;
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      seen => ({
+        openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+          tries += 1;
+          onSettingUp?.();
+          return tries === 1
+            ? tunnelFails()
+            : Promise.resolve({kind: 'done', value: tunnelOf(seen)});
+        },
+      }),
+    );
+    deepStrictEqual(
+      {connected: 'connected' in result, setup: setupStepsOf(recording)},
+      {connected: true, setup: SETUP_STEPS},
+    );
+  });
+
+  it('F-2407 6.4 step 3: a held server whose tunnel opens only after its bound is dropped, and the late tunnel is closed', async () => {
+    let tries = 0;
+    const {result, recording} = await sharedConnect(
+      {
+        startedHelper: false,
+        storedRecord: HELD,
+        waits: {probeMilliseconds: 1000, tunnelMilliseconds: 20},
+      },
+      seen => ({
+        openTunnel: (input, lease, server, onWaiting, signal, onSettingUp) => {
+          tries += 1;
+          onSettingUp?.();
+          const opened = {kind: 'done' as const, value: tunnelOf(seen)};
+          return tries === 1
+            ? new Promise(resolve => {
+                setTimeout(() => {
+                  resolve(opened);
+                }, 60);
+              })
+            : Promise.resolve(opened);
+        },
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 80));
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        setup: setupStepsOf(recording),
+        closes: recording.tunnelCloses,
+      },
+      {connected: true, setup: SETUP_STEPS, closes: 1},
+    );
+  });
+
+  it('F-2413 6.4 step 1, AC-17: a take-up in legacy mode prunes the old installs in the held server’s data folder, whatever the setting now says, before the window gets its connection', async () => {
+    const pruned: Array<string | undefined> = [];
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      seen => ({
+        maintain: (input, lease, action, cancellation, host, dataFolder) => {
+          seen.calls.push(action);
+          pruned.push(dataFolder);
+          return Promise.resolve({kind: 'done'});
+        },
+      }),
+      true,
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        pruned,
+        order: recording.calls.filter(call =>
+          ['heldServer', 'serverAnswers', 'cleanup'].includes(call),
+        ),
+        setup: setupStepsOf(recording),
+      },
+      {
+        connected: true,
+        pruned: ['/srv/held/.server'],
+        order: ['heldServer', 'serverAnswers', 'cleanup'],
+        setup: [],
+      },
+    );
+  });
+
+  it('ruling-2995-takeup-cleanup (corrected): with the setting on, as an editor that names no CLI source runs its direct install, the take-up prunes too, since only a direct install stores the record', async () => {
+    const {recording} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD,
+    });
+    deepStrictEqual(
+      {
+        taken: recording.calls.includes('serverAnswers'),
+        pruned: recording.calls.includes('cleanup'),
+      },
+      {taken: true, pruned: true},
+    );
+  });
+
+  it('F-2506 6.1 step 2, AC-6 (ruling-2995-takeup-cleanup): a take-up prunes and then installs the default extensions in the record’s data folder, whatever the setting now says, before the window gets its connection', async () => {
+    const done: Array<[string, string | undefined]> = [];
+    const {result} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      () => ({
+        maintain: (input, lease, action, cancellation, host, dataFolder) => {
+          done.push([action, dataFolder]);
+          return Promise.resolve({kind: 'done'});
+        },
+        installExtensions: (input, lease, cancellation, dataFolder) => {
+          done.push(['installExtensions', dataFolder]);
+          return Promise.resolve();
+        },
+      }),
+    );
+    deepStrictEqual(
+      {connected: 'connected' in result, done},
+      {
+        connected: true,
+        done: [
+          ['cleanup', '/srv/held/.server'],
+          ['installExtensions', '/srv/held/.server'],
+        ],
+      },
+    );
+  });
+
+  it('F-2103 AC-6, AC-9 (ruling-2995-takeup-mode): a connect that may take the CLI, as after the user switched the mode, takes up no held server: no host check, no tunnel to it, and the full setup', async () => {
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: HELD},
+      () => ({certainlyDirect: () => false}),
+    );
+    deepStrictEqual(takeUpOf(result, recording), NO_TAKE_UP);
+  });
+
+  it('F-2003 BR-6 item 9: a take-up logs that the held server is listening, on the record’s port', async () => {
+    const {logSink} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD,
+    });
+    deepStrictEqual(
+      logSink.lines
+        .map(line => line.message)
+        .filter(message => message.startsWith('Remote server listening')),
+      ['Remote server listening on port 4321'],
+    );
+  });
+
+  it('ruling-2995-takeup-cleanup: a record without a data folder, from an earlier connection server, is stale: no host check, no tunnel, and the full setup', async () => {
+    const {result, recording} = await sharedConnect({
+      startedHelper: false,
+      storedRecord: HELD_EARLIER,
+    });
+    deepStrictEqual(takeUpOf(result, recording), NO_TAKE_UP);
+  });
+
+  it('ruling-2995-held-server: a held server the host says is gone, or that runs on another port, is dropped before any tunnel opens to it', async () => {
+    const outcomes = [
+      {
+        kind: 'notAlive' as const,
+        reason: 'no server of this commit runs there',
+      },
+      {kind: 'alive' as const, port: 5555},
+    ];
+    const seen = [];
+    for (const outcome of outcomes) {
+      const {result, recording} = await sharedConnect(
+        {startedHelper: false, storedRecord: HELD},
+        () => ({heldServer: () => Promise.resolve(outcome)}),
+      );
+      seen.push({
+        connected: 'connected' in result,
+        tunnelsBeforeStart: recording.calls
+          .slice(0, recording.calls.indexOf('start'))
+          .filter(call => call === 'openTunnel').length,
+        asked: recording.calls.includes('serverAnswers'),
+        setup: setupStepsOf(recording),
+      });
+    }
+    deepStrictEqual(
+      seen,
+      Array(2).fill({
+        connected: true,
+        tunnelsBeforeStart: 0,
+        asked: false,
+        setup: SETUP_STEPS,
+      }),
+    );
+  });
+
+  it('F-2407 AC-7: a joined connection server with no record checks the folder after the join, and its refusal ends the connect there, before the plan', async () => {
+    const refusal = {
+      kind: 'invalidSetting' as const,
+      reason: {id: 'installPathProvided', values: ['relative/inst']},
+    };
+    const {result, recording} = await sharedConnect(
+      {startedHelper: false, storedRecord: undefined},
+      () => ({checkInstallFolder: () => ({kind: 'failed', failure: refusal})}),
+    );
+    deepStrictEqual(
+      {
+        connected: 'connected' in result,
+        probed: recording.calls.includes('probe'),
+        planned: recording.calls.includes('plan'),
+      },
+      {connected: false, probed: true, planned: false},
+    );
+  });
+
+  it('F-2407 AC-7: a connection server this window started had the folder checked by its start, so the connect checks it no second time', async () => {
+    const {recording} = await sharedConnect({
+      startedHelper: true,
+      storedRecord: undefined,
+    });
+    deepStrictEqual(recording.calls.includes('checkInstallFolder'), false);
+  });
+
+  it('F-2407 AC-7: in terminal mode the folder is checked before the connection, as before', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.indexOf('checkInstallFolder') <
+        recording.calls.indexOf('openConnection'),
+      true,
+    );
+  });
+});
+
+describe('the connect pipeline, with the client install lock (card #2844, F-2408 BR-6, 7.E2)', () => {
+  it('BR-6: the lock is held from after the lookup, before the connection opens, until the server started', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after start',
+    ]);
+  });
+
+  it('6.1 step 2: a wait for the lock shows "Waiting for other windows to connect" before the connection opens', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: (input, onWaiting) => {
+          onWaiting();
+          return Promise.resolve({
+            kind: 'done',
+            value: {release: () => undefined},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.phases.slice(0, 3), [
+      {kind: 'initializing', quiet: true},
+      {kind: 'waitingForOtherWindow'},
+      {kind: 'opened'},
+    ]);
+  });
+
+  it("7.E2: a lock wait that runs out is the connect's failure, with the local startup lock's reason, and no connection opens", async () => {
+    const {recording, options} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        holdClientLock: () =>
+          Promise.resolve({kind: 'failed', failure: LOCAL_LOCK_TIMEOUT}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      {
+        kind: 'kind' in result ? result.kind : 'connected',
+        reason: 'reason' in result ? result.reason : undefined,
+        opened: recording.calls.includes('openConnection'),
+      },
+      {kind: 'lockTimeout', reason: {id: 'localLockTimeout'}, opened: false},
+    );
+  });
+
+  it('BR-6: a connect that fails after it took the lock gives it back', async () => {
+    const {recording, options} = setup();
+    await connect(
+      INPUT,
+      steps(recording, {
+        openConnection: () => {
+          recording.calls.push('openConnection');
+          return Promise.resolve({
+            kind: 'failed',
+            failure: {kind: 'channelClosed'},
+          });
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(recording.clientLock, [
+      'held after locateClient',
+      'released after openConnection',
+    ]);
+  });
+});
+
+describe('the warning of the download mode (F-2406 BR-3, ruling-2878-manual-bootstrap)', () => {
+  it('BR-3: a window asks for the warning once at the start of every attempt', async () => {
+    const {recording, options} = setup();
+    let warnings = 0;
+    const counted = steps(recording, {
+      warnOfDownloadMode: () => {
+        warnings += 1;
+      },
+    });
+    await connect(INPUT, counted, options);
+    await connect(
+      {...INPUT, attempt: 2, isReconnection: true},
+      counted,
+      options,
+    );
+    deepStrictEqual(warnings, 2);
   });
 });
 
@@ -1366,14 +1966,133 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     server: {...STARTED.server, reused: true},
   };
 
-  it('installs the default extensions on a server that was already running', async () => {
+  /** The recording of a connect whose start found the server already running. */
+  async function connectReusing(): Promise<
+    ReturnType<typeof setup>['recording']
+  > {
     const {recording, options} = setup();
     await connect(
       INPUT,
       steps(recording, {start: () => Promise.resolve(REUSED)}),
       options,
     );
-    deepStrictEqual(recording.calls.includes('installExtensions'), true);
+    return recording;
+  }
+
+  it('ruling-2995-takeup-cleanup (2): on a server that was already running, the full flow prunes and then installs the default extensions, both in the folder its plan names', async () => {
+    const {recording, options} = setup();
+    const folders: Array<[string, string | undefined]> = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        start: () => Promise.resolve(REUSED),
+        maintain: (input, lease, action, cancellation, host, dataFolder) => {
+          folders.push([action, dataFolder]);
+          return Promise.resolve({kind: 'done'});
+        },
+        installExtensions: (input, lease, cancellation, dataFolder) => {
+          folders.push(['installExtensions', dataFolder]);
+          return Promise.resolve();
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(folders, [
+      ['cleanup', '/home/dev/.server'],
+      ['installExtensions', '/home/dev/.server'],
+    ]);
+  });
+
+  it('F-2413 6.4 step 1: a fresh direct install, a server this connect started, prunes the old installs and installs no default extensions', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['start', 'cleanup', 'installExtensions'].includes(call),
+      ),
+      ['start', 'cleanup'],
+    );
+  });
+
+  it('installs the default extensions on a server that was already running', async () => {
+    deepStrictEqual(
+      (await connectReusing()).calls.includes('installExtensions'),
+      true,
+    );
+  });
+
+  it('F-2413 6.4 step 1: the connect prunes the older installs once the server runs, before the tunnel opens', async () => {
+    const {recording, options} = setup();
+    await connect(INPUT, steps(recording), options);
+    deepStrictEqual(
+      recording.calls.filter(call =>
+        ['start', 'cleanup', 'openTunnel'].includes(call),
+      ),
+      ['start', 'cleanup', 'openTunnel'],
+    );
+  });
+
+  it('F-2413.BR-9: the clean-up gets the probed host, so it takes the locks as the install did', async () => {
+    const {recording, options} = setup();
+    const hosts: Array<string | undefined> = [];
+    await connect(
+      INPUT,
+      steps(recording, {
+        maintain: (input, lease, action, cancellation, host) => {
+          hosts.push(host?.operatingSystem);
+          return Promise.resolve({kind: 'done'});
+        },
+      }),
+      options,
+    );
+    deepStrictEqual(hosts, ['linux']);
+  });
+
+  it('F-2413 6.4 step 5: a connect that reuses the running server prunes too', async () => {
+    deepStrictEqual((await connectReusing()).calls.includes('cleanup'), true);
+  });
+
+  it('F-2413 6.4 step 8: a clean-up that cannot run is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.reject(new Error('the channel broke')),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [
+        true,
+        ['the clean-up of old installs did not work: Error: the channel broke'],
+      ],
+    );
+  });
+
+  it('F-2413 6.4: a clean-up that ends in another status than done is logged and the connect goes on', async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        maintain: () => Promise.resolve({kind: 'noResultBlock'}),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .map(line => line.message)
+          .filter(message => message.includes('clean-up')),
+      ],
+      [true, ['the clean-up of old installs ended with noResultBlock']],
+    );
   });
 
   it('leaves the default extensions alone on a server it started', async () => {
@@ -1406,6 +2125,7 @@ describe('the connect pipeline, what it keeps and gives back', () => {
         temporaryFolder: '/tmp',
         connectionToken: 'secret-token',
         ...NO_FORWARDING,
+        dataFolder: '/home/dev/.server',
       },
     ]);
   });
@@ -1793,6 +2513,8 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     send: (notice: Parameters<NonNullable<Recording['notice']>>[0]) => void;
     endTunnel: (detail: string) => void;
     release: () => void;
+    checkSession: () => Promise<SessionCheck>;
+    recording: Recording;
     heard: TransportEvent[];
     stop: () => void;
     logSink: MemorySink;
@@ -1816,6 +2538,8 @@ describe('the connect pipeline, the transport of a connection that worked', () =
       release: () => {
         result.release();
       },
+      checkSession: () => result.checkSession(),
+      recording,
       heard,
       stop,
       logSink,
@@ -1827,6 +2551,15 @@ describe('the connect pipeline, the transport of a connection that worked', () =
     send({type: 'transportLost'});
     send({type: 'helperGone'});
     deepStrictEqual(heard, ['lost', 'closed']);
+  });
+
+  it('F-2505 AC-25: the connection asks its lease whether the session answers, and gives the answer', async () => {
+    const {checkSession, recording} = await connected();
+    recording.sessionCheck = 'ended';
+    deepStrictEqual(
+      [await checkSession(), recording.releasesAtCheck],
+      ['ended', [0]],
+    );
   });
 
   it('R1: the other notices of the lease are not transport events', async () => {

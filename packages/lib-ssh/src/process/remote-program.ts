@@ -56,6 +56,16 @@ function environmentLines(
   ]);
 }
 
+/** The characters of base64 text on one line of a session's input, well under a terminal's line limit. */
+const BASE64_LINE_LENGTH = 76;
+
+/** `text` cut into lines of at most `BASE64_LINE_LENGTH` characters; none for empty text. */
+export function base64Lines(text: string): string[] {
+  return (
+    text.match(new RegExp(`.{1,${String(BASE64_LINE_LENGTH)}}`, 'gu')) ?? []
+  );
+}
+
 /**
  * The environment as the words in front of a command (`A='x y' B='it'\''s' `), empty for none, so that the command
  * receives it without the values appearing in any process's command line.
@@ -95,15 +105,43 @@ function powershellEnvironmentLines(
 }
 
 /**
- * The fixed text PowerShell runs: it reads exactly `byteCount` bytes of the raw standard input, which hold the
- * prelude and the script, and runs them as a script block. It never reads through the console's buffered reader, so
- * what follows those bytes is left for the script.
+ * What a PowerShell run reads first on its standard input: the environment as assignments, then the script, then a
+ * line end. The environment's names must already be checked.
  */
-export function powershellReader(byteCount: number): string {
+export function powershellPrelude(
+  environment: Readonly<Record<string, string>>,
+  script: string,
+): string {
+  return `${[...powershellEnvironmentLines(environment), script].join('\n')}\n`;
+}
+
+/**
+ * The PowerShell lines that open the raw standard input of a process sshd started as `$Stream`. On Windows sshd gives
+ * that process an overlapped pipe, and Windows PowerShell's console stream never completes a read that has to wait on
+ * one; there the same handle is read through an overlapped FileStream. PowerShell 7 reads it as it is.
+ */
+export const POWERSHELL_SESSION_INPUT = [
+  '$Stream = [Console]::OpenStandardInput()',
+  "if ($PSVersionTable.PSVersion.Major -lt 6) { try { $Stream = New-Object System.IO.FileStream($Stream.GetType().GetField('_handle', [Reflection.BindingFlags]'NonPublic,Instance').GetValue($Stream), [IO.FileAccess]::Read, 1, $true) } catch {} }",
+];
+
+/**
+ * The fixed text PowerShell runs: it reads exactly `byteCount` bytes of the raw standard input, which hold the
+ * prelude and the script, and runs them as a script block. `byteCount` may instead be a token that the session loop
+ * replaces with each run's count. It never reads through the console's buffered reader, so what follows those bytes
+ * is left for the script. `input` is `session` for a process sshd started, and `pipe` for the loop's child, whose
+ * input is the loop's own ordinary pipe.
+ */
+export function powershellReader(
+  byteCount: number | string,
+  input: 'session' | 'pipe' = 'session',
+): string {
   const count = String(byteCount);
   return [
     '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
-    '$Stream = [Console]::OpenStandardInput()',
+    ...(input === 'session'
+      ? POWERSHELL_SESSION_INPUT
+      : ['$Stream = [Console]::OpenStandardInput()']),
     `$Bytes = New-Object byte[] ${count}`,
     '$Read = 0',
     `while ($Read -lt ${count}) { $Count = $Stream.Read($Bytes, $Read, ${count} - $Read); if ($Count -le 0) { break }; $Read += $Count }`,
@@ -124,7 +162,7 @@ export function powershellPlan(
   if (script.kind === 'refused') {
     return script;
   }
-  const prelude = `${[...powershellEnvironmentLines(request.environment), script.text].join('\n')}\n`;
+  const prelude = powershellPrelude(request.environment, script.text);
   const reader = powershellReader(Buffer.byteLength(prelude, 'utf8'));
   const remoteProgram = `powershell -NoLogo -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(reader, 'utf16le').toString('base64')}`;
   if (remoteProgram.length > limit) {

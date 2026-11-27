@@ -9,6 +9,7 @@ import type {
   ConnectPhase,
   Connected,
   Connector,
+  DecodedTarget,
   Failed,
   FailureHint,
 } from 'lib-authority';
@@ -27,12 +28,7 @@ import {
   type ControlConnection,
   type PhaseEvent,
 } from './connect.ts';
-import {
-  EXEC_SERVER_LOST,
-  EXEC_SERVER_NO_CLI,
-  EXEC_SERVER_SETTING_OFF,
-  failedWith,
-} from './failure.ts';
+import {EXEC_SERVER_LOST, directInstallRefusal, failedWith} from './failure.ts';
 import type {CancelSource} from 'lib-authority';
 import type {SshTarget} from 'lib-ssh';
 import {sshTargetOf} from './host-settings.ts';
@@ -48,7 +44,10 @@ export interface ConnectorDependencies {
   /** Whether a connect runs in terminal mode (each window its own `ssh`); read once when the connect starts. */
   terminalMode: () => boolean;
   /** The options of one connect, except its cancellation and its phase listener, which the connector supplies. */
-  options: Omit<ConnectOptions, 'cancellation' | 'onPhase'>;
+  options: Omit<
+    ConnectOptions,
+    'cancellation' | 'onPhase' | 'onHostReported' | 'onPlanned'
+  >;
   /** Reveals the connection's log: what the progress's details link shows. */
   revealLog(): void;
   /** Makes these the only variables the window's terminals get from the extension, for the connect that worked. */
@@ -167,6 +166,11 @@ export interface SshConnector extends Connector {
    * holds none or its transport was lost.
    */
   heldHost(): {target: SshTarget; terminalMode: boolean} | undefined;
+  /**
+   * Calls `listener` with the connect's target each time a connect's host reported its platform; gives back what
+   * removes it.
+   */
+  onHostReported(listener: (target: DecodedTarget) => void): () => void;
 }
 
 function isConnection(result: Connection | Failed): result is Connection {
@@ -191,6 +195,7 @@ const CANCEL_SOURCES: Readonly<Record<CancelSource, string>> = {
 /** The connector of Remote - SSH over its pipeline. */
 export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
   const phases = new Listeners<ConnectPhase>();
+  const hostReported = new Listeners<DecodedTarget>();
   const lost = new Listeners<undefined>();
   const closed = new Listeners<undefined>();
   let running: AbortController | undefined;
@@ -212,6 +217,24 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
       current.connection.release();
     }
     windowExec = undefined;
+  }
+
+  /**
+   * Core started a reconnection, so the window's transport was lost: asks the helper of the connection the window
+   * holds whether its shared session still answers, and says what it found. A session that does not answer is ended,
+   * so this attempt starts a fresh one instead of joining it.
+   */
+  async function checkHeldSession(): Promise<void> {
+    const current = held;
+    if (current === undefined) {
+      return;
+    }
+    const found = await current.connection.checkSession();
+    dependencies.options.logger.info(
+      found === 'unchecked'
+        ? 'the held connection could not be checked: its helper did not answer the check'
+        : `the held connection was checked: ${found === 'alive' ? 'its session answers' : 'no live session answered: it did not within the bound and was ended, or there was none'}`,
+    );
   }
 
   /** Gives back the control connection a nested window holds. */
@@ -253,12 +276,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
     }
     const {control} = current.connection;
     if (control === undefined) {
-      return refusal(
-        input,
-        dependencies.options.useExecServer
-          ? EXEC_SERVER_NO_CLI
-          : EXEC_SERVER_SETTING_OFF,
-      );
+      return refusal(input, directInstallRefusal(dependencies.options));
     }
     if (windowExec?.connection !== current.connection) {
       windowExec = {
@@ -304,12 +322,34 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         told = phaseOf(event, terminalMode);
         phases.tell(told);
       }
+      // The label is told once: with the CLI path when the plan says so, before the server is ready; in the other flows
+      // only when the resolve has ended, whichever way, never for a cancel, so that the title and the indicator change in order.
+      let labelHeld = false;
+      function tellLabel(): void {
+        if (!labelHeld) {
+          return;
+        }
+        labelHeld = false;
+        hostReported.tell({
+          family: 'ssh-remote',
+          target: input.target,
+          rawHostString: input.rawHostString,
+        });
+      }
       let result: Result | Failed;
       try {
         result = await pipeline(dependencies.stepsFor(onPhase), {
           ...dependencies.options,
           cancellation: controller.signal,
           onPhase,
+          onHostReported: () => {
+            labelHeld = true;
+          },
+          onPlanned: kind => {
+            if (kind === 'cli') {
+              tellLabel();
+            }
+          },
         });
       } catch (caught) {
         dependencies.resolveEnded?.(
@@ -331,6 +371,12 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         result.release();
         return refusal(input, {kind: 'cancelled'});
       }
+      if (
+        !controller.signal.aborted &&
+        !('kind' in result && result.kind === 'cancelled')
+      ) {
+        tellLabel();
+      }
       return result;
     } finally {
       if (running === controller) {
@@ -341,8 +387,11 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
 
   return {
     async connect(hostInput): Promise<Connected | Failed> {
-      releaseHeld('a new connect starts');
       const input = pipelineInputOf(hostInput);
+      if (input?.isReconnection === true) {
+        await checkHeldSession();
+      }
+      releaseHeld('a new connect starts');
       if (input === undefined) {
         return NOT_SSH_TARGET;
       }
@@ -437,6 +486,7 @@ export function connectorOf(dependencies: ConnectorDependencies): SshConnector {
         : {target: held.target, terminalMode: held.terminalMode};
     },
     onPhase: listener => phases.subscribe(listener),
+    onHostReported: listener => hostReported.subscribe(listener),
     onTransportLost: listener =>
       lost.subscribe(() => {
         listener();

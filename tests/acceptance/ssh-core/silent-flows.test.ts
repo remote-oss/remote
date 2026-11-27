@@ -3,6 +3,7 @@ import {readdirSync} from 'node:fs';
 import path from 'node:path';
 import {
   closeWindow,
+  commandEventsSince,
   commandsOf,
   connectionLog,
   editorProduct,
@@ -15,6 +16,7 @@ import {
   variable,
   waitFor,
 } from '../windows/harness.ts';
+import {explainedFailure, section} from '../windows/connect-failure.ts';
 import {runFromPalette} from '../windows/palette.ts';
 import {
   notificationCentre,
@@ -89,6 +91,48 @@ async function footprintOf(window: string): Promise<Footprint> {
   };
 }
 
+/**
+ * The standing of the row's node debug session when the wait ends, from the window's text before and after the Debug
+ * Console is asked for: the pick stands while a start waits for a configuration, the console names a session that
+ * began, and the toolbar stands while one runs.
+ */
+function debugSessionStanding(
+  shown: string,
+  revealed: string,
+): {
+  state: string;
+  evidence: string;
+} {
+  if (shown.includes('Select a configuration')) {
+    return {
+      state: 'the configuration pick stood open',
+      evidence: "the pick 'Select a configuration' in the window",
+    };
+  }
+  if (revealed.includes('exited with code')) {
+    return {
+      state: 'the node session started and ended',
+      evidence: "the console's 'exited with code' line",
+    };
+  }
+  if (shown.includes('Run app')) {
+    return {
+      state: 'the node session stood running',
+      evidence: "the session's 'Run app' toolbar in the window",
+    };
+  }
+  if (revealed.includes('Starting debug session')) {
+    return {
+      state: 'the node session started',
+      evidence: "the console's 'Starting debug session' line",
+    };
+  }
+  return {
+    state: 'no pick, session or console line stood',
+    evidence: 'the window and the revealed console named the session nowhere',
+  };
+}
+
 describe('the extension in the core flows of an SSH window (card connect-125)', function () {
   this.timeout(600_000);
 
@@ -138,6 +182,7 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
       // 5.4: a node program is debugged to its end.
       // The start returns once the session is up, which on a slow host takes longer than a command may; the program's
       // output below is what the row waits for.
+      const debugStartAt = Date.now();
       await startInWindow(folder, 'workbench.action.debug.start');
       await waitFor(
         'the program to print in the Debug Console',
@@ -145,19 +190,43 @@ describe('the extension in the core flows of an SSH window (card connect-125)', 
         90_000,
       ).catch(async (caught: unknown) => {
         // What the window shows when the wait ends tells a program that did not start (a pick, a dialog) from one whose
-        // output did not reach the console.
-        const shown = await pageText(folder).catch(() => '(unreadable)');
-        // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
-        // differently from a session that never started.
-        await startInWindow(folder, 'workbench.debug.action.toggleRepl').catch(
-          () => undefined,
-        );
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const revealed = await pageText(folder).catch(() => '(unreadable)');
-        throw new Error(
-          `${String(caught)}; the window shows (its last 1500 characters): ${JSON.stringify(shown.slice(-1500))}; after Debug Console was asked for, the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'} and the window shows (its last 600 characters): ${JSON.stringify(revealed.slice(-600))}`,
-          {cause: caught},
-        );
+        // output did not reach the console; the standing names the session's state and the seconds since the start. Each
+        // fact is its own section, so a read that fails is told in its place and the wait's own failure stays first.
+        throw await explainedFailure(caught, async () => {
+          const seconds = Math.round((Date.now() - debugStartAt) / 1000);
+          const shown = await pageText(folder).catch(() => '(unreadable)');
+          // Then the Debug Console is asked for, so that a program that ran while another panel was shown reads
+          // differently from a session that never started.
+          await startInWindow(
+            folder,
+            'workbench.debug.action.toggleRepl',
+          ).catch(() => undefined);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          const revealed = await pageText(folder).catch(() => '(unreadable)');
+          return [
+            section('the debug session', () => {
+              const standing = debugSessionStanding(shown, revealed);
+              return `${String(seconds)} s after the debug start it stood at ${standing.state} (${standing.evidence})`;
+            }),
+            section('the window (its last 1500 characters)', () =>
+              JSON.stringify(shown.slice(-1500)),
+            ),
+            section(
+              'the window after the Debug Console was asked for (its last 600 characters)',
+              () =>
+                `the program's line is ${revealed.includes(`c125-ran-on-${host}`) ? 'there' : 'not there'}: ${JSON.stringify(revealed.slice(-600))}`,
+            ),
+            // A start the agent only accepted is still running, one that failed says why, and one that is done with no
+            // session standing is the editor's.
+            section(
+              'the window agent’s events about the commands since the debug start',
+              () => {
+                const lines = commandEventsSince(folder, debugStartAt);
+                return lines.length === 0 ? 'none' : lines.join('\n');
+              },
+            ),
+          ].join('\n');
+        });
       });
       await new Promise(resolve => setTimeout(resolve, 5000));
       await inWindow(folder, 'workbench.action.debug.stop').catch(

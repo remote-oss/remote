@@ -85,7 +85,7 @@
   "label": "spec:draft",
   "title": "Jump hosts and proxy commands",
   "epic": "E23",
-  "acCount": 36,
+  "acCount": 37,
   "surfaces": {
    "commands": [],
    "settings": [],

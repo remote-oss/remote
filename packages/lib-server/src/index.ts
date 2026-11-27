@@ -63,6 +63,7 @@ export {
   type MaintenanceOutcome,
   uninstall,
 } from './lifecycle/maintenance.ts';
+export {heldServer, type HeldServerOutcome} from './lifecycle/held-server.ts';
 export {
   plan,
   type ExistingLayout,
@@ -107,10 +108,12 @@ export {
 export {
   type Clock,
   type ClientLockOptions,
+  clientLockPath,
   type LockFilePort,
   lockIdFor,
   withClientLock,
 } from './locks/client-lock.ts';
+export {type NodeLockFiles, nodeLockFiles} from './locks/node-lock-files.ts';
 export {type HostLockStep, hostLockLoop} from './locks/host-lock-loop.ts';
 export type {
   ClientFilePort,
@@ -137,7 +140,6 @@ export {
 export {
   type CliInstallOutcome,
   type CliPlacement,
-  type CliStartDependencies,
   type CliStopOutcome,
   installCli,
   startCli,
@@ -205,4 +207,9 @@ export {
   type WatchedExecServer,
   watchedExecServer,
 } from './cli-control/exec-server.ts';
-export {type S045Event, s045EventOf} from './cli-control/progress.ts';
+export {execServerChannel} from './cli-control/exec-host-channel.ts';
+export {
+  cliServerFolderOf,
+  type S045Event,
+  s045EventOf,
+} from './cli-control/progress.ts';

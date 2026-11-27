@@ -18,7 +18,7 @@ import {
 } from 'lib-server';
 import {startHost, type RunningHost} from './host-fixture.ts';
 import {openSharedSession, type SharedSession} from './shared-session.ts';
-import {dataFolderOf, lockLoop, parametersFor, scheduler} from './support.ts';
+import {dataFolderOf, parametersFor, scheduler} from './support.ts';
 
 const ARCHIVE = process.env.REMOTE_OSS_CLI_ARCHIVE ?? '';
 
@@ -140,7 +140,6 @@ describe('V7a the CLI on a real host', function () {
         download,
         credentials: {readNetrc: () => Promise.resolve(undefined)},
         files: nodeClientFiles,
-        lockLoop: lockLoop(),
         logger: createLogger(undefined, {minimumLevel: () => 'info'}),
         onPhase: () => undefined,
       },
@@ -153,7 +152,6 @@ describe('V7a the CLI on a real host', function () {
       host.channel,
       parameters,
       token,
-      {lockLoop: lockLoop()},
       NEVER_CANCELLED,
     );
     if (outcome.kind === 'started') {
@@ -286,7 +284,6 @@ describe('V7a the CLI on a real host', function () {
       sessionHost.channel,
       parameters,
       TOKEN,
-      {lockLoop: lockLoop()},
       NEVER_CANCELLED,
     );
     const before = host.onHost('ps', '-o', 'args').includes('command-shell');
@@ -403,7 +400,6 @@ describe('V7a the CLI on a real host', function () {
       over.channel,
       parameters,
       TOKEN,
-      {lockLoop: lockLoop()},
       NEVER_CANCELLED,
     );
     const processId =

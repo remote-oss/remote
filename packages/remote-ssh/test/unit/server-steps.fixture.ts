@@ -112,12 +112,23 @@ export function settingsWith(
   );
 }
 
+/** Where the fixture's manual bootstrap reads the user's archive. */
+export const BOOTSTRAP_ARCHIVE =
+  '/home/me/vscode-remote-ssh-bootstrap/vscode-server.tar.gz';
+
 /** The server steps' dependencies for `devbox`, with `changes` applied. */
 export function dependencies(
   changes: Partial<ServerStepDependencies> = {},
 ): ServerStepDependencies {
   return {
     onHostDownloadRefused: () => undefined,
+    onInstallFolderInvalid: () => undefined,
+    onInstallFolderRefused: () => undefined,
+    onPrerequisitesMissing: () => undefined,
+    onCommandMissing: () => undefined,
+    onLocalDownloadFailed: () => undefined,
+    bootstrapArchive: BOOTSTRAP_ARCHIVE,
+    onLocalBootstrapFailed: () => undefined,
     copyAvailable: () => Promise.resolve(true),
     profile: PROFILE,
     policy: SSH_POLICY,
@@ -168,15 +179,32 @@ export function lines(status: string, ...facts: string[]): string[] {
 }
 
 /** A channel whose one script prints `output` and exits cleanly. */
-export function channelAnswering(output: readonly string[]): RecordingChannel {
+export function channelAnswering(
+  output: readonly string[],
+  lockMethod: 'link' | 'flock' = 'link',
+): RecordingChannel {
   return new RecordingChannel({
     identity: 'devbox',
     platformHint: 'linux',
     scripts: [
       {
+        // The host names the lock's place to a start; it has no `flock`, so no session lock follows.
         interpreter: 'posixShell',
-        matches: () => true,
+        matches: script => script.includes('lock-path='),
+        lines: [`lock-method=${lockMethod}`, 'lock-path=/lock'],
+        ending: {kind: 'exit', status: 0},
+      },
+      {
+        interpreter: 'posixShell',
+        matches: script => !script.includes('lock-path=') && script !== ':',
         lines: output,
+        ending: {kind: 'exit', status: 0},
+      },
+      {
+        // The release of the session's hold on the lock.
+        interpreter: 'posixShell',
+        matches: script => script === ':',
+        lines: [],
         ending: {kind: 'exit', status: 0},
       },
     ],
@@ -191,10 +219,12 @@ export function leaseOn(channel: RecordingChannel): ConnectionLease {
     socksPort: 1080,
     startedLogin: true,
     storedRecord: undefined,
+    startedHelper: true,
     storeSharedRecord: () => Promise.resolve(true),
     onNotice: () => () => undefined,
     answer: () => Promise.resolve(false),
     refuse: () => Promise.resolve(false),
+    checkSession: () => Promise.resolve('alive'),
     release: () => undefined,
   };
 }
@@ -226,6 +256,7 @@ export function surfacesOf(
   return {
     settings,
     configuredHosts: () => ({hosts: []}),
+    writeUserSetting: () => Promise.resolve(),
     translate,
     prompts: SILENT_PROMPTS,
     terminals: new RecordingTerminals(),
@@ -254,6 +285,7 @@ export function surfacesOf(
     presenter: {present: () => Promise.resolve('handled')},
     downloadProgress: SILENT_PROGRESS,
     revealLog,
+    writeWindowStart: () => undefined,
     rejectBindHost: () => undefined,
     parseUri: () => undefined,
     linkTerminals: {runProgram: () => Promise.resolve()},

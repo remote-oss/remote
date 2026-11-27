@@ -146,16 +146,19 @@ describe('F-2402 the prerequisites of a host', function () {
     host.stop();
   });
 
-  it('refuses a host without tar and names the tool (F-2402)', async () => {
+  it('contracts V3: a host without tar is probed, with tar absent from its tools, and the unpack reports it (BR-5 of the install)', async () => {
     host.asRoot('rm', '/bin/tar');
     const outcome = await probe(
       host.channel,
       PARAMETERS,
       new AbortController().signal,
     );
-    deepStrictEqual(outcome, {
-      kind: 'failed',
-      failure: {kind: 'prerequisiteMissing', missing: ['tar']},
-    });
+    // The probe still reads the host's other tools: the transfer picks its downloader from them.
+    deepStrictEqual(
+      outcome.kind === 'probed'
+        ? [outcome.host.tools.includes('tar'), outcome.host.tools.length > 0]
+        : outcome.kind,
+      [false, true],
+    );
   });
 });

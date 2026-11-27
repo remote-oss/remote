@@ -146,7 +146,7 @@
           "type": "boolean",
           "default": true,
           "scope": "application",
-          "markdownDeprecationMessage": "Deprecated, please use `#remote.SSH.localServerDownload#`"
+          "markdownDeprecationMessage": "%setting.allowLocalServerDownload.deprecationMessage%"
         },
         "remote.SSH.bindHost": {
           "markdownDescription": "%setting.Bindhost.description%",
@@ -439,7 +439,7 @@
           "items": {
             "type": "string"
           },
-          "deprecationMessage": "Deprecated: Please use `#remote.SSH.remotePlatorm#` instead"
+          "deprecationMessage": "%setting.windowsRemotes.deprecationMessage%"
         }
       }
     },
@@ -516,7 +516,8 @@
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-ssh": "workspace:*",
-    "lib-standdown": "workspace:*"
+    "lib-standdown": "workspace:*",
+    "lib-state": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

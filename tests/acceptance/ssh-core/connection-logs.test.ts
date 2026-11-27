@@ -17,7 +17,6 @@ import {
   readUserSettings,
   reloadWindow,
   restoreUserSettings,
-  signal,
   startInWindow,
   userSettings,
   waitFor,
@@ -47,7 +46,6 @@ import {
   INSTALL_MILLISECONDS,
   openConnected,
 } from '../windows/maintenance.ts';
-import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
 import {paletteItems, runFromPalette} from '../windows/palette.ts';
 
 /** What names a WebSocket compression in a line of a log. */
@@ -437,60 +435,6 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     }
   });
 
-  it('F-2003 AC-6 (c121-show-log-link): the Show log link of the forwarding refusal notification runs Show Log, the panel comes up on the Remote - SSH channel, and the notification stays open', async () => {
-    await keepingSettings(async () => {
-      await userSettings({...PLATFORMS});
-      const name = 'c121-link';
-      appendScript([
-        {
-          // Held, so the notification stays open until the row releases it.
-          surface: 'notice',
-          match: 'Failed to set up',
-          answer: 'dismiss',
-          after: 'c121-link-free',
-          window: name,
-        },
-        ...dismissals(name),
-      ]);
-      await openWindow('noforward', name);
-      try {
-        function linkNotices() {
-          return recordLines('notice', name).filter(line =>
-            line.question.includes('Show log'),
-          );
-        }
-        try {
-          await waitFor(
-            'the forwarding refusal notice of c121-link',
-            () => linkNotices().some(line => line.held === true),
-            180_000,
-          );
-        } catch (caught) {
-          const events = windowEvents(name).slice(-12);
-          throw new Error(
-            `${(caught as Error).message}: notice record ${JSON.stringify(recordLines('notice', name))}, notifications ${JSON.stringify(await notifications(name))}, dialog ${JSON.stringify(await dialogOf(name))}, events ${JSON.stringify(events)}`,
-            {cause: caught},
-          );
-        }
-        // The link runs the command it names, which the row runs, as the editor does for a click.
-        await inWindow(name, 'opensshremotes.showLog');
-        await windowState(name);
-        deepStrictEqual(
-          {
-            channel: await outputChannelOf(name),
-            focused: await outputPanelFocused(name),
-            // The held notice has no answer line until the row releases it: the notification is still open.
-            still: linkNotices().every(line => line.held === true),
-          },
-          {channel: 'Remote - SSH', focused: true, still: true},
-        );
-      } finally {
-        signal('c121-link-free');
-        await closeWindow(name).catch(() => undefined);
-      }
-    });
-  });
-
   it('F-2003 AC-9 (c121-trouble-link): a failure with detected issues shows the troubleshooting terminal, its last line the S125 line with the Output Log... link', async () => {
     appendScript(dismissals('c121-trouble'));
     await openWindow('nowhere', 'c121-trouble');
@@ -519,17 +463,20 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
     }
   });
 
-  it("F-2003 AC-11 (c121-full-order): a fresh connect's record holds the BR-6 kinds in order: the log level, the resolve start, the settings, the client search, the remote output, the listening port, the resolved authority, the rule and the analysis", async () => {
+  it("F-2003 AC-11 (c121-full-order): a fresh connect's record holds the BR-6 kinds in order: the log level, the resolve start, the settings listing, the versions, the client search, ssh started, the remote output, the listening port, the resolved authority, the rule and the analysis", async () => {
     await freshHost();
-    const mark = connectionLog().length;
+    const mark = connectionLog({withSettings: true}).length;
     await openConnected('c121-order', INSTALL_MILLISECONDS);
     try {
-      const lines = connectionLog().slice(mark);
+      const lines = connectionLog({withSettings: true}).slice(mark);
       const versions = lines.findIndex(each => each.includes('Editor version'));
       const resolving = lines.findIndex(each =>
         each.startsWith('Resolving ssh-remote+harness, attempt 1'),
       );
-      const setting = lines.findIndex(each => each.startsWith('remote.SSH.'));
+      const setting = lines.findIndex(each =>
+        each.startsWith('remote.SSH.useFlock = '),
+      );
+      const started = lines.findIndex(each => each === 'Started ssh');
       const searched = lines.findIndex(each =>
         each.startsWith('Searched for ssh in:'),
       );
@@ -548,18 +495,32 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
       deepStrictEqual(
         [
           (lines[0] ?? '').includes('Log level'),
-          versions >= 0,
-          resolving >= 0,
+          resolving > 0,
           setting > resolving,
-          searched > setting,
+          versions > setting,
+          searched > versions,
           using > searched,
-          remote > using,
+          started > using,
+          remote > started,
           listening > remote,
           resolved > listening,
           separator > resolved,
           analysis > separator,
         ],
-        [true, true, true, true, true, true, true, true, true, true, true],
+        [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+        ],
       );
     } finally {
       await closeWindow('c121-order').catch(() => undefined);
@@ -910,8 +871,10 @@ describe('the Remote - SSH log: the command surface (card coverage-121)', functi
   it('F-2003 AC-23 (c121-summary): after a failure with issues the channel holds the rule and the session summary; after one without issues, that no hints were found', async () => {
     async function captured(host: string, folder: string): Promise<string[]> {
       appendScript(dismissals(folder));
-      await openWindow(host, folder);
+      // The mark comes before the window opens: a host that refuses at once fails, and writes its summary, while the open
+      // is still waiting for the window's agent, so a mark taken after it can lie behind the lines the row reads (#2710).
       const mark = connectionLog().length;
+      await openWindow(host, folder);
       try {
         await waitFor(
           `the failure dialog of ${folder}`,

@@ -594,7 +594,7 @@
   "label": "spec:reviewed",
   "title": "Tunnel machines: states, unregister and WSL distros on a tunnel machine",
   "epic": "E52",
-  "acCount": 46,
+  "acCount": 47,
   "surfaces": {
    "commands": [
     "remote-explorer.unregisterTunnel",

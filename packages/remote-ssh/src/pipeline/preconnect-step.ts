@@ -5,7 +5,7 @@
  */
 
 import type {FailureReason} from 'lib-authority';
-import type {ProcessHandle} from 'lib-ssh';
+import type {FailureHint, ProcessHandle} from 'lib-ssh';
 import {contentHashOf} from '../preconnect/approvals.ts';
 import type {PreconnectPorts} from '../preconnect/ports.ts';
 import {expandedPath, programPath} from '../preconnect/script-path.ts';
@@ -41,6 +41,26 @@ const VALUE_KIND_IDS = {
   list: 'preconnectValueList',
 } as const;
 
+/** The setting that names the script, which the hint's first mitigation names. */
+const PRECONNECT_SETTING = 'remote.SSH.preconnect';
+
+/** The prefix of the script's output lines in the log, which the hint's last mitigation names. */
+const OUTPUT_PREFIX = '[preconnect]';
+
+/** The hint a failed script leaves for the troubleshooting view: the same text as the log's line, and what to try. */
+function hintOf(detail: string): FailureHint {
+  return {
+    status: 'PreconnectScriptFailure',
+    message: `The pre-connect script has failed (${detail})`,
+    mitigations: [
+      {id: 'S155', values: [PRECONNECT_SETTING]},
+      {id: 'S059', values: []},
+      {id: 'S019', values: [OUTPUT_PREFIX]},
+    ],
+    resources: [],
+  };
+}
+
 /** One piece of output as a log line: the text without one trailing line feed. */
 function lineOf(chunk: string): string {
   return chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk;
@@ -62,12 +82,10 @@ export function preconnectStep(
       ports.dialog.askUser(path, changed, cancellation),
   );
 
-  /** The failure with this text, and the two error lines the log gets for it. */
+  /** The failure with this text, the error line the log gets for it and the hint the summary of the step names. */
   function failed(reason: FailureReason, detail: string): Failure {
     logger.error(`the pre-connection script failed: ${detail}`);
-    logger.error(
-      `[PreconnectScriptFailure]: The pre-connect script has failed (${detail})`,
-    );
+    ports.recordHint(hintOf(detail));
     return {
       kind: 'failed',
       failure: {kind: 'preconnectFailed', reason},
@@ -88,12 +106,13 @@ export function preconnectStep(
       id: 'preconnectNotAPath',
       values: [alias, {id: kindId, values: []}],
     };
+    // The detail of the log and of the hint has no full stop: the reason of the dialog carries it.
     return failed(
       reason,
       textOfId('preconnectNotAPath', english, [
         alias,
         textOfId(kindId, english),
-      ]),
+      ]).replace(/\.$/u, ''),
     );
   }
 

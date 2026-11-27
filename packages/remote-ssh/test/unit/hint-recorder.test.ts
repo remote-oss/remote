@@ -1,10 +1,22 @@
 import type {DiagnosticStringId} from 'lib-ssh';
 import {deepStrictEqual} from 'node:assert';
-import {createLogger} from 'lib-log';
-import {MemorySink} from 'lib-log/testing/memory-sink';
 import type {FailureHint} from 'lib-ssh';
 import {hintRecorderOf} from '../../src/diagnostics/hint-recorder.ts';
-import type {HintStore} from '../../src/diagnostics/hint-store.ts';
+import {installPathHint} from '../../src/diagnostics/install-path-hint.ts';
+import {
+  LINUX_PREREQUISITES_PAGE,
+  prerequisitesHint,
+} from '../../src/diagnostics/prerequisites-hint.ts';
+import {
+  type HintEvents,
+  hintEventsOf,
+  type HintStore,
+} from '../../src/diagnostics/hint-store.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
+
+/** The folder of the rows' hint files. */
+const HINT_FOLDER =
+  '/profile/globalStorage/remote-oss.remote-ssh/connection-hints';
 
 const ENVIRONMENT = [
   {kind: 'environment' as const, message: 'one', details: 'first'},
@@ -21,77 +33,42 @@ const HINT: FailureHint = {
   resources: ['hangingOrFailingConnections'],
 };
 
-/** A recorder over an in-memory state, with the clock at `times` in turn. */
-function recording(times: string[], marks: number[] = []) {
-  const stored: {value?: HintStore} = {};
-  const keys: string[] = [];
+/** The hint events of the window `session` over `files`, with no store of an earlier version. */
+function eventsOn(files: MemoryFiles, session = 'aaaa'): HintEvents {
+  return hintEventsOf({
+    folder: HINT_FOLDER,
+    session,
+    files,
+    earlier: {get: () => undefined},
+    now: () => files.clock,
+  });
+}
+
+/** What a recorder needs besides its events, with the clock at `times` in turn. */
+function environmentAt(times: string[], marks: number[], logText = '') {
   let tick = 0;
-  const recorder = hintRecorderOf(
-    {
-      get: () => stored.value,
-      update: (key, value) => {
-        keys.push(key);
-        stored.value = value;
-        return Promise.resolve();
-      },
-    },
-    {
-      translate: template => template,
-      documentation: () => 'https://docs.example/ssh',
-      now: () => new Date(times[tick++] ?? times.at(-1) ?? 0),
-      environmentHints: () => ENVIRONMENT,
-      logMark: () => marks.shift() ?? 0,
-      logText: from => `from ${String(from)}: the log\nlines`,
-      delay: () => Promise.resolve(),
-      logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
-    },
-  );
-  return {recorder, stored, keys};
+  return {
+    translate: (template: string) => template,
+    documentation: () => 'https://docs.example/ssh',
+    now: () => new Date(times[tick++] ?? times.at(-1) ?? 0),
+    environmentHints: () => ENVIRONMENT,
+    logMark: () => marks.shift() ?? 0,
+    logText: (from: number) =>
+      logText === '' ? `from ${String(from)}: the log\nlines` : logText,
+  };
 }
 
-/** A recorder over `update`, which keeps what it chooses in `stored`; `delay` is the wait before a read back. */
-function recorderWith(
-  stored: {value?: HintStore},
-  update: (key: string, value: HintStore) => PromiseLike<void>,
-  delay: () => PromiseLike<void> = () => Promise.resolve(),
-  logText = () => '',
-) {
-  return hintRecorderOf(
-    {get: () => stored.value, update},
-    {
-      translate: template => template,
-      documentation: () => 'https://docs.example/ssh',
-      now: () => new Date('2026-11-02T00:00:00Z'),
-      environmentHints: () => ENVIRONMENT,
-      logMark: () => 0,
-      logText,
-      delay,
-      logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
+/** A recorder over the hint events of a window on files in memory, with the clock at `times` in turn. */
+function recording(times: string[], marks: number[] = []) {
+  const files = new MemoryFiles();
+  const events = eventsOn(files);
+  const recorder = hintRecorderOf(events, environmentAt(times, marks));
+  const stored = {
+    get value(): HintStore {
+      return events.read();
     },
-  );
-}
-
-/** The records `stored` holds now, read afresh so that an earlier assignment does not narrow the type. */
-function heldRecords(stored: {value?: HintStore}): HintStore['records'] {
-  return stored.value?.records ?? [];
-}
-
-/** A recorder whose read backs wait until `gate.release()`, over a state that keeps every write. */
-function gatedRecorder() {
-  const stored: {value?: HintStore} = {};
-  const gate: {release: () => void} = {release: () => undefined};
-  const recorder = recorderWith(
-    stored,
-    (key, value) => {
-      stored.value = value;
-      return Promise.resolve();
-    },
-    () =>
-      new Promise<void>(resolve => {
-        gate.release = resolve;
-      }),
-  );
-  return {stored, gate, recorder};
+  };
+  return {recorder, stored, events, files};
 }
 
 /** One attempt: it begins, records `hints` and ends in one synchronous run. */
@@ -123,7 +100,7 @@ describe('the hint recorder (card connect-119)', () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     attempt(recorder, [HINT]);
     await settled();
-    deepStrictEqual(errorsOf(stored.value?.records[0]), [
+    deepStrictEqual(errorsOf(stored.value.records[0]), [
       {
         kind: 'error',
         status: 'AllowTcpForwardingDisabled',
@@ -139,11 +116,83 @@ describe('the hint recorder (card connect-119)', () => {
     ]);
   });
 
-  it('F-2604 AC-22: the hints are written under the key the clear command deletes', async () => {
-    const {recorder, keys} = recording(['2026-11-02T00:00:00Z']);
+  it('F-2602 AC-14: a hint whose templates name a setting key as a link stores where those keys sit, in the message and in the mitigations, and the text stays plain', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [
+      {
+        status: 'CreateInstallDirFailed',
+        message: {id: 'S139', values: ['$HOME', 'remote.SSH.key']},
+        mitigations: [
+          {id: 'S112', values: ['remote.SSH.key']},
+          {id: 'S053', values: []},
+        ],
+        resources: [],
+      },
+    ]);
+    await settled();
+    const [entry] = errorsOf(stored.value.records[0]);
+    deepStrictEqual(
+      [
+        entry?.kind === 'error' && entry.mitigations?.[0],
+        entry?.kind === 'error' && entry.links,
+      ],
+      [
+        'Remove or edit setting remote.SSH.key',
+        {
+          message: [{start: 143, length: 14}],
+          mitigations: [[{start: 23, length: 14}], []],
+        },
+      ],
+    );
+  });
+
+  it('F-2602 AC-14: a hint with no link slot stores no links, as a record written before them has none', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     attempt(recorder, [HINT]);
     await settled();
-    deepStrictEqual([...new Set(keys)], ['remote.ssh.hints']);
+    deepStrictEqual(
+      errorsOf(stored.value.records[0]).map(entry => 'links' in entry),
+      [false],
+    );
+  });
+
+  it('F-2407 AC-9: of the four mitigations of an invalid install folder only the key of the second, S048, is a link; the third, S038, shows its key plain', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [installPathHint('~x', template => template)]);
+    await settled();
+    const [entry] = errorsOf(stored.value.records[0]);
+    deepStrictEqual(entry?.kind === 'error' && entry.links, {
+      message: [],
+      mitigations: [[], [{start: 13, length: 28}], [], []],
+    });
+  });
+
+  it('F-2401 AC-17: the prerequisites hint is stored with the message, its details, the old-Linux page as the one mitigation and the prerequisites page as the one resource', async () => {
+    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [prerequisitesHint()]);
+    await settled();
+    deepStrictEqual(errorsOf(stored.value.records[0]), [
+      {
+        kind: 'error',
+        status: 'LinuxPrereqs',
+        statusNumber: 15,
+        message:
+          "The remote host may not meet VS Code Server's prerequisites for glibc and libstdc++",
+        details:
+          'The remote host does not meet the prerequisites for running VS Code Server',
+        mitigations: [
+          'https://github.com/remote-oss/remote/blob/main/docs/remote-ssh/old-linux-hosts.md',
+        ],
+        resources: [LINUX_PREREQUISITES_PAGE],
+      },
+    ]);
+  });
+
+  it('F-2604 AC-22: the hints are written in the window’s own file of the hint folder, which the clear command hides', async () => {
+    const {recorder, files} = recording(['2026-11-02T00:00:00Z']);
+    attempt(recorder, [HINT]);
+    await settled();
+    deepStrictEqual(files.names(HINT_FOLDER), ['aaaa.json']);
   });
 
   it('F-2604 AC-22: two hints of one connect share one record', async () => {
@@ -154,7 +203,7 @@ describe('the hint recorder (card connect-119)', () => {
     ]);
     await settled();
     deepStrictEqual(
-      [stored.value?.records.length, errorsOf(stored.value?.records[0]).length],
+      [stored.value.records.length, errorsOf(stored.value.records[0]).length],
       [1, 2],
     );
   });
@@ -169,7 +218,7 @@ describe('the hint recorder (card connect-119)', () => {
     attempt(recorder, [HINT]);
     await settled();
     deepStrictEqual(
-      stored.value?.records.map(record => record.started),
+      stored.value.records.map(record => record.started),
       ['2026-11-02T00:00:00.000Z', '2026-11-02T00:01:00.000Z'],
     );
   });
@@ -180,41 +229,34 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.record({...HINT, message: 'Error: Other', mitigations: []});
     recorder.end();
     await settled();
-    const [hint] = errorsOf(stored.value?.records[0]);
+    const [hint] = errorsOf(stored.value.records[0]);
     deepStrictEqual(hint?.kind === 'error' && hint.message, 'Error: Other');
   });
 
-  it('F-2604 AC-22: a write the state refuses does not stop the hint recorded after it', async () => {
-    const stored: {value?: HintStore} = {};
+  it('F-2604 AC-22: a write the files refuse does not stop the hint recorded after it', async () => {
+    const files = new MemoryFiles();
+    const events = eventsOn(files);
     const attempts: string[] = [];
     let refusals = 1;
     const recorder = hintRecorderOf(
       {
-        get: () => stored.value,
-        update: (key, value) => {
-          attempts.push(key);
+        record: record => {
+          attempts.push(record.started);
           if (refusals > 0) {
             refusals -= 1;
             return Promise.reject(new Error('refused'));
           }
-          stored.value = value;
-          return Promise.resolve();
+          return events.record(record);
         },
       },
       {
-        translate: template => template,
-        documentation: () => 'https://docs.example/ssh',
-        now: () => new Date('2026-11-02T00:00:00Z'),
+        ...environmentAt(['2026-11-02T00:00:00Z'], []),
         environmentHints: () => [],
-        logMark: () => 0,
-        logText: () => '',
-        delay: () => Promise.resolve(),
-        logger: createLogger(new MemorySink(), {minimumLevel: () => 'info'}),
       },
     );
     attempt(recorder, [HINT]);
     await settled();
-    deepStrictEqual([stored.value?.records.length, attempts.length], [1, 2]);
+    deepStrictEqual([events.read().records.length, attempts.length], [1, 2]);
   });
 
   it('F-2405 AC-20: the details of a hint, a text or a string of the table, are kept as text', async () => {
@@ -231,7 +273,7 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records.map(record => {
+      stored.value.records.map(record => {
         const error = record.hints.find(hint => hint.kind === 'error');
         return error?.kind === 'error' ? error.details : undefined;
       }),
@@ -259,7 +301,7 @@ describe('the hint recorder (card connect-119)', () => {
     });
     recorder.end();
     await settled();
-    const [hint] = errorsOf(stored.value?.records[0]);
+    const [hint] = errorsOf(stored.value.records[0]);
     deepStrictEqual(
       hint?.kind === 'error'
         ? [hint.message, hint.mitigations, hint.details]
@@ -286,7 +328,7 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records.map(record => {
+      stored.value.records.map(record => {
         const [error] = errorsOf(record);
         return error?.kind === 'error' ? error.details : undefined;
       }),
@@ -298,7 +340,7 @@ describe('the hint recorder (card connect-119)', () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     recorder.begin();
     await settled();
-    deepStrictEqual(stored.value?.records, [
+    deepStrictEqual(stored.value.records, [
       {started: '2026-11-02T00:00:00.000Z', hints: ENVIRONMENT},
     ]);
   });
@@ -311,7 +353,7 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records[0]?.hints.map(hint =>
+      stored.value.records[0]?.hints.map(hint =>
         hint.kind === 'error'
           ? [hint.kind, hint.status, hint.statusNumber]
           : [hint.kind, hint.kind === 'log' ? hint.text : hint.message],
@@ -333,7 +375,7 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.record(HINT);
     await settled();
     deepStrictEqual(
-      stored.value?.records[0]?.hints.map(hint => hint.kind),
+      stored.value.records[0]?.hints.map(hint => hint.kind),
       ['environment', 'environment', 'log', 'error'],
     );
   });
@@ -346,8 +388,7 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records[0]?.hints.filter(hint => hint.kind === 'log')
-        .length,
+      stored.value.records[0]?.hints.filter(hint => hint.kind === 'log').length,
       1,
     );
   });
@@ -365,7 +406,7 @@ describe('the hint recorder (card connect-119)', () => {
     }
     await settled();
     deepStrictEqual(
-      stored.value?.records.map(record => record.started),
+      stored.value.records.map(record => record.started),
       ['2026-11-02T00:00:02.000Z', '2026-11-02T00:00:03.000Z'],
     );
   });
@@ -380,40 +421,37 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records[0]?.hints.filter(hint => hint.kind === 'error')
+      stored.value.records[0]?.hints.filter(hint => hint.kind === 'error')
         .length,
       2,
     );
   });
 
   it('F-2605.AC-22: a record that was cleared does not come back with the hints that follow it', async () => {
-    const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
+    const {recorder, stored, events} = recording(['2026-11-02T00:00:00Z']);
     recorder.begin();
     await settled();
-    stored.value = {records: [], clearedAt: '2026-11-02T00:00:30.000Z'};
+    await events.clear('2026-11-02T00:00:30.000Z');
     recorder.record(HINT);
     recorder.end();
     await settled();
-    deepStrictEqual(heldRecords(stored), []);
+    deepStrictEqual(stored.value.records, []);
   });
 
   it('F-2605.AC-22: a resolve that begins after a clear starts a record again', async () => {
-    const {recorder, stored} = recording([
+    const {recorder, stored, events} = recording([
       '2026-11-02T00:00:00Z',
       '2026-11-02T00:00:01Z',
       '2026-11-02T00:00:02Z',
     ]);
-    function current(): HintStore | undefined {
-      return stored.value;
-    }
     recorder.begin();
     await settled();
-    delete stored.value;
+    await events.clear('2026-11-02T00:00:01.500Z');
     recorder.begin();
     recorder.end();
     await settled();
     deepStrictEqual(
-      current()?.records.map(record => record.started),
+      stored.value.records.map(record => record.started),
       ['2026-11-02T00:00:02.000Z'],
     );
   });
@@ -429,7 +467,7 @@ describe('the hint recorder (card connect-119)', () => {
     recorder.end();
     await settled();
     deepStrictEqual(
-      stored.value?.records.map(record =>
+      stored.value.records.map(record =>
         record.hints.flatMap(hint => (hint.kind === 'log' ? [hint.text] : [])),
       ),
       [['from 4: the log\nlines'], ['from 11: the log\nlines']],
@@ -455,7 +493,7 @@ describe('the hint recorder (card connect-119)', () => {
     );
   });
 
-  it('F-2604 AC-5 (c2326-early-error): an error recognised before the step ends is stored when it is recognised, not when the step ends', async () => {
+  it('F-2604 AC-24 (c2326-early-error): an error recognised before the step ends is stored when it is recognised, not when the step ends', async () => {
     const {recorder, stored} = recording(['2026-11-02T00:00:00Z']);
     recorder.begin();
     await settled();
@@ -463,66 +501,27 @@ describe('the hint recorder (card connect-119)', () => {
     await settled();
     deepStrictEqual(
       [
-        errorsOf(stored.value?.records[0]).length,
-        stored.value?.records[0]?.hints.some(hint => hint.kind === 'log'),
+        errorsOf(stored.value.records[0]).length,
+        stored.value.records[0]?.hints.some(hint => hint.kind === 'log'),
       ],
       [1, false],
     );
   });
 
   it('F-2605 BR-9 (c2326-folded): the errors and the log hint added in one synchronous run are written together, after the write at begin', async () => {
-    const {recorder, stored, keys} = recording(['2026-11-02T00:00:00Z']);
+    const {recorder, stored, files} = recording(['2026-11-02T00:00:00Z']);
     attempt(recorder, [
       HINT,
       {...HINT, status: 'Other', message: 'Error: Other'},
     ]);
     await settled();
     deepStrictEqual(
-      [keys.length, stored.value?.records[0]?.hints.map(hint => hint.kind)],
+      [
+        files.operations.filter(operation => operation.startsWith('write'))
+          .length,
+        stored.value.records[0]?.hints.map(hint => hint.kind),
+      ],
       [2, ['environment', 'environment', 'error', 'error', 'log']],
     );
-  });
-
-  it('F-2605.AC-22 (c2326-clear-in-window): a clear between the write and its read back is not undone: the record does not come back', async () => {
-    const {stored, gate, recorder} = gatedRecorder();
-    recorder.begin();
-    await settled();
-    stored.value = {records: [], clearedAt: '2026-11-02T00:00:30.000Z'};
-    gate.release();
-    await settled();
-    deepStrictEqual(stored.value.records, []);
-  });
-
-  it('F-2605 BR-9 (c2326-reverted-write): a write that the state reverts to the older record is written again, so the log hint is stored', async () => {
-    const stored: {value?: HintStore} = {};
-    let updates = 0;
-    const recorder = recorderWith(
-      stored,
-      (key, value) => {
-        updates += 1;
-        if (updates !== 2) {
-          stored.value = value;
-        }
-        return Promise.resolve();
-      },
-      undefined,
-      () => 'the log',
-    );
-    attempt(recorder, [HINT]);
-    await settled();
-    deepStrictEqual(
-      stored.value?.records[0]?.hints.map(hint => hint.kind),
-      ['environment', 'environment', 'error', 'log'],
-    );
-  });
-
-  it('F-2605 BR-9 (c2326-lost-record): a record that an older copy of the store lost, with no clear after it began, is written again at the read back', async () => {
-    const {stored, gate, recorder} = gatedRecorder();
-    recorder.begin();
-    await settled();
-    delete stored.value;
-    gate.release();
-    await settled();
-    deepStrictEqual(heldRecords(stored).length, 1);
   });
 });

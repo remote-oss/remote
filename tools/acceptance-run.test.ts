@@ -26,6 +26,7 @@ import {
   cleanRun,
   connectRunNetwork,
   createdSecondsOf,
+  HOST_EPHEMERAL_RANGE,
   hostImageOf,
   type HostContainer,
   loadImageIntoPodman,
@@ -37,6 +38,7 @@ import {
   runNetworkOf,
   startHostContainer,
   sweepStaleRunObjects,
+  usesHostNetworking,
 } from './acceptance-run.ts';
 import {
   checked,
@@ -109,9 +111,21 @@ describe('runFolderBase (card tooling-195)', () => {
   it("#2350: the run's folder is made in /tmp on macOS, whose own temporary folder is too long for the editor's socket, and in the temporary folder elsewhere", () => {
     deepStrictEqual(
       (['darwin', 'linux', 'win32'] as const).map(platform =>
-        runFolderBase(platform),
+        runFolderBase(platform, {}),
       ),
       ['/tmp', tmpdir(), tmpdir()],
+    );
+  });
+
+  it('#2763: HARNESS_RUN_BASE chooses the folder on every platform, and an empty value counts as unset', () => {
+    deepStrictEqual(
+      [
+        ...(['darwin', 'linux', 'win32'] as const).map(platform =>
+          runFolderBase(platform, {HARNESS_RUN_BASE: '/tmp/colima'}),
+        ),
+        runFolderBase('darwin', {HARNESS_RUN_BASE: ''}),
+      ],
+      ['/tmp/colima', '/tmp/colima', '/tmp/colima', '/tmp'],
     );
   });
 });
@@ -218,12 +232,13 @@ describe('checked (card tooling-10)', () => {
   });
 });
 
-/** The scripted commands of a successful start: build, key, run, port. */
+/** The scripted commands of a successful start: build, key, run, the range inside, port. */
 function startingCommands(): ScriptedCommands & CommandRunner {
   const scripted = scriptedCommands();
   scripted.passes(); // docker build
   scripted.passes(); // ssh-keygen
   scripted.passes('c123\n'); // docker run
+  scripted.passes('47000\t60999\n'); // docker exec: the range inside
   scripted.passes('127.0.0.1:49153\n'); // docker port
   return scripted;
 }
@@ -303,6 +318,8 @@ describe('startHostContainer (card tooling-10)', () => {
               path.join(runFolder, 'host.env'),
               '--cap-add',
               'NET_ADMIN',
+              '--sysctl',
+              'net.ipv4.ip_local_port_range=47000 60999',
               '--publish',
               '127.0.0.1::22',
               'remote-oss-acceptance-host:77-2',
@@ -313,6 +330,80 @@ describe('startHostContainer (card tooling-10)', () => {
     } finally {
       rmSync(runFolder, {recursive: true, force: true});
     }
+  });
+});
+
+/** The message of the error `start` throws, or undefined when it does not. */
+function failureOf(start: () => unknown): string | undefined {
+  try {
+    start();
+    return undefined;
+  } catch (caught) {
+    return (caught as Error).message;
+  }
+}
+
+describe("the host container's ephemeral port range (card #2683)", () => {
+  it("is read inside the container after it starts, and a range other than the run's ends the start", () => {
+    const runFolder = mkdtempSync(path.join(tmpdir(), 'acceptance-run-'));
+    try {
+      const scripted = scriptedCommands();
+      scripted.passes(); // docker build
+      scripted.passes(); // ssh-keygen
+      scripted.passes('c123\n'); // docker run
+      scripted.passes('32768\t60999\n'); // docker exec: the kernel's default
+      deepStrictEqual(
+        [
+          failureOf(() =>
+            startHostContainer(scripted, '/root', RUN_ID, runFolder),
+          )?.split(': the setting')[0],
+          scripted.callsOf('docker').filter(argv => argv[0] === 'exec'),
+        ],
+        [
+          `the host container's ephemeral port range is "32768 60999", not "47000 60999"`,
+          [['exec', 'c123', 'cat', '/proc/sys/net/ipv4/ip_local_port_range']],
+        ],
+      );
+    } finally {
+      rmSync(runFolder, {recursive: true, force: true});
+    }
+  });
+
+  it('is never a setting of the host network: both spellings of host networking end the start before anything runs', () => {
+    const scripted = scriptedCommands();
+    deepStrictEqual(
+      [
+        [
+          ['--network=host'],
+          ['--net=host'],
+          ['--network', 'host'],
+          ['--net', 'host'],
+          ['--network', 'bridge'],
+          ['--env', 'HOST=host'],
+        ].map(usesHostNetworking),
+        failureOf(() =>
+          startHostContainer(scripted, '/root', RUN_ID, tmpdir(), [
+            '--network',
+            'host',
+          ]),
+        )?.includes("ask for the host's network"),
+        scripted.callsOf('docker'),
+      ],
+      [[true, true, true, true, false, false], true, []],
+    );
+  });
+
+  it("is not combined with host networking by any caller: the files that build a host container's arguments name no network", () => {
+    const named = [
+      'acceptance.ts',
+      'acceptance-keys.ts',
+      'acceptance-downloads.ts',
+    ].filter(file =>
+      /'--(?:network|net)(?:=host)?'/u.test(
+        readFileSync(path.join(import.meta.dirname, file), 'utf8'),
+      ),
+    );
+    deepStrictEqual([named, HOST_EPHEMERAL_RANGE], [[], '47000 60999']);
   });
 });
 
@@ -330,6 +421,7 @@ describe('the Ubuntu host (card tooling-70)', () => {
       const second = scriptedCommands();
       second.passes(); // docker build
       second.passes('c456\n'); // docker run
+      second.passes('47000\t60999\n'); // docker exec: the range inside
       second.passes('127.0.0.1:49154\n'); // docker port
       const ubuntu = startHostContainer(
         second,
@@ -422,6 +514,7 @@ describe('the one-time-code secret of the start (card tooling-34)', () => {
       const again = scriptedCommands();
       again.passes(); // docker build
       again.passes('c456\n'); // docker run, the run's key kept
+      again.passes('47000\t60999\n'); // docker exec: the range inside
       again.passes('127.0.0.1:49154\n'); // docker port
       const second = startHostContainer(again, '/root', RUN_ID, runFolder);
       deepStrictEqual(

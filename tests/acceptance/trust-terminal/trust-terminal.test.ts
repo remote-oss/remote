@@ -14,10 +14,23 @@ import {
   setting,
   storedPlatform,
 } from '../windows/maintenance.ts';
-import {answerDialog, waitForDialog} from '../windows/renderer.ts';
+import {
+  answerDialog,
+  notifications,
+  waitForDialog,
+} from '../windows/renderer.ts';
 
 /** The buttons of core's trust request, in the order the page holds them (measured on the run's build). */
 const REQUEST_BUTTONS = ['Manage', 'Cancel', 'Trust Folder & Continue'];
+
+/** The toasts of window `window` that carry core's error for a terminal that cannot start in an untrusted workspace. */
+async function untrustedToasts(window: string): Promise<string[]> {
+  return (await notifications(window)).filter(text =>
+    text.includes(
+      'The terminal process failed to launch: Cannot launch a terminal process in an untrusted workspace.',
+    ),
+  );
+}
 
 describe('the trust launch with core’s defaults (card tooling-33)', function () {
   this.timeout(300000);
@@ -90,7 +103,7 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
     }
   });
 
-  it('F-2206 AC-38 (reading-1679-trust-cancel): with workspace trust on and an untrusted folder, picking Linux brings core’s trust dialog, and after Cancel the connect fails with one of the two reasons F-2601 AC-28 records, and nothing is stored', async () => {
+  it('F-2206 AC-38 (reading-1679-trust-cancel): with workspace trust on and an untrusted folder, picking Linux brings core’s trust dialog, and after Cancel the connect fails with one of the two reasons F-2601 AC-28 records, core’s error that the terminal process failed to launch follows, and nothing is stored', async () => {
     const window = 'tt38';
     await setting('remote.SSH.connectTimeout', 10);
     try {
@@ -118,6 +131,12 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
         120_000,
       );
       const [dialog] = recordLines('failureDialog', window);
+      // Core's error follows the failure dialog: the wait is for the toast, which the assertion then reads.
+      await waitFor(
+        'core’s error that the terminal process failed to launch',
+        async () => (await untrustedToasts(window)).length > 0,
+        60_000,
+      );
       deepStrictEqual(
         [
           shown.message,
@@ -126,11 +145,13 @@ describe('the trust launch with core’s defaults (card tooling-33)', function (
             'Could not establish connection to "harness-dash": Connecting with SSH timed out.',
             'Could not establish connection to "harness-dash": Got bad result from install script.',
           ].includes(dialog?.question ?? ''),
+          (await untrustedToasts(window)).length > 0,
           Object.keys(storedPlatform() as object).includes('harness-dash'),
         ],
         [
           'Do you trust the authors of the files in this folder?',
           REQUEST_BUTTONS,
+          true,
           true,
           false,
         ],

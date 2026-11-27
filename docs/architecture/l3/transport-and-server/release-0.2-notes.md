@@ -7,18 +7,9 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
 
 - **The Extensions view's "Install Local Extensions in …" action names the host by its label, "SSH: <host>"**; the
   reference shows the raw authority "ssh-remote+<host>".
-  - F-2508 AC-30 records the action's text with the raw authority as observed. Ours registers the host label at the
-    first resolve's start, so that a failed first connect's indicator reads "Disconnected from SSH: <host>" (F-2410 AC-12
-    and AC-31), and core builds the action's title from it (athena's ruling on #1656; spec question on
-    remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
-
-- **A window whose first connect fails names the host in the remote indicator ("Disconnected from SSH: <host>") and in the window title ("<folder> [SSH: <host>]")**; the
-  reference shows "Disconnected from SSH" and "<folder> [SSH]" until a connect has succeeded.
-  - F-2307 AC-7 and F-2206 7.E1 describe the indicator without the host for an authority that never connected, while
-    F-2410 AC-12 and AC-31 describe it with the host for the same state; F-2704 AC-25 gives the title without the host,
-    and AC-23 the reloading window's title as the folder alone. Ours registers the host label at the first resolve's
-    start, everywhere (athena's ruling on #1681 and #1608; spec question on remote-oss/remote-ssh#40). Rows:
-    `ruling-1681-first-label`.
+  - F-2508 AC-30 records the action's text with the raw authority as observed. Ours registers the host label once the
+    host has reported its platform (athena's reading on #2635), and core builds the action's title from it (athena's
+    ruling on #1656; spec question on remote-oss/remote-ssh#66). Rows: `ruling-1656-host-label`.
 
 - **Remote - SSH's local server download copies the archive without the reference's `.done` marker files**; the install starts only after the copy has completed in the same session.
   - F-2405 AC-8, AC-16, BR-9 and BR-10 describe a marker file that the reference's copy leaves beside the archive, which
@@ -28,13 +19,6 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     folder of the archive and its marker that the reference never removes, are covered by the same ruling: ours keeps
     no such folder (athena's ruling on #1607; spec question on
     remote-oss/remote-ssh#50). Rows: `ruling-1607-no-marker`.
-
-- **A question that Remote - SSH does not recognise, left unanswered in a hidden login terminal, ends in the connection failure dialog after the connect wait**; the reference keeps waiting until it is answered.
-  - F-2308 AC-12, 7.E3 and BR-5 have the reference keep waiting, so that the dialog appears only when the user answers
-    after the server dropped the login. Ours bounds a question nobody can reach by the connect wait (the connect
-    timeout and a margin of 2 seconds, F-2105 BR-3 and BR-4), so the dialog is already there when the server drops the
-    login. Brief ruling 3 for the terminal mode (daedalus on #299, corrected by athena on #385) and R-79; spec
-    question on remote-oss/remote-ssh#41. Rows: `ruling-299-question-bound`.
 
 - **Remote - SSH installs in VS Code and VSCodium from version 1.125.0 on**, eight minor versions earlier than 1.133.0.
   - F-2001 AC-19 asks for an `engines.vscode` range whose minimum is 1.133.0 or higher. Ours is `^1.125.0`, the
@@ -56,15 +40,6 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     VS Code 1.139.1 and VSCodium); the settings file opens there (athena on #737; spec question on
     remote-oss/remote-ssh#79).
 
-- **A server download that the client makes and that gets an HTTP 404 always says "Server returned 404"**, whether
-  or not the answer carries an `Access-Control-Allow-Origin` header.
-  - F-2405 AC-29 describes the reference reading "Failed to fetch" for a 404 without that header, as a browser's fetch
-    does. Ours runs in the extension host, where no such header matters (athena on #253; spec question on
-    remote-oss/remote-ssh#50).
-- **A server archive that the client downloads isn't kept on the client**, after a success or a failure.
-  - F-2405 AC-17 describes the reference leaving a `vscode_server_<time>` folder with the archive in the client's
-    temporary folder after a successful download. Ours copies the archive to the host and removes it, under Remote -
-    SSH's no-cache policy (athena on #253; spec question on remote-oss/remote-ssh#50).
 - **A password you dismiss in the window that New Window on Active Host opens fails that window with "Permission denied
   (password,keyboard-interactive)"**, not with "Connecting was canceled".
   - F-2303 AC-15 describes the cancel message. F-2306 7.E2 and AC-20 govern every first connection, the new window's
@@ -100,11 +75,7 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     install terminal behind "details". Ours asks it the way terminal mode does with `remote.SSH.showLoginTerminal` off
     (F-2305 AC-43), one rule across the modes; with the setting on the question stays in the terminal (ruled 2026-10-20
     on remote-oss/remote-ssh#41; `ruling-1601-host-key-pick`, athena on #1601; spec question on remote-oss/remote-ssh#55).
-  - F-2412 AC-10 describes the question of the maintenance commands as a quick input with core's message "Press 'Enter'
-    to confirm your input or 'Escape' to cancel", answered "yes". That raw input is the reference's fallback for a
-    wording it does not recognize; a recognized host-key question is F-2305's pick in every flow. Continue goes on and
-    records the key; Escape ends the command with the error of F-2412 AC-12 and records nothing (athena on #1687).
-    Rows: (ruling-1601-host-key-pick)
+    Rows: (ruling-1601-host-key-pick-half)
 - **A window that joins a running local connection server writes no setting line.**
   - F-2604 AC-1 and AC-15 put the line "ERROR: TCP port forwarding appears to be disabled…" (STR:S046) in the log of the
     connect that started the shared `ssh`. A window that joined a login already running, a reload of the window
@@ -112,11 +83,15 @@ the catalogue allows a reason only on `core` and `deferred` rows (dike on #931).
     athena on #1773). Each connect still keeps its own hint.
     Rows: (ruling-1773-joiner-lines)
 
-- **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode.**
+- **With pty allocation permitted and no RequestTTY, ssh writes no pseudo-terminal warning in local-server mode on a host decided as Windows.**
   - F-2106 AC-14 expects ssh's "Pseudo-terminal will not be allocated…" warning in the log when the setting is on and the
-    host entry has no `RequestTTY`. Our connection command always carries a remote command (the prelude), so with
-    `RequestTTY` unset ssh asks for no terminal and writes no warning. `-T` is still present exactly when the setting is
-    falsy and no terminal is allocated (athena's ruling on #1606; `ruling-1606-no-tty-warning`).
+    host entry has no `RequestTTY`. On a host decided as Windows (a `windows` entry or a `windowsRemotes` listing) our
+    connection command carries the PowerShell loop as its remote command, so with `RequestTTY` unset ssh asks for no
+    terminal and writes no warning. `-T` is still present exactly when the setting is falsy and no terminal is allocated
+    (athena's ruling on #1606; `ruling-1606-no-tty-warning`, narrowed by athena on #1835).
+  - Every other host in local-server mode, with or without a `linux` or `macOS` entry, opens with no remote command, so
+    that its own shell can answer the platform probe, and ssh writes the warning as F-2106 AC-14 expects (row
+    `c1835-unknown-warning`, which is the criterion's, not this deviation's).
     Rows: (ruling-1606-no-tty-warning)
 
 - **In terminal mode with pty allocation permitted and `RequestTTY yes`, the session gets a pseudo-terminal and ssh writes no warning.**

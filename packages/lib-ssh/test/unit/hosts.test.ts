@@ -236,8 +236,8 @@ describe('listHosts (the host entries of the files in effect)', () => {
     deepStrictEqual(names('Match host m1\nHost h2'), ['m1', 'h2']);
   });
 
-  it('F-2202.7.E4: a Host line without a pattern', () => {
-    deepStrictEqual(names('Host\nHost b'), ['b']);
+  it('F-2202.7.E4: a Host line without a pattern, followed by an option line, leaves every host after the option line listed', () => {
+    deepStrictEqual(names('Host\n    Port 22\nHost b'), ['b']);
   });
 
   it('F-2201.AC-37: a bare keyword line names nothing', () => {

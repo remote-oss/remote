@@ -3,7 +3,6 @@ import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
 import {
   INSTALL_IF_LOCAL_KEY,
-  mergeInstallIfLocal,
   moveInstallIfLocal,
   OLD_INSTALL_IF_LOCAL_KEY,
 } from '../../src/extensions/install-if-local.ts';
@@ -114,16 +113,6 @@ describe('the move of the install-if-installed-locally setting (card containers-
           ],
         ],
       ],
-    );
-  });
-
-  it('contracts: values that are not lists count as empty, and non-text entries are skipped', () => {
-    deepStrictEqual(
-      [
-        mergeInstallIfLocal('x', ['A', 3]),
-        mergeInstallIfLocal(['P', 4], undefined),
-      ],
-      [['A'], ['P']],
     );
   });
 });

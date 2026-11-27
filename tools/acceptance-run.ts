@@ -64,13 +64,21 @@ export function acceptanceRunId(
 }
 
 /**
- * The folder the run's own folder is made in: the machine's temporary folder, except on macOS, where the per-user
- * one (`/var/folders/…/T`) is so long that the editor's main socket in the run's user data folder passes the 104
- * bytes of a Unix socket path (`listen EINVAL`), so `/tmp` there. The clean-up looks in the same folder.
+ * The folder the run's own folder is made in: `HARNESS_RUN_BASE` when it is set, else the machine's temporary folder,
+ * except on macOS, where the per-user one (`/var/folders/…/T`) is so long that the editor's main socket in the run's
+ * user data folder passes the 104 bytes of a Unix socket path (`listen EINVAL`), so `/tmp` there. A Docker engine in a
+ * VM that shares other folders than Docker Desktop's (colima shares the home folder and `/tmp/colima`, not `/tmp`)
+ * needs the variable, or every bind mount from the run's folder is empty in the container. The clean-up looks in the
+ * same folder.
  */
 export function runFolderBase(
   platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env,
 ): string {
+  const chosen = environment.HARNESS_RUN_BASE;
+  if (chosen !== undefined && chosen !== '') {
+    return chosen;
+  }
   return platform === 'darwin' ? '/tmp' : tmpdir();
 }
 
@@ -378,6 +386,32 @@ export function mappedPort(dockerPortOutput: string): number {
 }
 
 /**
+ * The range of ports the host's own outgoing connections take their local port from: above every port a row names on the
+ * host (the ports a ports case holds are 45000 to 45004, and its largest range ends at 46010), so that no client socket of the
+ * host can hold a port a server or a holder is about to bind (#2563, #2683). The kernel's default, 32768 to 60999, has
+ * all of them inside it.
+ */
+export const HOST_EPHEMERAL_RANGE = '47000 60999';
+
+/** The file where Linux keeps the range of the ports it gives to outgoing connections. */
+const EPHEMERAL_RANGE_FILE = '/proc/sys/net/ipv4/ip_local_port_range';
+
+/**
+ * Whether `dockerArguments` put the container on the host's own network. The host's range is a setting of the
+ * container's network namespace: on the host's network it would be the runner's own, so no host container uses it.
+ */
+export function usesHostNetworking(
+  dockerArguments: readonly string[],
+): boolean {
+  return dockerArguments.some(
+    (argument, index) =>
+      /^--(?:network|net)=host$/u.test(argument) ||
+      (/^--(?:network|net)$/u.test(argument) &&
+        dockerArguments[index + 1] === 'host'),
+  );
+}
+
+/**
  * Builds the run's image of `base`, makes the run's key and password in `runFolder`, and runs the labelled container:
  * the one start of the host both acceptance harnesses share. The password reaches the container in an env file, never
  * in a command line. `extraArguments` go to `docker run` before the image, such as the `--env` of a host variant. A
@@ -391,6 +425,11 @@ export function startHostContainer(
   extraArguments: readonly string[] = [],
   base: HostBase = 'alpine',
 ): HostContainer {
+  if (usesHostNetworking(extraArguments)) {
+    throw new Error(
+      `the host container's arguments ask for the host's network, where its ephemeral port range would be the runner's own: ${extraArguments.join(' ')}`,
+    );
+  }
   checked(command, 'docker', [
     'build',
     '--load',
@@ -444,11 +483,27 @@ export function startHostContainer(
     environmentFile,
     '--cap-add',
     'NET_ADMIN',
+    '--sysctl',
+    `net.ipv4.ip_local_port_range=${HOST_EPHEMERAL_RANGE}`,
     '--publish',
     '127.0.0.1::22',
     ...extraArguments,
     hostImageOf(runId, base),
   ]).trim();
+  const rangeInside = checked(command, 'docker', [
+    'exec',
+    container,
+    'cat',
+    EPHEMERAL_RANGE_FILE,
+  ])
+    .trim()
+    .split(/\s+/u)
+    .join(' ');
+  if (rangeInside !== HOST_EPHEMERAL_RANGE) {
+    throw new Error(
+      `the host container's ephemeral port range is "${rangeInside}", not "${HOST_EPHEMERAL_RANGE}": the setting did not take, and a client socket of the host can hold a port a ports case needs`,
+    );
+  }
   const port = mappedPort(
     checked(command, 'docker', ['port', container, '22']),
   );

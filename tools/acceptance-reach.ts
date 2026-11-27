@@ -30,13 +30,16 @@ import {
   type PartsTable,
   suiteFilesIn,
 } from './acceptance-parts.ts';
-import {isInside, isLibraryFolder} from './repository.ts';
+import {isInside, isLibraryFolder, isServiceFolder} from './repository.ts';
 
 /** The launch table's file, as a changed path names it. */
 export const LAUNCH_TABLE = 'tools/acceptance-launches.ts';
 
 /** The parts table's file, as a changed path names it. */
 export const PARTS_TABLE_FILE = 'tools/acceptance-parts.json';
+
+/** The pull request gate's list of rows that are red on main (tools/known-reds.ts). */
+export const KNOWN_REDS_FILE = 'tools/known-reds.json';
 
 /**
  * Paths no launch can reach: documentation, unit tests, and the selection's own two modules (acceptance-select.ts and
@@ -757,7 +760,7 @@ export function packageReach(
       )) {
         labels.add(label);
       }
-    } else if (!isLibraryFolder(name)) {
+    } else if (!isLibraryFolder(name) && !isServiceFolder(name)) {
       return undefined;
     }
     pending.push(...(graph.dependents.get(current) ?? []));
@@ -778,9 +781,11 @@ export function packageReach(
       }
     }
   }
-  return labels.size === 0
-    ? undefined
-    : labelsWhere(launches, launch => labels.has(launch.label));
+  if (labels.size === 0) {
+    // A service runs on its own, so no launch shows it; anything else that no launch shows reaches every launch.
+    return isServiceFolder(path.basename(folder)) ? [] : undefined;
+  }
+  return labelsWhere(launches, launch => labels.has(launch.label));
 }
 
 /**
@@ -817,12 +822,16 @@ export const MAIN_ONLY_LAUNCH_JOBS: ReadonlySet<string> = new Set([
   'vscodium-plan',
   'acceptance-vscodium',
   'acceptance-vscodium-containers',
+  'acceptance-vscodium-cli',
   'acceptance-genuine',
 ]);
 
-/** What in a job's definition makes or plans launches: the VSCodium run, the plan's tools, a local workflow or action. */
+/**
+ * What in a job's definition makes or plans launches: the VSCodium run, the plan's tools, a local workflow. A local
+ * action only sets a job up (pnpm and Node), and a change to its own file reaches every launch by its path.
+ */
 export const LAUNCH_MARKER =
-  /test:acceptance:vscodium|acceptance-select|acceptance-parts|"uses":"\.\//;
+  /test:acceptance:vscodium|acceptance-select|acceptance-parts|"uses":"\.\/\.github\/workflows\//;
 
 /** A workflow as the reach compares it: its jobs by name, and the text of everything else. */
 interface Workflow {
@@ -980,8 +989,9 @@ function imageFolderOf(file: string): string | undefined {
 /**
  * The reach measured at `root`, the head, for the changed paths it can place: each path in a package's folder that is
  * not a unit test, by its package; each test of a folder of its own job, by the launch tests that import it (none
- * when nothing does: its own job runs it); the parts table, by the parts it makes otherwise than at `base`; and each
- * workflow file, by the jobs it changes (workflowReach). The graph is read once, and only when such a path changed.
+ * when nothing does: its own job runs it); the parts table, by the parts it makes otherwise than at `base`; each
+ * workflow file, by the jobs it changes (workflowReach); and the known-red list, by the entries it removes or changes
+ * (knownRedsReach). The graph is read once, and only when such a path changed.
  */
 export function measuredPaths(
   changed: readonly string[],
@@ -1049,7 +1059,93 @@ export function measuredPaths(
       measured.set(file, reach);
     }
   }
+  const knownReds = changed.includes(KNOWN_REDS_FILE)
+    ? knownRedsReach(base, launches, root)
+    : undefined;
+  if (knownReds !== undefined) {
+    measured.set(KNOWN_REDS_FILE, knownReds);
+  }
   return measured;
+}
+
+/** The key that names an entry's row: its launch, file and title. */
+function knownRedKey(entry: Record<string, unknown>): string {
+  return JSON.stringify([entry.launch, entry.file, entry.title]);
+}
+
+/** The entries of a known-red list's text, or undefined when it is not a list of entries that each name a launch. */
+function knownRedEntries(
+  text: string,
+): Array<Record<string, unknown>> | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  return Array.isArray(parsed) &&
+    parsed.every(
+      entry =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as {launch?: unknown}).launch === 'string',
+    )
+    ? (parsed as Array<Record<string, unknown>>)
+    : undefined;
+}
+
+/**
+ * What a change of the known-red list from the text `before` to `after` reaches. The list changes no row: it only
+ * excuses a listed row's red on a pull request's run. So an entry that is only added reaches no launch, and an entry
+ * removed or changed reaches its launch, so that the change's own run shows the row it no longer excuses. A side that
+ * is not a list of entries, or an entry whose launch is not one of `launches`, reaches every launch (undefined).
+ */
+export function knownRedsEditReach(
+  before: string,
+  after: string,
+  launches: readonly Launch[],
+): string[] | undefined {
+  const earlier = knownRedEntries(before);
+  const later = knownRedEntries(after);
+  if (earlier === undefined || later === undefined) {
+    return undefined;
+  }
+  const laterByKey = new Map(
+    later.map(entry => [knownRedKey(entry), JSON.stringify(entry)]),
+  );
+  const labels = new Set(launches.map(launch => launch.label));
+  const reached = new Set<string>();
+  for (const entry of earlier) {
+    if (laterByKey.get(knownRedKey(entry)) === JSON.stringify(entry)) {
+      continue;
+    }
+    const label = String(entry.launch);
+    if (!labels.has(label)) {
+      return undefined;
+    }
+    reached.add(label);
+  }
+  return [...reached].sort();
+}
+
+/** What the known-red list's change since `base` reaches (knownRedsEditReach), the head read at `root`. */
+function knownRedsReach(
+  base: string,
+  launches: readonly Launch[],
+  root: string,
+): string[] | undefined {
+  const before = spawnSync('git', ['show', `${base}:${KNOWN_REDS_FILE}`], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  const absolute = path.join(root, KNOWN_REDS_FILE);
+  return before.status === 0 && existsSync(absolute)
+    ? knownRedsEditReach(
+        before.stdout,
+        readFileSync(absolute, 'utf8'),
+        launches,
+      )
+    : undefined;
 }
 
 /** A part as a run makes it: its launches, in their order, and its time limit. */

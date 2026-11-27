@@ -3,6 +3,7 @@
  * roles name, and the step's body, which ends in the result block.
  */
 
+import {MANUAL_BOOTSTRAP_ARCHIVE} from 'lib-product';
 import {
   CVE_LINE,
   NO_FREE_PORT_PREFIX,
@@ -119,15 +120,47 @@ function probeBody(installTree: string): readonly string[] {
   ];
 }
 
+/**
+ * A manual bootstrap's archive goes into the install folder under the host lock, under its fixed name with its marker
+ * file, by a rename of the copy (or a copy and a rename of a file the host reads in place), and is unpacked from
+ * there only while the marker is present. A failed unpack leaves the archive and drops the marker; a good one removes
+ * both.
+ */
+const BOOTSTRAP_INTO_INSTALL_LINES: readonly string[] = [
+  'if [ "$ARCHIVE_INTO_INSTALL" = yes ] && [ -n "$ARCHIVE_PATH" ]; then',
+  `  BOOTSTRAP_ARCHIVE=$INSTALL_DIR/${MANUAL_BOOTSTRAP_ARCHIVE}`,
+  '  rm -f "$BOOTSTRAP_ARCHIVE.done"',
+  '  if [ "$ARCHIVE_REMOVE" = yes ]; then',
+  '    mv -f "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed',
+  '  else',
+  '    cp "$ARCHIVE_PATH" "$BOOTSTRAP_ARCHIVE.part.$$" && mv -f "$BOOTSTRAP_ARCHIVE.part.$$" "$BOOTSTRAP_ARCHIVE" || leave UnpackFailed',
+  '  fi',
+  '  printf \'complete\\n\' >"$BOOTSTRAP_ARCHIVE.done" || leave UnpackFailed',
+  '  ARCHIVE_PATH=$BOOTSTRAP_ARCHIVE',
+  '  ARCHIVE_REMOVE=no',
+  '  [ -f "$BOOTSTRAP_ARCHIVE.done" ] || leave UnpackFailed',
+  'fi',
+];
+
 const INSTALL_BODY: readonly string[] = [
   'STARTED_AT=$(now_seconds)',
   '[ -n "$DATA_ROOT" ] || finish CreateInstallDirFailed',
-  'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
-  'take_lock_or_finish "$COMMIT"',
-  'if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
-  '  fact server.installDir "$INSTALL_DIR"',
-  '  leave Ok',
+  'MKDIR_ERROR=$(mkdir -p "$DATA_DIR" 2>&1) || write_failed "$DATA_DIR" "$MKDIR_ERROR"',
+  'if [ ! -x "$INSTALL_DIR/$LAUNCHER" ] && [ -z "$ARCHIVE_PATH" ]; then',
+  '  have wget || have curl || finish NoDownloaderAvailable',
   'fi',
+  'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
+  'leave_if_installed() {',
+  '  if [ -x "$INSTALL_DIR/$LAUNCHER" ]; then',
+  '    fact server.installDir "$INSTALL_DIR"',
+  '    leave Ok',
+  '  fi',
+  '}',
+  // The lock is for writing: an installed server needs none, and an install repeats the check under the lock.
+  'leave_if_installed',
+  'take_lock_or_finish "$COMMIT"',
+  'leave_if_installed',
+  ...BOOTSTRAP_INTO_INSTALL_LINES,
   'prepare_environment',
   'if [ -n "$ARCHIVE_PATH" ]; then',
   '  ARCHIVE=$ARCHIVE_PATH',
@@ -138,8 +171,13 @@ const INSTALL_BODY: readonly string[] = [
   'fi',
   'DOWNLOADED_AT=$(now_seconds)',
   'unpack_into "$ARCHIVE" "$INSTALL_DIR" || UNPACK_FAILED=yes',
+  'if [ -n "${BOOTSTRAP_ARCHIVE:-}" ]; then',
+  '  rm -f "$BOOTSTRAP_ARCHIVE.done"',
+  '  [ -n "${UNPACK_FAILED:-}" ] || rm -f "$BOOTSTRAP_ARCHIVE"',
+  'fi',
   '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
-  '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
+  '[ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed',
+  '[ -x "$INSTALL_DIR/$LAUNCHER" ] || leave UnpackFailed',
   'rewrite_identity "$INSTALL_DIR" || leave UnpackFailed',
   'fact server.installDir "$INSTALL_DIR"',
   'fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
@@ -170,7 +208,7 @@ const INSTALL_TREE_BODY: readonly string[] = [
   '  DOWNLOADED_AT=$(now_seconds)',
   '  install_tree "$ARCHIVE" || UNPACK_FAILED=yes',
   '  [ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
-  '  [ -z "${UNPACK_FAILED:-}" ] || leave UnpackFailed',
+  '  [ -z "${UNPACK_FAILED:-}" ] || leave_unpack_failed',
   '  rewrite_identity "$INSTALL_TREE" || leave UnpackFailed',
   '  fact server.treeInstalled yes',
   '  fact timing.download "$(( ( DOWNLOADED_AT - STARTED_AT ) * 1000 ))"',
@@ -190,7 +228,6 @@ const INSTALL_CLI_BODY: readonly string[] = [
   'STARTED_AT=$(now_seconds)',
   '[ -n "$DATA_ROOT" ] && [ -n "$CLI_NAME" ] || finish CreateInstallDirFailed',
   'MKDIR_ERROR=$(mkdir -p "$INSTALL_DIR" 2>&1) || write_failed "$INSTALL_DIR" "$MKDIR_ERROR"',
-  'take_lock_or_finish "$COMMIT"',
   'if [ -x "$CLI_FILE" ]; then',
   '  fact cli.path "$CLI_FILE"',
   '  leave Ok',
@@ -200,16 +237,25 @@ const INSTALL_CLI_BODY: readonly string[] = [
   'if [ -n "$ARCHIVE_PATH" ]; then',
   '  ARCHIVE=$ARCHIVE_PATH',
   'else',
-  '  have wget || have curl || leave NoDownloaderAvailable',
+  '  have wget || have curl || { clear_staging; leave NoDownloaderAvailable; }',
   '  ARCHIVE=$CLI_STAGING.archive.$$',
   '  fetch_archive "$ARCHIVE_URL" "$ARCHIVE" || { rm -f "$ARCHIVE"; clear_staging; leave ServerDownloadFailed; }',
   'fi',
   'DOWNLOADED_AT=$(now_seconds)',
   'unpack_into "$ARCHIVE" "$CLI_STAGING" || UNPACK_FAILED=yes',
   '[ -n "$ARCHIVE_PATH" ] || rm -f "$ARCHIVE"',
-  'if [ -n "${UNPACK_FAILED:-}" ] || [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then',
+  'if [ -n "${UNPACK_FAILED:-}" ]; then',
+  '  clear_staging',
+  '  leave_unpack_failed',
+  'fi',
+  'if [ ! -f "$CLI_STAGING/$LAUNCHER" ]; then',
   '  clear_staging',
   '  leave UnpackFailed',
+  'fi',
+  'if [ -x "$CLI_FILE" ]; then',
+  '  clear_staging',
+  '  fact cli.path "$CLI_FILE"',
+  '  leave Ok',
   'fi',
   'chmod +x "$CLI_STAGING/$LAUNCHER" && mv "$CLI_STAGING/$LAUNCHER" "$CLI_FILE" || { clear_staging; leave UnpackFailed; }',
   'clear_staging',
@@ -284,7 +330,8 @@ const STEPWISE_BODIES: Readonly<Record<StepwiseAction, readonly string[]>> = {
     'cat >"$STAGING.archive" || finish UnpackFailed',
     'unpack_into "$STAGING.archive" "$STAGING" || UNPACK_FAILED=yes',
     'rm -f "$STAGING.archive"',
-    '[ -z "${UNPACK_FAILED:-}" ] && [ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
+    '[ -z "${UNPACK_FAILED:-}" ] || finish_unpack_failed',
+    '[ -x "$STAGING/$LAUNCHER" ] || finish UnpackFailed',
     'rewrite_identity "$STAGING" || finish UnpackFailed',
     'finish Ok',
   ],
@@ -390,8 +437,12 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '}',
     ...(installTree === '' ? [] : ['ensure_install_link']),
     '[ -x "$INSTALL_DIR/$LAUNCHER" ] || finish ServerFailedToStart',
-    'take_lock_or_finish "$COMMIT"',
     'RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    // The lock is for launching: a live server is reused without it, and a launch repeats the check under the lock.
+    'if ! is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
+    '  take_start_lock_or_finish',
+    '  RUNNING_PID=$(cat "$PID_FILE" 2>/dev/null)',
+    'fi',
     'if is_server_process "$RUNNING_PID" "$INSTALL_DIR"; then',
     '  SERVER_PID=$RUNNING_PID',
     '  LAUNCHED=no',
@@ -429,7 +480,7 @@ function startBody(start: StartParameters, installTree: string): string[] {
     '  WRITE_ERROR=$( (umask 077; printf \'\' >"$LOG_FILE") 2>&1 ) || write_failed_leave "$LOG_FILE" "$WRITE_ERROR"',
     `  printf '%s\\n' ${shellQuote(LAUNCHING_LINE)}`,
     '  fact server.launching yes',
-    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 9>&- &',
+    '  nohup "$INSTALL_DIR/$LAUNCHER" "$@" </dev/null >"$LOG_FILE" 2>&1 8>&- 9>&- &',
     '  SERVER_PID=$!',
     '  WRITE_ERROR=$( { echo "$SERVER_PID" >"$PID_FILE"; } 2>&1 ) || { kill "$SERVER_PID" 2>/dev/null; write_failed_leave "$PID_FILE" "$WRITE_ERROR"; }',
     '  LAUNCHED=yes',
@@ -505,12 +556,18 @@ const CLEANUP_BODY: readonly string[] = [
   '[ -d "$DATA_DIR/bin" ] || finish Ok',
   'INDEX=0',
   'ls -t "$DATA_DIR/bin" 2>/dev/null | while IFS= read -r NAME; do',
-  '  INDEX=$((INDEX + 1))',
-  '  [ "$NAME" != "$COMMIT" ] || continue',
   '  KIND=$(folder_kind "$NAME")',
+  '  [ "$CLEANUP_KIND" != keepNewest ] || [ "$KIND" != commit ] || INDEX=$((INDEX + 1))',
+  '  [ "$NAME" != "$COMMIT" ] || continue',
   '  case $CLEANUP_KIND in',
   '    keepNewest)',
-  '      [ "$INDEX" -gt "$KEEP_COUNT" ] && remove_install "$NAME"',
+  '      case $KIND in',
+  '        commit) [ "$INDEX" -le "$KEEP_COUNT" ] || remove_install "$NAME" ;;',
+  '        leftover)',
+  '          # A leftover is also a stepwise install in progress, which holds no lock: only an old one goes.',
+  '          [ -z "$(find "$DATA_DIR/bin" -maxdepth 1 -name "$NAME" -mmin +60 2>/dev/null)" ] || remove_install "$NAME"',
+  '          ;;',
+  '      esac',
   '      ;;',
   '    onlyCurrentRemoveLeftovers)',
   '      [ "$KIND" = other ] || remove_install "$NAME"',
@@ -520,6 +577,21 @@ const CLEANUP_BODY: readonly string[] = [
   '      ;;',
   '  esac',
   'done',
+  'finish Ok',
+];
+
+/**
+ * Whether the server the data folder's commit recorded still runs, and the port its log last named, for a window that
+ * takes up a running server; it starts nothing, takes no lock and changes nothing.
+ */
+const HELD_SERVER_BODY: readonly string[] = [
+  'HELD_PID=$(cat "$BOOT_PREFIX.pid" 2>/dev/null)',
+  'if is_server_process "$HELD_PID" "$INSTALL_DIR"; then',
+  '  fact server.alive yes',
+  `  fact server.port "$(sed -n 's/^${READY_LINE} \\([0-9][0-9]*\\)$/\\1/p' "$BOOT_PREFIX.log" 2>/dev/null | tail -n 1)"`,
+  'else',
+  '  fact server.alive no',
+  'fi',
   'finish Ok',
 ];
 
@@ -566,6 +638,8 @@ function bodyOf(step: BodyStep): readonly string[] {
       return UNINSTALL_BODY;
     case 'cleanup':
       return CLEANUP_BODY;
+    case 'heldServer':
+      return HELD_SERVER_BODY;
     default:
       return STEPWISE_BODIES[step];
   }
@@ -589,12 +663,8 @@ function stepBody(
   }
 }
 
-/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
-export function posixScript(
-  request: BootstrapRequest,
-  parameters: ScriptParameters,
-): string {
-  const body = stepBody(request, parameters);
+/** The lines every POSIX script starts with: the guard, the parameters, and the policy's umask. */
+function preambleOf(parameters: ScriptParameters): readonly string[] {
   return [
     ...GUARD,
     ...parameterValuesOf(parameters).map(
@@ -602,8 +672,42 @@ export function posixScript(
     ),
     // The install and start scripts set the policy's umask; the token and log files keep their own.
     '[ "$INSTALL_UMASK" = inherit ] || umask "$INSTALL_UMASK"',
+  ];
+}
+
+/** The POSIX script of one request: the guard, the parameters, the role functions and the step's body. */
+export function posixScript(
+  request: BootstrapRequest,
+  parameters: ScriptParameters,
+): string {
+  const body = stepBody(request, parameters);
+  return [
+    ...preambleOf(parameters),
     ...rolesOf(request, parameters).flatMap(role => POSIX_FUNCTIONS[role]),
     ...body,
+    '',
+  ].join('\n');
+}
+
+/** The line that names the lock method the host will use, as `lockPathScript` prints it. */
+export const LOCK_METHOD_LINE = 'lock-method=';
+
+/** The line that names the lock file's path, as `lockPathScript` prints it. */
+export const LOCK_PATH_LINE = 'lock-path=';
+
+/**
+ * The script that prints the method and the path of the host lock of `parameters`, from the script's own lock
+ * functions, and makes the folder the lock file is in: the session shell opens the file itself before the step runs.
+ */
+export function lockPathScript(parameters: ScriptParameters): string {
+  return [
+    ...preambleOf(parameters),
+    ...POSIX_FUNCTIONS.common,
+    ...POSIX_FUNCTIONS.lock,
+    'LOCK_CANDIDATE=$(lock_path "$COMMIT")',
+    'mkdir -p "${LOCK_CANDIDATE%/*}" 2>/dev/null || true',
+    `printf '${LOCK_METHOD_LINE}%s\\n' "$(lock_method)"`,
+    `printf '${LOCK_PATH_LINE}%s\\n' "$LOCK_CANDIDATE"`,
     '',
   ].join('\n');
 }

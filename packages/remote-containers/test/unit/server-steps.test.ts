@@ -269,8 +269,11 @@ function dependenciesOf(
           ? !seen.removed.includes(file)
           : seen.renames.some(([, kept]) => kept === file),
       ),
+    entryExists: () => Promise.resolve(false),
     size: () => Promise.resolve(10),
     sha256: () => Promise.resolve('00'),
+    stage: () =>
+      Promise.resolve({kind: 'failed', detail: 'nothing is staged here'}),
     rename: (source, destination) => {
       seen.renames.push([source, destination]);
       return Promise.resolve({kind: 'renamed'});
@@ -989,21 +992,11 @@ describe('the server steps of a connect (card containers-08)', () => {
     });
   });
 
-  it('F-0503 7.E1: a probe that finds a tool missing is serverFailed, and the log names the tool', async () => {
+  it('F-0503 7.E1: a probe that reports a failure of its own is serverFailed, and the log names the kind', async () => {
     const channel = new RecordingChannel({
       identity: 'c1',
       platformHint: 'linux',
-      scripts: [
-        answer(
-          isProbe,
-          blockOf(
-            'Ok',
-            ...hostFacts('glibc', undefined).map(fact =>
-              fact === 'host.tool.tar=yes' ? 'host.tool.tar=no' : fact,
-            ),
-          ),
-        ),
-      ],
+      scripts: [answer(isProbe, blockOf('NoBash'))],
     });
     const {result, seen} = await runSteps(channel);
     deepStrictEqual(
@@ -1013,10 +1006,7 @@ describe('the server steps of a connect (card containers-08)', () => {
           .map(line => line.message)
           .filter(message => !message.startsWith('remote.serverDownload')),
       ],
-      [
-        'serverFailed',
-        ['the probe failed: prerequisiteMissing', 'the container lacks: tar'],
-      ],
+      ['serverFailed', ['the probe failed: probeFailed']],
     );
   });
 

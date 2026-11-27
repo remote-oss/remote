@@ -1,0 +1,201 @@
+/**
+ * @fileoverview F-2310's host-key questions of the jump hosts in the wording of OpenSSH 10.2, on the pinned client
+ * (card #2610): every hop's question is F-2305's fingerprint pick, told apart by its fingerprint, in both modes, and
+ * the unanswered one of terminal mode ends with the dialog. The hops have keys of their own: the harness
+ * host's sshd, and user-level sshds behind it.
+ */
+
+import {deepStrictEqual} from 'node:assert';
+import {hostPort, recordLines} from '../windows/harness.ts';
+import {
+  connectWith,
+  freshKnown,
+  harnessHostFingerprint,
+  startHostSshd,
+} from '../windows/config-keywords-support.ts';
+import {
+  FIRST_PORT,
+  knownHosts,
+  oneJump,
+  pickOf,
+  SECOND_PORT,
+  terminalSettings,
+  twoJumps,
+} from '../windows/jump-pick-support.ts';
+
+/** The questions of the fingerprint pick that window `alias` was asked and answered, in order. */
+function picksOf(alias: string): string[] {
+  return recordLines('pick', alias)
+    .filter(line => line.answer !== 'held')
+    .map(line => line.question);
+}
+
+/** How many questions of the free-text and masked input surfaces window `alias` was asked. */
+function inputsOf(alias: string): number {
+  return (
+    recordLines('textInput', alias).length +
+    recordLines('maskedInput', alias).length
+  );
+}
+
+/** The entries of the script that answer the fingerprint pick `count` times with Continue. */
+function continues(alias: string, count: number) {
+  return Array.from({length: count}, () => ({
+    surface: 'pick',
+    match: 'fingerprint',
+    answer: 'yes',
+    window: alias,
+  })) as Array<{
+    surface: 'pick';
+    match: string;
+    answer: 'yes';
+    window: string;
+  }>;
+}
+
+describe('F-2310 host-key questions in the wording of OpenSSH 10.2 (card #2610)', function () {
+  this.timeout(300_000);
+
+  /** Connects window `alias` behind one jump host, both keys unknown, and gives what it showed. */
+  async function behindOneJump(alias: string) {
+    const known = freshKnown(alias);
+    const second = await startHostSshd(FIRST_PORT);
+    try {
+      const jumpKey = await harnessHostFingerprint();
+      const shown = await connectWith(
+        alias,
+        [],
+        'connects',
+        outcome => ({
+          progress: outcome.progress[0],
+          picks: picksOf(alias),
+          inputs: inputsOf(alias),
+          indicator: outcome.indicator,
+          known: knownHosts(known),
+        }),
+        {
+          file: oneJump(alias, known),
+          script: continues(alias, 2),
+          settings: {'remote.SSH.remotePlatform': {[alias]: 'linux'}},
+        },
+      );
+      return {shown, jumpKey, targetKey: second.fingerprint};
+    } finally {
+      await second.stop();
+    }
+  }
+
+  it('F-2310 AC-1 (c2610-first-pick): behind a jump host with unknown keys the window opens with the progress of the host and asks the fingerprint pick of the jump host first, with no input', async () => {
+    const alias = 'c2610-first';
+    const {shown, jumpKey} = await behindOneJump(alias);
+    deepStrictEqual(
+      [shown.progress, shown.picks[0], shown.inputs],
+      [`Setting up SSH Host ${alias}`, pickOf(alias, jumpKey), 0],
+    );
+  });
+
+  it('F-2310 AC-2, AC-3 (c2610-picks-one-jump-part): the second pick is the target’s, told apart by its fingerprint, and Continue on each pick records one known-hosts line for each hop and connects; whether each pick holds focus when it is answered is not asserted', async () => {
+    const alias = 'c2610-one-jump';
+    const {shown, jumpKey, targetKey} = await behindOneJump(alias);
+    deepStrictEqual(shown, {
+      progress: `Setting up SSH Host ${alias}`,
+      picks: [pickOf(alias, jumpKey), pickOf(alias, targetKey)],
+      inputs: 0,
+      indicator: `SSH: ${alias}`,
+      known: [
+        `[127.0.0.1]:${String(hostPort())}`,
+        `[127.0.0.1]:${String(FIRST_PORT)}`,
+      ],
+    });
+  });
+
+  it('F-2310 AC-4 (c2610-picks-chain-part): ProxyJump a,b with all keys unknown asks three fingerprint picks in the order first jump, second jump, target, each answered with Continue, and the window connects; whether each holds focus when it is answered is not asserted', async () => {
+    const alias = 'c2610-chain';
+    const known = freshKnown(alias);
+    const first = await startHostSshd(FIRST_PORT);
+    const second = await startHostSshd(SECOND_PORT);
+    try {
+      const firstKey = await harnessHostFingerprint();
+      const file = twoJumps(alias, known);
+      const result = await connectWith(
+        alias,
+        [],
+        'connects',
+        outcome => ({
+          picks: picksOf(alias),
+          indicator: outcome.indicator,
+          known: knownHosts(known).length,
+        }),
+        {
+          file,
+          script: continues(alias, 3),
+          settings: {'remote.SSH.remotePlatform': {[alias]: 'linux'}},
+        },
+      );
+      deepStrictEqual(result, {
+        picks: [
+          pickOf(alias, firstKey),
+          pickOf(alias, first.fingerprint),
+          pickOf(alias, second.fingerprint),
+        ],
+        indicator: `SSH: ${alias}`,
+        known: 3,
+      });
+    } finally {
+      await second.stop();
+      await first.stop();
+    }
+  });
+
+  it('F-2310 AC-34 (c2610-picks-unanswered): without the local server and with the login terminal hidden, a jump host pick nobody answers for 15 seconds ends with the dialog without a reason', async () => {
+    const alias = 'c2610-unanswered';
+    const known = freshKnown(alias);
+    const second = await startHostSshd(FIRST_PORT);
+    try {
+      const result = await connectWith(
+        alias,
+        [],
+        'fails',
+        outcome => ({
+          dialog: outcome.dialog,
+          within:
+            (outcome.failedAfter ?? 0) >= 10_000 &&
+            (outcome.failedAfter ?? 0) < 40_000,
+          picks: recordLines('pick', alias).length,
+        }),
+        {
+          file: oneJump(alias, known),
+          script: [
+            {
+              surface: 'pick',
+              match: 'fingerprint',
+              answer: 'yes',
+              window: alias,
+              after: 'c2610-never-answered',
+            },
+            {
+              surface: 'failureDialog',
+              match: 'Could not establish connection',
+              answer: 'dismiss',
+              window: alias,
+            },
+            {
+              surface: 'mitigationPick',
+              match: 'Pick an action',
+              answer: 'dismiss',
+              window: alias,
+            },
+          ],
+          settings: terminalSettings(alias, false),
+        },
+      );
+      deepStrictEqual(result, {
+        dialog: `Could not establish connection to "${alias}".`,
+        within: true,
+        picks: 2,
+      });
+    } finally {
+      await second.stop();
+    }
+  });
+});

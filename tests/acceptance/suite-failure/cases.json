@@ -112,7 +112,7 @@
     },
     {
       "alias": "readonly",
-      "cite": "#668",
+      "cite": "F-2407 AC-11, AC-12",
       "script": [
         {
           "surface": "failureDialog",
@@ -125,7 +125,7 @@
           "answer": "dismiss"
         }
       ],
-      "dialog": "Could not establish connection to \"readonly\": Failed to install the VS Code Server.",
+      "dialog": "Could not establish connection to \"readonly\": Failed to create the remote server's install directory.",
       "bound": {
         "from": "progress",
         "milliseconds": 15000,
@@ -208,6 +208,223 @@
         "cite": "#670"
       },
       "noDownloadRequests": true
+    },
+    {
+      "label": "install-path-invalid",
+      "alias": "harness",
+      "cite": "F-2602 AC-4",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "~x"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Provided: \"~x\"."
+    },
+    {
+      "label": "install-path-nocreate",
+      "alias": "harness",
+      "cite": "F-2602 AC-4, F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/proc/nope/dir"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
+      "label": "install-path-root",
+      "alias": "harness",
+      "cite": "F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
+      "label": "install-path-file",
+      "alias": "harness",
+      "cite": "F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/etc/hostname"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
+      "label": "install-path-readonly",
+      "alias": "harness",
+      "cite": "F-2407 AC-11",
+      "settings": {
+        "remote.SSH.serverInstallPath": {
+          "harness": "/etc"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to create the remote server's install directory."
+    },
+    {
+      "label": "manual-bootstrap",
+      "alias": "harness",
+      "cite": "F-2602 AC-4, F-2406 AC-4",
+      "settings": {
+        "remote.SSH.localServerDownload": "manual-bootstrap",
+        "remote.SSH.serverDownloadUrlTemplate": "http://downloads.invalid/ok/${os}-${arch}/${commit}",
+        "remote.SSH.serverInstallPath": {
+          "harness": "/tmp/failure-manual"
+        }
+      },
+      "script": [
+        {
+          "surface": "notice",
+          "match": "Local download mode is configured as 'manual-bootstrap'. Exec server mode will be disabled.'",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Expected tarball at local path ${home}/vscode-remote-ssh-bootstrap/vscode-server.tar.gz."
+    },
+    {
+      "label": "download-offline",
+      "alias": "harness",
+      "cite": "F-2602 AC-4",
+      "settings": {
+        "remote.SSH.localServerDownload": "off",
+        "remote.SSH.serverDownloadUrlTemplate": "http://downloads:1/x/${commit}",
+        "remote.SSH.serverInstallPath": {
+          "harness": "/tmp/failure-offline"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Downloading VS Code Server failed. Please try again later."
+    },
+    {
+      "label": "proxy-invalid",
+      "alias": "harness",
+      "cite": "F-2602 AC-4",
+      "settings": {
+        "remote.SSH.httpProxy": " http://127.0.0.1:1"
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": [UriError]: Scheme contains illegal characters. Found ' ' at index 0 (1 total) (len:5)."
+    },
+    {
+      "label": "proxy-refused",
+      "alias": "harness",
+      "cite": "F-2602 AC-4",
+      "settings": {
+        "remote.SSH.localServerDownload": "always",
+        "http.proxy": "http://127.0.0.1:1",
+        "remote.SSH.serverDownloadUrlTemplate": "http://downloads.invalid/ok/${os}-${arch}/${commit}",
+        "remote.SSH.serverInstallPath": {
+          "harness": "/tmp/failure-proxy"
+        }
+      },
+      "script": [
+        {
+          "surface": "failureDialog",
+          "match": "\"harness\"",
+          "answer": "dismiss"
+        },
+        {
+          "surface": "mitigationPick",
+          "match": "Pick an action to help resolve the problem.",
+          "answer": "dismiss"
+        }
+      ],
+      "dialog": "Could not establish connection to \"harness\": Failed to download VS Code Server (Failed to fetch)."
     }
   ]
 }

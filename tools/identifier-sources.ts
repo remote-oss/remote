@@ -8,7 +8,7 @@
 
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
-import {isLibraryFolder, messageOf} from './repository.ts';
+import {isLibraryFolder, isServiceFolder, messageOf} from './repository.ts';
 
 /** The kinds an invented identifier or a namespace belongs to. */
 const LEDGER_KINDS = [
@@ -132,6 +132,8 @@ export interface DeclaredIdentifiers {
   ungated: UngatedEntry[];
   /** Whether the stand-down key also gates keybindings, views, walkthroughs and their steps; absent for a package that does not. */
   gateAlsoKinds?: boolean;
+  /** Whether the package's qps-ploc tables are generated from its English ones; absent for a package that does not. */
+  pseudoLocalized?: boolean;
   /** The locales the package ships string tables for; absent when the package states none. */
   locales?: string[];
 }
@@ -448,6 +450,7 @@ const DECLARED_FIELDS = [
   'settingPairs',
   'ungated',
   'gateAlsoKinds',
+  'pseudoLocalized',
   'locales',
 ];
 
@@ -457,6 +460,7 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
   const standingDownKey = declared.field('standingDownKey');
   const locales = declared.field('locales');
   const gateAlsoKinds = declared.field('gateAlsoKinds');
+  const pseudoLocalized = declared.field('pseudoLocalized');
   return {
     source: declared.field('source').nonEmptyString(),
     standsDownFor: declared.field('standsDownFor').string(),
@@ -546,6 +550,9 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
     ...(gateAlsoKinds.isAbsent()
       ? {}
       : {gateAlsoKinds: gateAlsoKinds.boolean()}),
+    ...(pseudoLocalized.isAbsent()
+      ? {}
+      : {pseudoLocalized: pseudoLocalized.boolean()}),
     ...(locales.isAbsent()
       ? {}
       : {locales: locales.items().map(locale => locale.string())}),
@@ -559,6 +566,7 @@ export function readDeclared(file: string, where: string): DeclaredIdentifiers {
 export function needsIdentifiers(packageDirectory: string): boolean {
   return (
     !isLibraryFolder(path.basename(packageDirectory)) &&
+    !isServiceFolder(path.basename(packageDirectory)) &&
     existsSync(path.join(packageDirectory, 'src'))
   );
 }

@@ -41,6 +41,8 @@ interface LaunchCommon {
    * one; their names are HARNESS_WSL_DISTROS. Only a Windows client can, and another refuses the launch.
    */
   wslDistros?: true;
+  /** Whether the launch needs a Windows client: left out of the Linux parts, named by platform.yml's Windows job. */
+  windowsClient?: true;
   /**
    * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
    * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
@@ -98,6 +100,12 @@ export interface RunnerLaunch extends LaunchCommon {
   kind?: undefined;
   /** The development extension the tests run in: `runner` (a local window) or `runner-remote` (a remote one). */
   runner: 'runner' | 'runner-remote';
+  /**
+   * Whether the launch starts the run's CLI-source copy of VSCodium (`tools/acceptance-cli-editor.ts`) and the download
+   * host serves a stand-in archive of the editor's CLI under `/cli/<platform>/`, made by the run, with no pin and no
+   * token: for a host case that only needs the client to fetch the CLI and the host to receive it.
+   */
+  cliStandIn?: true;
   /** The suite folder under tests/acceptance, bundled into `dist-<suite without "suite-">`. */
   suite: string;
   /** Whether the launch answers from its own script and record files (`<label>-script.json`, `<label>-record.jsonl`). */
@@ -197,6 +205,9 @@ export const LAUNCH_EXTENSIONS: ReadonlyMap<string, string> = new Map([
  */
 export const WINDOW_PORT_RANGE = '20000-20999';
 
+/** The lowest port of the client's ephemeral range on Linux by default: the ports a row names for the client to hold or search stay below it. */
+export const CLIENT_EPHEMERAL_LOWEST = 32_768;
+
 /** The setting that holds the window's port range. */
 export const WINDOW_PORT_RANGE_SETTING = 'remote.SSH.preferredLocalPortRange';
 
@@ -228,6 +239,13 @@ export function windowPortRangeProblem(
     ? `the window port range ${range} overlaps this machine's ephemeral port range ${String(lowest)}-${String(highest)}: an outgoing connection of the client can hold a port the search finds free, so the launch's rows would fail at random; set the range outside ${String(lowest)}-${String(highest)}`
     : undefined;
 }
+
+/**
+ * The setting that switches off the palette's history of commands run from it ([oss]
+ * `src/vs/workbench/browser/workbench.contribution.ts`: "Set to 0 to disable command history"): a launch whose rows read
+ * the order of the palette's list has it from the start, so no earlier row's command leads the alphabetical list.
+ */
+const PALETTE_HISTORY_OFF = {'workbench.commandPalette.history': 0} as const;
 
 const RENDERER_LAUNCH = {
   kind: 'plain',
@@ -710,6 +728,8 @@ export interface HostCase {
    * a run makes it only when the case is named.
    */
   primer?: true;
+  /** Whether the case's launch starts the CLI-source editor, with a stand-in CLI archive on the download host. */
+  cliStandIn?: true;
   /** Further commands the host's `sh` runs, in order, after the suite's own setup. */
   setup?: string[];
   /** The script the case's window answers from; the suite's dialog script when absent. */
@@ -829,10 +849,28 @@ export function portFreeCommand(port: number): string {
 }
 
 /**
+ * The command that waits, up to five seconds, until a listener of the host has `port` on 127.0.0.1, and, when none has,
+ * prints the sockets that have `port` as their local port and the holders that run, and fails: a holder that could not
+ * bind its port leaves nothing else to read.
+ */
+export function holderListeningCommand(port: number): string {
+  return (
+    'for i in $(seq 1 20); do ' +
+    `netstat -ltn | grep -q ' 127.0.0.1:${String(port)} ' && exit 0; ` +
+    'sleep 0.25; done; ' +
+    `echo "nothing listens on 127.0.0.1:${String(port)} after 5 s; the sockets with that local port:"; ` +
+    `netstat -tanp | awk '$4 ~ /:${String(port)}$/'; ` +
+    'echo "the holders that run:"; ' +
+    "ps | grep '[n]c -lk'; exit 1"
+  );
+}
+
+/**
  * The host setup of a host case, in the order the run runs it: free the held ports; stop the server unless the case
  * keeps it; remove the suite's folders unless the case keeps the server or its files; hold the case's ports, each
- * waited on as it starts; then the case's own commands. The brackets keep `pkill` from matching the `sh -c` that runs
- * it.
+ * waited on to be free of other sockets as it starts (a client socket of the host that holds the port as its local port
+ * keeps the holder from binding it); then wait for each holder to listen; then the case's own commands. The brackets
+ * keep `pkill` from matching the `sh -c` that runs it.
  */
 export function hostSetupOf(
   hostCase: HostCase,
@@ -858,18 +896,14 @@ export function hostSetupOf(
     entries.push({command: portFreeCommand(hostCase.port)});
   }
   for (const holder of holders) {
+    entries.push({command: portFreeCommand(holder)});
     entries.push({
       command: `nc -lk -p ${String(holder)} -s 127.0.0.1 -e /bin/true`,
       detach: true,
     });
   }
   for (const holder of holders) {
-    entries.push({
-      command:
-        'for i in $(seq 1 20); do ' +
-        `netstat -ltn | grep -q ' 127.0.0.1:${String(holder)} ' && exit 0; ` +
-        'sleep 0.25; done; exit 1',
-    });
+    entries.push({command: holderListeningCommand(holder)});
   }
   for (const command of hostCase.setup ?? []) {
     entries.push({command});
@@ -1050,6 +1084,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'terminal-login',
       settings: {
         ...RENDERER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         'remote.SSH.useLocalServer': false,
         'remote.SSH.showLoginTerminal': true,
         'remote.SSH.remotePlatform': {
@@ -1128,8 +1163,8 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     {
+      ...RENDERER_LAUNCH,
       label: 'preconnect',
-      kind: 'plain',
       suite: 'preconnect',
       // A variable of the editor's environment, which the script of a row reports it received.
       environment: {REMOTE_OSS_F2108_VARIABLE: 'f2108-<run>'},
@@ -1178,7 +1213,18 @@ export function launchesOf(root: string): Launch[] {
       },
     },
     // The core features of the editor in a window on the SSH host, read through the renderer.
-    {...RENDERER_LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-core',
+      suite: 'ssh-core',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // A new window opens no Welcome page of its own, as in the containers launches: a row reads the window's editors
+        // and the page it draws, and the page's focus is not what a row means to test.
+        'workbench.startupEditor': 'none',
+        ...PALETTE_HISTORY_OFF,
+      },
+    },
     // The same with the pinned OpenSSH client as the user's `remote.SSH.path`, for the criteria about keywords newer than
     // the runners' client; the rows run plain `ssh` through the same path.
     {
@@ -1186,6 +1232,19 @@ export function launchesOf(root: string): Launch[] {
       label: 'ssh-newclient',
       suite: 'ssh-newclient',
       sshClient: 'pinned',
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
+      },
+    },
+    // The same client with the extension's own pickers: the empty script makes Remote - SSH show its real quick picks, which
+    // the host-key row reads (its items and the focused one), and the rows of ssh-newclient need the script.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-newclient-pickers',
+      suite: 'ssh-newclient-pickers',
+      sshClient: 'pinned',
+      environment: {REMOTE_OSS_ACCEPTANCE_SCRIPT: ''},
       settings: {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.path': '${HARNESS_SSH_CLIENT}',
@@ -1199,6 +1258,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'ssh-agents',
       settings: {
         'window.title': '[${rootName}]${remoteName}',
+        ...PALETTE_HISTORY_OFF,
         'window.dialogStyle': 'custom',
         'chat.disableAIFeatures': true,
         'chat.remoteAgentHostsEnabled': true,
@@ -1260,6 +1320,29 @@ export function launchesOf(root: string): Launch[] {
         PATH: '<run>/askpass-bin:<path>',
       },
     },
+    // A window on the SSH host whose editor is killed, one case per launch like `containers-killed-*`: the harness kills the
+    // launch's editor tree (the connection is not closed), and the row goes on against the host, with an editor of its own
+    // only where its case relaunches one. Each case names itself in `HARNESS_KILLED_CASE`.
+    ...['12', '13', '14'].map(killedCase => ({
+      ...RENDERER_LAUNCH,
+      label: `ssh-killed-${killedCase}`,
+      suite: 'ssh-killed',
+      environment: {HARNESS_KILLED_CASE: killedCase},
+    })),
+    // The host's lock files while a window installs from the run's slow download source: one plain launch, each row a window of
+    // its own on a fresh host, with the settings it needs written to the user settings.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-locks',
+      suite: 'ssh-locks',
+    },
+    // A host whose login PATH has neither curl nor wget, the account `nofetch`: one plain launch, each row a window of its
+    // own on that account.
+    {
+      ...RENDERER_LAUNCH,
+      label: 'ssh-downloaders',
+      suite: 'ssh-downloaders',
+    },
     // Dev Containers beside Remote - SSH, in a window on the SSH host: the commands that edit a configuration where it lives.
     {
       ...RENDERER_LAUNCH,
@@ -1277,13 +1360,19 @@ export function launchesOf(root: string): Launch[] {
       suite: 'no-proposals',
       proposedApi: false,
     },
-    // The CLI path: the editor's copy names a CLI source; named only until CI holds the CLI archives' token.
+    // The CLI path: the editor's copy names a CLI source. Named only, so a run that names no launch needs no CLI archives'
+    // token; CI's parts make it (tools/acceptance-parts.ts), in the job whose fetch step holds that token.
     {
+      ...RENDERER_LAUNCH,
       label: 'cli-path',
-      kind: 'plain',
       suite: 'cli-path',
-      cliSource: true,
+      cliSource: true as const,
       namedOnly: true,
+      settings: {
+        ...RENDERER_LAUNCH.settings,
+        // Core draws its dialogs natively on Linux unless asked otherwise, which a row's read of the page does not show.
+        'window.dialogStyle': 'custom',
+      },
     },
     // WSL on Linux: its commands stay out of the way where WSL cannot run, in a desktop window, in the browser build
     // the editor stands in for with `remote.extensionKind`, and beside the other WSL extension, where it stands down.
@@ -1293,6 +1382,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'wsl',
       files: ['activation.test.ts'],
       withExtensions: ['remote-oss.remote-wsl'],
+      settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
     {
       ...RENDERER_LAUNCH,
@@ -1315,7 +1405,8 @@ export function launchesOf(root: string): Launch[] {
       wslDistros: true,
     },
     // A Windows SSH host: the platform workflow's Windows job runs Windows' OpenSSH Server on 127.0.0.1, and the
-    // launch's windows open it as `winhost`, its platform known so no pick is asked.
+    // launch's windows open it as `winhost`, its platform known so no pick is asked, or as `winhost-unknown`, with none.
+    // Pseudo-terminals are permitted for the launch, so no row writes a setting the editor may read late.
     {
       ...RENDERER_LAUNCH,
       label: 'windows-host',
@@ -1325,7 +1416,17 @@ export function launchesOf(root: string): Launch[] {
       settings: {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.remotePlatform': {winhost: 'windows'},
+        'remote.SSH.permitPtyAllocation': true,
       },
+    },
+    // Dev Containers on a Windows client whose engine is the WSL distro's own, reached through executeInWSL; the platform
+    // workflow's Windows job only, by name.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-wsl',
+      suite: 'containers-wsl',
+      namedOnly: true,
+      windowsClient: true,
     },
     {
       ...RENDERER_LAUNCH,
@@ -1367,7 +1468,11 @@ export function launchesOf(root: string): Launch[] {
       label: 'explorer-home',
       suite: 'explorer-home',
       // Core's dialogs are drawn in the window, where the renderer helpers read them.
-      settings: {...EXPLORER_LAUNCH.settings, 'window.dialogStyle': 'custom'},
+      settings: {
+        ...EXPLORER_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
+        'window.dialogStyle': 'custom',
+      },
       // The empty script makes Remote - SSH show its real pickers, which the rows of the SSH group's hand-overs read.
       environment: {
         ...EXPLORER_LAUNCH.environment,
@@ -1429,6 +1534,7 @@ export function launchesOf(root: string): Launch[] {
       suite: 'trust',
       settings: {
         ...TRUST_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         // Core's default is never; the rows answer core's startup prompt, so this launch turns it on.
         'security.workspace.trust.startupPrompt': 'once',
       },
@@ -1447,6 +1553,7 @@ export function launchesOf(root: string): Launch[] {
       ...RENDERER_LAUNCH,
       label: 'web-ui',
       suite: 'web-ui',
+      settings: {...RENDERER_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // A recording xdg-open that the suite writes into the run's folder comes first on the editor's PATH, so that
       // opening the web UI opens nothing on the machine.
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
@@ -1461,6 +1568,7 @@ export function launchesOf(root: string): Launch[] {
       // rows connect only through the local server.
       settings: {
         ...TRUST_LAUNCH.settings,
+        ...PALETTE_HISTORY_OFF,
         'security.workspace.trust.startupPrompt': 'never',
       },
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
@@ -1475,6 +1583,7 @@ export function launchesOf(root: string): Launch[] {
       partOf: 'containers',
       registry: true,
       templates: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // A recording xdg-open first on the editor's PATH, so that a row can tell whether a link was opened.
       environment: {PATH: `${RUN_FOLDER_TOKEN}/browser-bin:${RUN_PATH_TOKEN}`},
       // The other Dev Containers, installed and disabled: the package works beside it and warns of nothing.
@@ -1605,6 +1714,7 @@ export function launchesOf(root: string): Launch[] {
       ...CONTAINERS_LAUNCH,
       label: 'containers-shutdown',
       suite: 'containers-shutdown',
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
       // The other Dev Containers, installed and disabled, as in `containers`.
       standIns: ['ms-vscode-remote.remote-containers'],
       disabledExtensions: ['ms-vscode-remote.remote-containers'],
@@ -1773,6 +1883,7 @@ export function launchesOf(root: string): Launch[] {
               partOf: hostCaseLabel(suite, cases[position + 1] ?? hostCase),
             }
           : {}),
+        ...(hostCase.cliStandIn === true ? {cliStandIn: true as const} : {}),
         ownScript: true,
         hostSetup: hostSetupOf(hostCase, suite),
       })),
@@ -1789,6 +1900,7 @@ export function launchesOf(root: string): Launch[] {
       label: 'containers-view',
       suite: 'containers-view',
       registry: true,
+      settings: {...CONTAINERS_LAUNCH.settings, ...PALETTE_HISTORY_OFF},
     },
   ];
   return launches;

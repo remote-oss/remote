@@ -1,9 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
+import {REGISTER_WAIT_MILLISECONDS} from '../../src/shutdown/helper-request.ts';
 import type {CliTarget} from '../../src/cli/cli-arguments.ts';
 import type {EngineRunOutcome} from '../../src/engine/engine-host.ts';
 import {volumePayloadOf} from '../../src/volumes/volume-payload.ts';
 import {
   inputOf,
+  preparedAroundRegister,
   leaveRebuildIntent,
   type Scene,
   sceneOf,
@@ -154,6 +156,72 @@ describe('the connector of a clone in a volume (card containers-151)', () => {
           },
         ]),
       },
+    );
+  });
+
+  it("F-0417 BR-5, F-0701 AC-14: the clone counts for the shutdown helper before its container is looked up, so an earlier window's check cannot stop the container it reuses", async () => {
+    const scene = volumeScene();
+    const ready = scene.outcome;
+    let atPrepare: string[] = [];
+    scene.outcome = () => {
+      atPrepare = scene.shutdownSent.map(request => request.type);
+      return Promise.resolve(typeof ready === 'function' ? ready() : ready);
+    };
+    await scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    await new Promise(setImmediate);
+    deepStrictEqual(
+      [
+        atPrepare,
+        scene.shutdownSent.filter(request => request.type === 'register')
+          .length,
+      ],
+      [['register'], 1],
+    );
+  });
+
+  it('F-0417 BR-5: the clone looks its container up only once the helper has answered its register, which comes after a stop already running', async () => {
+    deepStrictEqual(
+      await preparedAroundRegister(volumeScene(), VOLUME_PAYLOAD),
+      [0, 1],
+    );
+  });
+
+  it('F-0417 BR-5: an answer to the register that came after a stop held it is logged with its wait', async () => {
+    const scene = volumeScene();
+    await preparedAroundRegister(scene, VOLUME_PAYLOAD, () => {
+      scene.clockNow += 9300;
+    });
+    deepStrictEqual(
+      scene.sink.lines.some(line =>
+        line.message.includes(
+          'the shutdown helper answered the register after 9.3 s',
+        ),
+      ),
+      true,
+    );
+  });
+
+  it('F-0417 BR-5: a helper that never answers the register holds the clone for the bound only, and the log says so', async () => {
+    const scene = volumeScene();
+    scene.registerAnswer = () => new Promise<void>(() => undefined);
+    const connecting = scene.connector.connect(inputOf(VOLUME_PAYLOAD));
+    for (let turn = 0; turn < 20; turn += 1) {
+      await new Promise(setImmediate);
+    }
+    const waited = scene.timerDelays.includes(REGISTER_WAIT_MILLISECONDS);
+    for (const timer of scene.timers.splice(0)) {
+      timer();
+    }
+    await connecting;
+    deepStrictEqual(
+      [
+        waited,
+        scene.prepared.length,
+        scene.sink.lines.some(line =>
+          line.message.includes('did not answer the register in time'),
+        ),
+      ],
+      [true, 1, true],
     );
   });
 

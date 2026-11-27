@@ -2,6 +2,7 @@ import type {TunnelOptions} from '../../src/forwarding/default-forwards.ts';
 import type {ReadSignal} from '../../src/forwarding/default-forwards-timing.ts';
 import {deepStrictEqual, rejects, throws} from 'node:assert';
 import {FakeClock} from 'lib-helper/testing/fake-clock';
+import {MemoryLockPort} from 'lib-server/testing/memory-lock-port';
 import {parseDefaultForwards} from 'lib-forwarding';
 import {FakeDialer, FakeLocalPort} from 'lib-forwarding/testing/fake-network';
 import type {HostChannel} from 'lib-host';
@@ -34,7 +35,12 @@ import {
   connectWaitsFor,
 } from '../../src/pipeline/bounds.ts';
 import {serverDownloadProgress} from '../../src/cli/server-download-progress.ts';
-import type {LoginLease} from '../../src/pipeline/connection-step.ts';
+import {
+  connectionKeyOf,
+  type LoginLease,
+} from '../../src/pipeline/connection-step.ts';
+import {HeldClientLocks} from '../../src/pipeline/client-lock-step.ts';
+import {clientLockPath, lockIdFor} from 'lib-server';
 import type {RawServerSettings} from '../../src/pipeline/host-settings.ts';
 import {CONNECT_WAIT_TIMEOUT} from '../../src/pipeline/failure.ts';
 import type {ConnectSteps} from '../../src/pipeline/steps.ts';
@@ -107,6 +113,8 @@ interface WiringSeen {
   terminals: RecordingTerminals;
   /** The clock the terminal step's waits run on. */
   clock: FakeClock;
+  /** The client lock files of the connects. */
+  lockFiles: MemoryLockPort;
   /** The loopback the CLI path connects and listens on. */
   cliLocal: FakeLocalPort;
   /** The kinds of the failures shown after the window resolved. */
@@ -119,6 +127,8 @@ interface WiringSeen {
   tunnels: TunnelOptions[];
   /** The listeners of the grant of trust that are still registered. */
   trustListeners: Array<() => void>;
+  /** How many times the manual bootstrap's warning was shown. */
+  modeWarnings: number;
 }
 
 /** Ports over fakes: a client that passes `-V` and looks the host up with `lookup`, and an acquire that fails. */
@@ -157,17 +167,26 @@ function portsOf(
     sink: new MemorySink(),
     terminals: new RecordingTerminals(),
     clock: new FakeClock(),
+    lockFiles: new MemoryLockPort({
+      now: () => 0,
+      wait: () => Promise.resolve(),
+    }),
     cliLocal: changes.cliLocal ?? new FakeLocalPort(),
     presented: [],
     progress: [],
     tunnels: [],
     linkTerminals: [],
     trustListeners: [],
+    modeWarnings: 0,
   };
   const logger = createLogger(seen.sink, {
     minimumLevel: (): Level => 'info',
   });
   const ports: WiringPorts = {
+    serverStatus: () => Promise.resolve(undefined),
+    warnManualBootstrap: () => {
+      seen.modeWarnings += 1;
+    },
     tunnels: {
       openTunnel: options => {
         seen.tunnels.push(options);
@@ -191,6 +210,11 @@ function portsOf(
       },
     },
     configuredHosts: changes.configuredHosts ?? (() => ({hosts: []})),
+    legacySettings: {
+      read: () => undefined,
+      write: () => Promise.resolve(),
+      logger,
+    },
     preconnect: {
       readFile: () => Promise.resolve(new Uint8Array()),
       exists: () => Promise.resolve(false),
@@ -204,6 +228,7 @@ function portsOf(
       },
       dialog: {askUser: () => Promise.resolve('skip')},
       logger,
+      recordHint: () => undefined,
     },
     settings: {
       preconnect: () => changes.preconnect,
@@ -313,7 +338,6 @@ function portsOf(
         dispose: () => undefined,
       }),
       revealLoginTerminals: () => false,
-      forwardRefused: () => undefined,
       warnedForwardingDisabled: () => false,
       prohibitedForwarding: () => false,
       settings: () => ({
@@ -331,6 +355,14 @@ function portsOf(
       dialerFor: () => new FakeDialer(['work']),
       chooseLocalPort: () => Promise.resolve({port: 50000}),
       logger,
+    },
+    clientLock: {
+      port: seen.lockFiles,
+      folder: '/tmp',
+      clock: {now: () => seen.clock.now(), wait: () => Promise.resolve()},
+      held: new HeldClientLocks((path, modified) => {
+        void seen.lockFiles.removeIfModified(path, modified);
+      }),
     },
     cliPath: {
       local: seen.cliLocal,
@@ -407,6 +439,94 @@ function stepsOf(ports: WiringPorts): ReturnType<typeof stepsWith> {
 }
 
 describe("the composition of a connect's steps", () => {
+  it('F-2506 6.3: the legacy settings step moves the legacy key through the legacy ports', async () => {
+    const {ports} = portsOf();
+    const written: Array<[string, unknown]> = [];
+    ports.legacySettings = {
+      ...ports.legacySettings,
+      read: key =>
+        key === 'remote.SSH.defaultExtensionsIfInstalledLocally'
+          ? ['a.b']
+          : undefined,
+      write: (key, value) => {
+        written.push([key, value]);
+        return Promise.resolve();
+      },
+    };
+    await stepsOf(ports).migrateLegacySettings();
+    deepStrictEqual(written, [
+      ['remote.defaultExtensionsIfInstalledLocally', ['a.b']],
+      ['remote.SSH.defaultExtensionsIfInstalledLocally', undefined],
+    ]);
+  });
+
+  it("F-2408 BR-6: the client lock step holds the alias's file in the editor's temporary folder and logs its path", async () => {
+    const {ports, seen} = portsOf();
+    const input = inputFor('dev');
+    const path = clientLockPath('/tmp', connectionKeyOf(input));
+    const held = await stepsOf(ports).holdClientLock(
+      input,
+      () => undefined,
+      new AbortController().signal,
+    );
+    const whileHeld = seen.lockFiles.files();
+    if (held.kind === 'done') {
+      held.value.release();
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    deepStrictEqual(
+      {
+        kind: held.kind,
+        whileHeld,
+        afterRelease: seen.lockFiles.files(),
+        logged: seen.sink.lines.some(
+          line =>
+            line.message ===
+            `Acquiring local install lock ${lockIdFor(connectionKeyOf(input))} in /tmp`,
+        ),
+      },
+      {kind: 'done', whileHeld: [path], afterRelease: [], logged: true},
+    );
+  });
+
+  it('F-2406 BR-3: the attempt warns of the manual bootstrap in that mode only', () => {
+    const counts = (['manualBootstrap', 'auto', 'always', 'off'] as const).map(
+      localDownloadMode => {
+        const {ports, seen} = portsOf({localDownloadMode});
+        stepsOf(ports).warnOfDownloadMode();
+        return seen.modeWarnings;
+      },
+    );
+    deepStrictEqual(counts, [1, 0, 0, 0]);
+  });
+
+  it('F-2407 6.4 step 2 (card #2995, ruling-2995-shared-reuse): a held server answers only with a reply that is not the refusal of its token: 403 or no reply is no answer, and each check asks for the address and the token', async () => {
+    const asked: unknown[] = [];
+    const answers: boolean[] = [];
+    for (const status of [404, 200, 403, undefined]) {
+      const {ports} = portsOf();
+      const steps = stepsOf({
+        ...ports,
+        serverStatus: (address, token) => {
+          asked.push([address, token]);
+          return Promise.resolve(status);
+        },
+      });
+      answers.push(
+        await steps.serverAnswers(
+          {host: '127.0.0.1', port: 20000},
+          'held-token',
+          new AbortController().signal,
+        ),
+      );
+    }
+    const each = [{host: '127.0.0.1', port: 20000}, 'held-token'];
+    deepStrictEqual(
+      {answers, asked},
+      {answers: [true, true, false, false], asked: [each, each, each, each]},
+    );
+  });
+
   it("connect-14: checkInstallFolder reads the server settings of this connect's host alias", () => {
     const {ports} = portsOf({server: {serverInstallPath: {[ALIAS]: '/$bad'}}});
     deepStrictEqual(
@@ -753,7 +873,7 @@ describe("the composition's forwarding of the later server steps", () => {
     const [call] = channel.calls;
     deepStrictEqual(
       call?.operation === 'runScript' &&
-        call.request.script.includes('remote-lock.alex'),
+        call.request.script.includes('vscode-remote-lock.alex'),
       true,
     );
   });
@@ -773,6 +893,65 @@ describe("the composition's forwarding of the later server steps", () => {
     deepStrictEqual(
       [outcome.kind, call?.operation === 'runScript'],
       ['done', true],
+    );
+  });
+
+  it('F-2413.BR-9: the clean-up takes its locks by the probed host’s system, as the install does, and a kill with no host does not', async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const methods: string[] = [];
+    for (const host of [HOST, undefined]) {
+      const channel = channelAnswering(lines('Ok'));
+      await steps.maintain(
+        inputFor('dev'),
+        leaseOn(channel),
+        'cleanup',
+        new AbortController().signal,
+        host,
+      );
+      const [call] = channel.calls;
+      methods.push(
+        call?.operation === 'runScript'
+          ? (/LOCK_METHOD='(\w+)'/.exec(call.request.script)?.[1] ?? '')
+          : '',
+      );
+    }
+    deepStrictEqual(methods, ['flock', 'link']);
+  });
+
+  it("ruling-2995-held-server: the held server check is this connect's server steps', in the record's data folder", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    const channel = channelAnswering(
+      lines('Ok', 'server.alive=yes', 'server.port=4321'),
+    );
+    const outcome = await steps.heldServer(
+      inputFor('dev'),
+      leaseOn(channel),
+      HOST,
+      '/srv/held/.server-data',
+      new AbortController().signal,
+    );
+    const [call] = channel.calls;
+    deepStrictEqual(
+      [
+        outcome,
+        call?.operation === 'runScript' &&
+          call.request.script.includes("INSTALL_ROOT='/srv/held'"),
+      ],
+      [{kind: 'alive', port: 4321}, true],
+    );
+  });
+
+  it("ruling-2995-takeup-mode: whether a connect is certainly direct is this connect's server steps' reading", async () => {
+    const {ports} = portsOf();
+    const steps = stepsOf(ports);
+    await steps.locateClient(inputFor('dev'));
+    deepStrictEqual(
+      typeof steps.certainlyDirect(inputFor('dev'), HOST),
+      'boolean',
     );
   });
 

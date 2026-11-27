@@ -41,7 +41,9 @@ import type {
   ContainerRequest,
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
 import {storeRebuildIntent} from '../../src/open/rebuild-intent.ts';
+import {rebuildHandoffsOn} from './handoff-kinds.fixture.ts';
 import type {
   RelayHostRequest,
   RelayHostStart,
@@ -144,9 +146,12 @@ export interface Scene {
   /** What the version query answers: its status and stderr. */
   version: {status: number; stderr: string};
   prepared: ContainerRequest[];
-  /** What the extension's store holds under the rebuild key, and the error its reading throws, if any. */
-  intentStore: unknown;
+  /** The rebuild intents the extension's storage holds, and the error taking one throws, if any. */
+  files: MemoryFiles;
   intentError: Error | undefined;
+  /** What the global state holds of the paused retries, and the error its reading throws, if any. */
+  retryStore: unknown;
+  retryError: Error | undefined;
   configurationReads: Array<{
     target: CliTarget;
     containerId: string | undefined;
@@ -179,6 +184,10 @@ export interface Scene {
   revealed: number;
   /** What the shutdown helper was told, in order, and how many configuration reads had started at each message. */
   shutdownSent: ShutdownRequest[];
+  /** When the helper answers a register: at once, unless a row holds it. */
+  registerAnswer: () => Promise<void>;
+  /** What the connector's clock reads, in milliseconds. */
+  clockNow: number;
   readsAtShutdown: number[];
   /** What `docker inspect` prints of the container's metadata label; `fails` for an engine that does not answer. */
   metadata: string;
@@ -393,8 +402,10 @@ export function sceneOf(
     inspect: {answer: {status: 'running', startedAt: '2026-10-14T10:00:00Z'}},
     version: {status: 0, stderr: ''},
     prepared: [],
-    intentStore: undefined,
+    files: new MemoryFiles(),
     intentError: undefined,
+    retryStore: undefined,
+    retryError: undefined,
     configurationReads: [],
     serverRequests: [],
     relayRequests: [],
@@ -414,6 +425,8 @@ export function sceneOf(
     relayHostsEnded: 0,
     revealed: 0,
     shutdownSent: [],
+    registerAnswer: () => Promise.resolve(),
+    clockNow: 0,
     readsAtShutdown: [],
     metadata: '',
     published: 'null',
@@ -685,7 +698,9 @@ export function sceneOf(
       send: request => {
         scene.shutdownSent.push(request);
         scene.readsAtShutdown.push(scene.configurationReads.length);
-        return Promise.resolve();
+        return request.type === 'register'
+          ? scene.registerAnswer()
+          : Promise.resolve();
       },
     },
     newConnectionId: () => {
@@ -753,7 +768,7 @@ export function sceneOf(
     preflight: {
       logger: createLogger(sink, {minimumLevel: () => 'debug'}),
       searchPath: () => '/usr/bin',
-      clock: () => 0,
+      clock: () => scene.clockNow,
       setTimer: (milliseconds, callback) => {
         scene.timerDelays.push(milliseconds);
         scene.timers.push(callback);
@@ -771,14 +786,26 @@ export function sceneOf(
       };
     },
     intents: {
+      ...rebuildHandoffsOn(scene.files),
+      store: {
+        ...rebuildHandoffsOn(scene.files).store,
+        take: key => {
+          if (scene.intentError !== undefined) {
+            throw scene.intentError;
+          }
+          return rebuildHandoffsOn(scene.files).store.take(key);
+        },
+      },
+    },
+    pausedRetries: {
       get: () => {
-        if (scene.intentError !== undefined) {
-          throw scene.intentError;
+        if (scene.retryError !== undefined) {
+          throw scene.retryError;
         }
-        return scene.intentStore;
+        return scene.retryStore;
       },
       update: (key, value) => {
-        scene.intentStore = value;
+        scene.retryStore = value;
         return Promise.resolve();
       },
     },
@@ -916,16 +943,32 @@ export async function leaveRebuildIntent(
   scene: Scene,
   payload: string,
 ): Promise<void> {
-  await storeRebuildIntent(
-    {
-      get: () => scene.intentStore,
-      update: (key, value) => {
-        scene.intentStore = value;
-        return Promise.resolve();
-      },
-    },
-    payload,
-    {buildNoCache: true},
-    0,
-  );
+  await storeRebuildIntent(rebuildHandoffsOn(scene.files), payload, {
+    buildNoCache: true,
+  });
+}
+
+/**
+ * Connects `scene` to `payload` with the helper's answer to its register held, runs `beforeAnswer`, gives the answer,
+ * and gives how many containers were prepared before the answer came and once the connect was over.
+ */
+export async function preparedAroundRegister(
+  scene: Scene,
+  payload: string,
+  beforeAnswer: () => void = () => undefined,
+): Promise<[number, number]> {
+  const answer = {give: (): void => undefined};
+  scene.registerAnswer = () =>
+    new Promise<void>(resolve => {
+      answer.give = resolve;
+    });
+  const connecting = scene.connector.connect(inputOf(payload));
+  for (let turn = 0; turn < 20; turn += 1) {
+    await new Promise(setImmediate);
+  }
+  const before = scene.prepared.length;
+  beforeAnswer();
+  answer.give();
+  await connecting;
+  return [before, scene.prepared.length];
 }

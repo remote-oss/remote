@@ -33,8 +33,11 @@ platforms, an SSH client or a container engine, is described in the member's own
 Install the pack from the Extensions view of your editor, or from the page of the gallery you use. Installing it
 installs the members of this release, Dev Containers and Remote - SSH, and Remote Explorer with them.
 
-- Install one Remote Development pack, not two. Running two packs whose extensions share the same identifiers is
-  unsupported, and this family's extensions stand down next to extensions with those identifiers.
+- Install one Remote Development pack, not two. Running Dev Containers, Remote - SSH, Remote Explorer or Remote - SSH: Editing Configuration Files next to another
+  publisher's extensions with the same identifiers isn't supported: this family's extensions stand down there, staying
+  inactive with one warning each.
+- An extension pack or an extension that lists another publisher's Remote Development extensions installs those, not
+  this family's. Install this pack directly.
 - If the gallery does not have one of the members, the pack installs without it and says nothing. Install that member
   on its own once the gallery offers it.
 - Uninstalling the pack also uninstalls the members it installed.

@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {readFileSync} from 'node:fs';
 import {
   appendScript,
   closeWindow,
@@ -15,6 +16,7 @@ import {
   restoreHostNetwork,
   terminalsOf,
   userSettings,
+  variable,
   waitFor,
   windowEvents,
   windowState,
@@ -27,9 +29,7 @@ import {
 } from '../windows/renderer.ts';
 import {hintRecords, type HintRecords} from '../windows/hint-store.ts';
 import {keepingSettings, PLATFORMS} from '../windows/tunnel-support.ts';
-
-/** The notice of a refused SOCKS forward. */
-const REFUSED = 'Failed to set up';
+import {changedKeyHostsFile} from '../../../tools/acceptance-keys.ts';
 
 /** The text of the log line that names the forwarding setting. */
 const SETTING_LINE = 'TCP port forwarding appears to be disabled';
@@ -54,12 +54,9 @@ function forwardingHints(since: string): number {
 /** The reason the dialog gives for a refused forward: S046 without its "ERROR: " lead. */
 const REFUSED_REASON = SETTING_TEXT.replace(/^ERROR: /u, '');
 
-/** Opens window `name` on `alias` with the notice of a refusal and the dialog and the pick after it dismissed. */
+/** Opens window `name` on `alias` with the dialog of its failure and the pick after it dismissed. */
 async function opened(alias: string, name: string): Promise<void> {
-  appendScript([
-    {surface: 'notice', match: REFUSED, answer: 'dismiss', window: name},
-    ...dismissals(name),
-  ]);
+  appendScript([...dismissals(name)]);
   await openWindow(alias, name);
 }
 
@@ -112,7 +109,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     );
   });
 
-  it('F-2604 AC-4, AC-6 (ruling-1985-forwarding-fails): the refusal shows the notice, and the connect then fails with F-2601’s dialog that names the refused forward, with no wait', async () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): the refusal shows no notification (reading-2713-forwarding-notice, #2749), and the connect fails at once with F-2601’s dialog that names the refused forward', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-wait';
@@ -121,7 +118,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       deepStrictEqual(
         [await failureOf(name), dialogText(name)],
         [
-          [1, 1, 'Disconnected from SSH: noforward'],
+          [0, 1, 'Disconnected from SSH: noforward'],
           refusedDialog('noforward'),
         ],
       );
@@ -235,7 +232,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it("F-2604 AC-17 (c85-disturbed): a cut and restored network, or the end of the window's ssh, after the failure adds no notice or dialog", async () => {
+  it("F-2604 AC-24 (c85-disturbed): a cut and restored network, or the end of the window's ssh, after the failure adds no notice or dialog", async () => {
     const seen: Array<Awaited<ReturnType<typeof failureOf>>> = [];
     const ended: string[] = [];
     for (const disturbance of ['network', 'ssh']) {
@@ -268,8 +265,8 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
       [seen.map(entry => entry.slice(0, 2)), ended.length > 0],
       [
         [
-          [1, 1],
-          [1, 1],
+          [0, 1],
+          [0, 1],
         ],
         true,
       ],
@@ -288,7 +285,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     ],
   };
 
-  it('F-2604 AC-1, AC-2, AC-3, AC-5, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored when the dialog shows; Show log puts the Remote - SSH channel in front', async () => {
+  it('F-2604 AC-1, AC-2, AC-3, AC-22 (c85-line): the log holds the setting line once, directly after the first refused-channel line; the hint is stored when the dialog shows; Show log puts the Remote - SSH channel in front', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-line';
@@ -368,7 +365,7 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it('F-2604 AC-9, AC-18 (ruling-1985-forwarding-fails): with the second ssh the window shows the failure dialog with the refused-forward reason, and the log holds the setting line', async () => {
+  it('F-2604 AC-24 (ruling-1985-forwarding-fails): with the second ssh the window shows the failure dialog with the refused-forward reason, and the log holds the setting line', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, 'remote.SSH.useExecServer': false});
       const name = 'c85-second';
@@ -414,17 +411,24 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
     });
   });
 
-  it('F-2604 AC-19 (ruling-1985-forwarding-fails): a host whose key changed, with every setting at its default, fails the connect at once with S107’s reason and the MitmPortForwardingDisabled hint, and no server-side port forwarding text, setting line or hint', async () => {
+  it('F-2604 AC-19, F-2305 AC-20 (ruling-1985-forwarding-fails): a host whose key changed, with every setting at its default, fails the connect at once with S107’s reason and the MitmPortForwardingDisabled hint, and no server-side port forwarding text, setting line or hint; the changed key is not trusted, no question offers to accept it, and the window can be closed', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS});
       const name = 'c85-changed';
       const mark = connectionLog().length;
       const since = new Date().toISOString();
+      const keyFile = changedKeyHostsFile(variable('HARNESS_RUN_FOLDER'));
+      const keyBefore = readFileSync(keyFile);
       await opened('changedkey', name);
       await dialogOf(name);
       await new Promise(resolve => setTimeout(resolve, 5_000));
       deepStrictEqual(
         {
+          known: readFileSync(keyFile).equals(keyBefore),
+          asked: [
+            ...recordLines('pick', name),
+            ...recordLines('maskedInput', name),
+          ].length,
           lines: connectionLog()
             .slice(mark)
             .filter(line => line.includes(SETTING_LINE)).length,
@@ -434,12 +438,16 @@ describe('F-2604: TCP forwarding disabled on the server', function () {
             .flatMap(record => record.hints)
             .filter(hint => hint.kind === 'error')
             .map(hint => hint.status),
+          closed: await closeWindow(name).then(() => true),
         },
         {
+          known: true,
+          asked: 0,
           lines: 0,
           dialog:
             'Could not establish connection to "changedkey": Port forwarding is disabled.',
           stored: ['MitmPortForwardingDisabled'],
+          closed: true,
         },
       );
     });

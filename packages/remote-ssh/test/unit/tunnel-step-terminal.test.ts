@@ -132,7 +132,6 @@ function stepWith(
     revealLoginTerminals: () => options.reveal ?? false,
     warnedForwardingDisabled: () => options.warned ?? false,
     prohibitedForwarding: () => false,
-    forwardRefused: () => undefined,
     connectWait: () =>
       options.connectWait ?? {
         connectTimeoutSeconds: 0,
@@ -724,7 +723,7 @@ describe('the step that opens the window tunnel, secondSsh and socket paths (car
     return {context, pending};
   }
 
-  it('connect-109, F-2604 AC-6: the second ssh fails the same refusal at once, whatever the exec server setting is', async () => {
+  it('connect-109, F-2604 AC-24: the second ssh fails the same refusal at once, whatever the exec server setting is', async () => {
     const {pending} = await refusedFirstForward({listening: 'yes'}, 0);
     deepStrictEqual(await pending, {
       kind: 'failed',

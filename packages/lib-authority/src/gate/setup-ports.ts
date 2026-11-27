@@ -63,13 +63,25 @@ interface GateState {
   update(key: string, value: boolean): PromiseLike<void>;
 }
 
+/** The handoff of a failed attempt, in a file of the extension's own storage that the window taking it deletes. */
+export interface AttemptHandoff {
+  /** Whether an attempt is handed over, left where it is. */
+  pending(): boolean;
+  /** Hands an attempt over, in place of one that is; rejects when the write fails. */
+  leave(): PromiseLike<void>;
+  /** Takes the attempt once; false for a window that finds none, or whose claim another window won. */
+  take(): boolean;
+}
+
 /** What the setup needs from the editor. */
 export interface GateEditor {
   probeApi: ProbeApi;
   installed(): PromiseLike<readonly InstalledExtension[]>;
   /** The text of the runtime-arguments file, or nothing when there is none. */
   readFile(filePath: string): PromiseLike<string | undefined>;
+  /** The dismissal, which the profile shares: an answer of the user's, kept in the global state. */
   state: GateState;
+  attempt: AttemptHandoff;
   documents: DocumentEvents;
   window: WindowClaim;
   /** Shows a warning with buttons and says which was chosen; closing it chooses nothing. */
@@ -161,6 +173,18 @@ export function setupPortsOf(
       ? filled(texts.setup, [...names, quotedList(notice.argvEntries)])
       : filled(texts.failedAttempt, [...names, identity.extensionId]);
   }
+  /**
+   * Takes the pending attempt: the file's, else the value an earlier version kept in the global state, which is read
+   * once and cleared, and never written true again.
+   */
+  async function claimedAttempt(): Promise<boolean> {
+    const taken = editor.attempt.take();
+    const earlier = editor.state.read(ATTEMPT_PENDING_KEY) === true;
+    if (earlier) {
+      await editor.state.update(ATTEMPT_PENDING_KEY, false);
+    }
+    return taken || earlier;
+  }
   return {
     extensionId: identity.extensionId,
     probe: () =>
@@ -181,9 +205,17 @@ export function setupPortsOf(
     flags: {
       dismissed: () => editor.state.read(DISMISSED_KEY) ?? false,
       setDismissed: value => editor.state.update(DISMISSED_KEY, value),
-      attemptPending: () => editor.state.read(ATTEMPT_PENDING_KEY) ?? false,
-      setAttemptPending: value =>
-        editor.state.update(ATTEMPT_PENDING_KEY, value),
+      attemptPending: () =>
+        editor.attempt.pending() ||
+        (editor.state.read(ATTEMPT_PENDING_KEY) ?? false),
+      setAttemptPending: async value => {
+        if (value) {
+          await editor.attempt.leave();
+        } else {
+          await claimedAttempt();
+        }
+      },
+      claimAttemptPending: claimedAttempt,
     },
     window: editor.window,
     showSetup: async (notice): Promise<SetupAnswer> =>

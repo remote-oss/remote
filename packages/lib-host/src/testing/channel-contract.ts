@@ -15,6 +15,7 @@ import {
   type ScriptOutcome,
   type ScriptRequest,
 } from '../host-channel.ts';
+import {LONGEST_PENDING_LINE} from '../channel-rules.ts';
 
 /** A situation the harness sets up on its transport before the case calls the channel. */
 export type ContractScenario =
@@ -35,7 +36,17 @@ export type ContractScenario =
   // The request's input is a local file; the script prints the lines, then waits.
   | {kind: 'streamsUntilCancelled'; lines: readonly string[]}
   // The copy request's local file is one the host can, or cannot, read directly.
-  | {kind: 'clientFile'; reachable: boolean};
+  | {kind: 'clientFile'; reachable: boolean}
+  // The script backgrounds a long `sleep`, prints its pid, then waits.
+  | {kind: 'backgroundsThenWaits'}
+  // The script starts a long `sleep` that leaves its tree (re-parented), prints its pid, then waits.
+  | {kind: 'detachesThenWaits'}
+  // The script prints `out one` to standard output, `err one` to standard error, then `out two` to standard output.
+  | {kind: 'printsBothStreams'}
+  // The script prints `LONG_LINE_LENGTH` characters `x` with no line end, then exits 0.
+  | {kind: 'printsLongLine'}
+  // The copy request's local file holds `LARGE_COPY_LENGTH` bytes.
+  | {kind: 'copiesLarge'};
 
 /** The input a harness stages for `scenario`: its own text, a local file `localFile`, or an empty text. */
 export function stagedInputOf(
@@ -64,6 +75,25 @@ export interface StagedChannel {
   hostPath?: string;
 }
 
+/** The characters of the long line a `printsLongLine` script prints. */
+export const LONG_LINE_LENGTH = 1024 * 1024;
+
+/** The bytes of the local file a `copiesLarge` copy places. */
+export const LARGE_COPY_LENGTH = 1024 * 1024;
+
+/** How a harness shows that a large copy's writes stay bounded: the largest write it saw, or why its transport can't. */
+export type BoundedCopy =
+  | {kind: 'measured'; largestWrite: () => number}
+  | {kind: 'notApplicable'; reason: string};
+
+/** What a harness can see of the processes on its host. */
+export interface HostProcesses {
+  /** Whether the process `processId` is still running on the host. */
+  alive(processId: number): Promise<boolean>;
+  /** Ends the process `processId`, which a case leaves running on purpose. */
+  end(processId: number): Promise<void>;
+}
+
 /** What an implementation provides to run the contract on its transport. */
 export interface ChannelHarness {
   /** The failure kinds this transport can be made to produce from `runScript`. */
@@ -72,6 +102,12 @@ export interface ChannelHarness {
   copyFailures: readonly ChannelFailureKind[];
   /** Whether the host can read some client files directly. */
   reachesClientFiles: boolean;
+  /** For the cases of the cancel, error stream and bounds rules: the host's processes this harness can see. */
+  processes?: HostProcesses;
+  /** For the bounded-copy case: how this harness shows it. */
+  boundedCopy?: BoundedCopy;
+  /** The card that brings this channel to the cancel, error stream and bounds rules; their cases are pending until it lands. */
+  pendingOn?: string;
   stage(scenario: ContractScenario): Promise<StagedChannel>;
 }
 
@@ -79,6 +115,8 @@ export interface ChannelHarness {
 export interface ContractCase {
   name: string;
   check: () => Promise<void>;
+  /** A case its runner registers as pending, with no check run. */
+  pending?: boolean;
 }
 
 const PRINTED_LINES = ['first line', 'second line', 'third line'];
@@ -351,6 +389,121 @@ function copyCases(harness: ChannelHarness): ContractCase[] {
   ];
 }
 
+/** Waits `milliseconds`. */
+function pause(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+/** The pid a script printed on its first line, cancelling the run there; and the run's outcome. */
+async function cancelledAtProcessId(
+  staged: StagedChannel,
+): Promise<{processId: number; outcome: ScriptOutcome}> {
+  const controller = new AbortController();
+  const {lines, outcome} = await runCollecting(staged, controller, () => {
+    controller.abort();
+  });
+  return {processId: Number(lines[0]), outcome};
+}
+
+/** The cases of `ruling-3269-channel-contract`'s rules: the cancel, the error stream and the bounds. */
+function ruleCases(harness: ChannelHarness): ContractCase[] {
+  /** The host's processes the harness sees, which these cases need. */
+  function processesOf(): HostProcesses {
+    if (harness.processes === undefined) {
+      throw new Error('this harness sees no host processes');
+    }
+    return harness.processes;
+  }
+  const cases: ContractCase[] = [
+    {
+      name: "ends a cancelled script's whole tree: a backgrounded child is gone",
+      check: async () => {
+        const staged = await harness.stage({kind: 'backgroundsThenWaits'});
+        const {processId, outcome} = await cancelledAtProcessId(staged);
+        deepStrictEqual(
+          [failureKindOf(outcome), await processesOf().alive(processId)],
+          ['failed:cancelled', false],
+        );
+      },
+    },
+    {
+      name: 'leaves a process the script detached from its tree running after a cancel',
+      check: async () => {
+        const staged = await harness.stage({kind: 'detachesThenWaits'});
+        const {processId, outcome} = await cancelledAtProcessId(staged);
+        await pause(100);
+        const alive = await processesOf().alive(processId);
+        await processesOf().end(processId);
+        deepStrictEqual(
+          [failureKindOf(outcome), alive],
+          ['failed:cancelled', true],
+        );
+      },
+    },
+    {
+      name: 'delivers standard error with standard output, in the order the script wrote them',
+      check: async () => {
+        const staged = await harness.stage({kind: 'printsBothStreams'});
+        deepStrictEqual(await runCollecting(staged, new AbortController()), {
+          lines: ['out one', 'err one', 'out two'],
+          outcome: {kind: 'exited', status: 0},
+        });
+      },
+    },
+    {
+      name: `delivers a line with no line end in parts of at most ${String(LONGEST_PENDING_LINE)} characters, all of it`,
+      check: async () => {
+        const staged = await harness.stage({kind: 'printsLongLine'});
+        const {lines, outcome} = await runCollecting(
+          staged,
+          new AbortController(),
+        );
+        deepStrictEqual(
+          [
+            outcome,
+            lines.every(line => line.length <= LONGEST_PENDING_LINE),
+            lines.join('').length,
+          ],
+          [{kind: 'exited', status: 0}, true, LONG_LINE_LENGTH],
+        );
+      },
+    },
+  ];
+  const bounded = harness.boundedCopy;
+  if (bounded?.kind === 'notApplicable') {
+    cases.push({
+      name: `writes a large copy in bounded pieces: not applicable, ${bounded.reason}`,
+      check: () => Promise.resolve(),
+      pending: true,
+    });
+  } else {
+    cases.push({
+      name: `writes a large copy in pieces of at most ${String(LONGEST_PENDING_LINE)} bytes`,
+      check: async () => {
+        const staged = await harness.stage({kind: 'copiesLarge'});
+        const outcome = await staged.channel.copyToHost({
+          ...staged.copy,
+          cancellation: new AbortController().signal,
+        });
+        deepStrictEqual(
+          [
+            outcome,
+            (bounded?.largestWrite() ?? Infinity) <= LONGEST_PENDING_LINE,
+          ],
+          [{kind: 'copied'}, true],
+        );
+      },
+    });
+  }
+  return harness.pendingOn === undefined
+    ? cases
+    : cases.map(each => ({
+        name: `${each.name} (pending ${String(harness.pendingOn)})`,
+        check: () => Promise.resolve(),
+        pending: true,
+      }));
+}
+
 /** The contract's cases for one implementation, staged through its harness. */
 export function channelContractCases(harness: ChannelHarness): ContractCase[] {
   return [
@@ -359,5 +512,6 @@ export function channelContractCases(harness: ChannelHarness): ContractCase[] {
     ...inputCases(harness),
     ...copyCases(harness),
     ...clientPathCases(harness),
+    ...ruleCases(harness),
   ];
 }

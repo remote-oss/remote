@@ -8,14 +8,115 @@
  */
 
 import {combineQuickPickReads, type QuickPickRead} from './quick-pick-reads.ts';
-import {existsSync, readFileSync} from 'node:fs';
+import {
+  mergeReads,
+  shownLabels,
+  wheelDirection,
+  wheelTopProbe,
+  type ViewRowRead,
+} from '../../../tools/view-rows.ts';
 import path from 'node:path';
-import {isOpen, variable, windowState} from './harness.ts';
+import {inWindow, isOpen, variable, windowState} from './harness.ts';
+import {
+  activateWindowWithin,
+  activeWindowName,
+  drive,
+  windowsOf,
+  type ActivationOutcome,
+  type WindowCandidate,
+  type WindowInstant,
+} from './display.ts';
+import {
+  dispatchAt,
+  evaluateAt,
+  LONG_READ_MILLISECONDS,
+  unavailableWhenNoAnswer,
+} from './page-protocol.ts';
+import {
+  type DebugTarget,
+  listedTargets,
+  localPageAmong,
+  pageAmong,
+  pagesDescription,
+  portIn,
+  REMEMBERED_PAGES,
+} from './page-list.ts';
 
 /** How long a wait for the renderer lasts, in milliseconds. */
 const WAIT_MILLISECONDS = 60_000;
 
 const POLL_MILLISECONDS = 200;
+
+/**
+ * The page-side code the reads of a virtualized list share (card #2960), standing on the pane and on the list it
+ * finds in it: the container that overflows and holds treeitems, the wheel of its viewport, the labels of the rows
+ * that move, and the wheel to the list's top.
+ */
+
+/** The pane's outermost element that overflows and holds treeitems, the container of its virtualized list. */
+const LIST_CONTAINER = `const overflowing = [...pane.querySelectorAll('*')].filter(el =>
+  el.scrollHeight > el.clientHeight + 1 &&
+  el.querySelector('[role="treeitem"]') !== null
+);
+const list = overflowing.find(el =>
+  overflowing.every(other => other === el || !other.contains(el))
+);`;
+
+/** A wheel of the list's container, then the settle of its smooth scroll. */
+const WHEEL_SETTLE = `const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+const wheel = delta => {
+  list.dispatchEvent(
+    new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: delta,
+      deltaMode: 0,
+    })
+  );
+  return wait(600);
+};`;
+
+/**
+ * The labels of the rows of the list's viewport, and `first`, the pair of its first and last label: the sticky
+ * (pinned) rows are left out — they do not move with the list, so they tell nothing about where a wheel went — and
+ * a list that overflows by less than a row moves its last row in while the first stays, so the first alone does
+ * not tell that the list moved.
+ */
+const ROW_LABELS = `const labels = () =>
+  [...pane.querySelectorAll('[role="treeitem"]:not(.monaco-tree-sticky-row)')]
+    .filter(row => row.getAttribute('aria-level') !== null)
+    .map(row => row.querySelector('.label-name')?.textContent ?? '');
+const first = () => {
+  const rows = [...pane.querySelectorAll('[role="treeitem"]:not(.monaco-tree-sticky-row)')];
+  const label = row => row?.querySelector('.label-name')?.textContent ?? '';
+  return label(rows[0]) + '\u0000' + label(rows.at(-1));
+};`;
+
+/**
+ * The probe of the wheel to the list's top, standing on the list's `labels` and `move`: the wheel's sign that
+ * scrolls the list up varies with the build, so it is probed — at a boundary only one sign moves — and a move's
+ * direction, told by its labels with `wheelDirection`'s own text (the page runs the very functions the unit rows
+ * test), settles the sign; a list that is still filling its rows tells no direction from three reads, and the
+ * probe stands unsettled, for the walk to read the list where it stands. `toTop` wheels the list up with the
+ * settled sign, and fails when 200 moves do not reach the top.
+ */
+const WHEEL_TOP_PROBE = `const wheelDirection = ${wheelDirection.toString()};
+const wheelTopProbe = ${wheelTopProbe.toString()};
+const probe = async delta => {
+  const before = labels();
+  const moved = await move(delta);
+  return {delta, moved, before, after: labels()};
+};
+const wheelTop = await wheelTopProbe(probe);
+const toTop = async sign => {
+  let moves = 0;
+  while (sign !== 0 && moves < 200 && (await move(sign))) {
+    moves += 1;
+  }
+  if (sign !== 0 && moves >= 200) {
+    throw new Error('the list did not reach its top in 200 moves');
+  }
+};`;
 
 /** A row of a view, as the window shows it. */
 export interface ViewRow {
@@ -23,28 +124,6 @@ export interface ViewRow {
   description: string;
   level: number;
   expanded: boolean | undefined;
-}
-
-/** A target of the debugging port's list. */
-interface DebugTarget {
-  /** The target's id, which a window's page keeps for as long as the window lives, a reload in place included. */
-  id: string;
-  type: string;
-  title: string;
-  webSocketDebuggerUrl?: string;
-}
-
-/** The answer of the protocol's `Runtime.evaluate`. */
-interface EvaluateAnswer {
-  id: number;
-  result?: {
-    result?: {value?: unknown};
-    exceptionDetails?: {
-      text: string;
-      exception?: {description?: string};
-    };
-  };
-  error?: {message: string};
 }
 
 /** A dialog of core's, as the window shows it: its message, its detail and its buttons' labels in order. */
@@ -99,12 +178,7 @@ async function debuggingPort(): Promise<number> {
   const file = path.join(variable('HARNESS_USER_DATA'), 'DevToolsActivePort');
   return settled(
     () => `the editor's debugging port in ${file}`,
-    () => {
-      const port = existsSync(file)
-        ? Number.parseInt(readFileSync(file, 'utf8').split('\n')[0] ?? '', 10)
-        : Number.NaN;
-      return Promise.resolve(Number.isInteger(port) ? port : undefined);
-    },
+    () => Promise.resolve(portIn(file)),
   );
 }
 
@@ -205,41 +279,20 @@ export function pagesForState(
     : fitting;
 }
 
-/**
- * The page of window `name` among `candidates`, the pages whose titles fit its state. A page the window remembered is
- * the one when it is there. Otherwise the one candidate; or, of several, the one that no other open window
- * remembered: two folder-less windows have the same title, but each keeps its own page's id. Nothing when it stays
- * ambiguous.
- */
-export function pageAmong(
-  candidates: readonly DebugTarget[],
-  name: string,
-  remembered: ReadonlyMap<string, string>,
-  open: (window: string) => boolean,
-): DebugTarget | undefined {
-  const own = candidates.find(page => page.id === remembered.get(name));
-  if (own !== undefined || candidates.length === 1) {
-    return own ?? candidates[0];
-  }
-  const taken = new Set(
-    [...remembered]
-      .filter(([other]) => other !== name && open(other))
-      .map(([, pageId]) => pageId),
-  );
-  const left = candidates.filter(page => !taken.has(page.id));
-  return left.length === 1 ? left[0] : undefined;
-}
-
-/** The id of the page each window's name was last found by, while the window lives. */
-const REMEMBERED_PAGES = new Map<string, string>();
-
 /** The pages of the renderer, from the debugging port's list. */
 async function pages(): Promise<DebugTarget[]> {
-  const answer = await fetch(
-    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-  );
-  const targets = (await answer.json()) as DebugTarget[];
+  const targets = await listedTargets(await debuggingPort());
   return targets.filter(target => target.type === 'page');
+}
+
+/**
+ * The title of a window as the lookup of its page reads it: without the ` [Administrator]` the editor adds to every title
+ * when it runs elevated, as it does on Windows runners, so that the empty window is `[]` there too and a title with the
+ * mark does not read as a remote one. Only the lookup of a page by its title uses it: the pages are listed with the
+ * titles the editor gave them, and a row that asserts a window's title reads `document.title`, with the mark.
+ */
+export function withoutAdministratorMark(title: string): string {
+  return title.replace(/ \[Administrator\]$/u, '');
 }
 
 /**
@@ -278,12 +331,15 @@ export async function pageCount(): Promise<number> {
   return (await pages()).length;
 }
 
-/** The titles among `titles` that window `name`'s folder name gives: `[<name>]` or `[<name> [...`, `[]` for `local`. */
+/**
+ * The titles among `titles` that window `name`'s folder name gives: `[<name>]`, `[<name> [...` once a remote window has
+ * its label, `[<name>]<authority>` while it has none yet, and `[]` for `local`.
+ */
 function titlesOfName(name: string, titles: readonly string[]): string[] {
   return titles.filter(title =>
     name === 'local'
       ? title === '[]'
-      : title === `[${name}]` ||
+      : title.startsWith(`[${name}]`) ||
         title.startsWith(`[${name} [`) ||
         // The window of the in-memory folder memfs:/ is titled by the folder's name, which is its root.
         (name === 'memfs' && title === '[/]'),
@@ -335,12 +391,18 @@ export async function pageOf(
   milliseconds = WAIT_MILLISECONDS,
 ): Promise<string> {
   let titles: string[] = [];
+  let described = '';
   const started = Date.now();
   return settled(
-    () => `one page of window ${name} among ${JSON.stringify(titles)}`,
+    () =>
+      `one page of window ${name} among ${JSON.stringify(titles)}; the pages and who remembers each: ${described}`,
     async () => {
-      const found = await pages();
+      const found = (await pages()).map(page => ({
+        ...page,
+        title: withoutAdministratorMark(page.title),
+      }));
       titles = found.map(page => page.title);
+      described = pagesDescription(found, REMEMBERED_PAGES, isOpen);
       const named = pageTitleByName(name, titles);
       if (named !== undefined) {
         const page = found.find(each => each.title === named);
@@ -360,6 +422,16 @@ export async function pageOf(
         titlesOfName(name, titles).length < 2
       ) {
         return remembered.webSocketDebuggerUrl;
+      }
+      // The local window is the one titled `[]`, so with several such pages it is chosen from them as its state would, without
+      // asking its agent: the agent may be running the command whose pick the caller waits for, and takes nothing else.
+      const local =
+        name === 'local'
+          ? localPageAmong(found, REMEMBERED_PAGES, isOpen)
+          : undefined;
+      if (local !== undefined) {
+        REMEMBERED_PAGES.set(name, local.id);
+        return local.webSocketDebuggerUrl;
       }
       const state = await stateForPage(
         name,
@@ -403,47 +475,6 @@ export async function rememberPage(name: string): Promise<void> {
   await pageOf(name);
 }
 
-/** Evaluates `expression` in the page at protocol address `address` and returns its value; `owner` names the page in a failure. */
-async function evaluateAt<Value>(
-  address: string,
-  owner: string,
-  expression: string,
-): Promise<Value> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to ${owner}`));
-      });
-    });
-    const answer = await new Promise<EvaluateAnswer>(resolve => {
-      socket.addEventListener('message', event => {
-        resolve(JSON.parse(String(event.data)) as EvaluateAnswer);
-      });
-      socket.send(
-        JSON.stringify({
-          id: 1,
-          method: 'Runtime.evaluate',
-          params: {expression, returnByValue: true, awaitPromise: true},
-        }),
-      );
-    });
-    const failure =
-      answer.error?.message ??
-      answer.result?.exceptionDetails?.exception?.description ??
-      answer.result?.exceptionDetails?.text;
-    if (failure !== undefined) {
-      throw new Error(`${owner}: ${failure}`);
-    }
-    return answer.result?.result?.value as Value;
-  } finally {
-    socket.close();
-  }
-}
-
 /**
  * Evaluates `expression` in window `name`'s page and returns its value; a thrown error fails with its text. A read that
  * a reload of the window meets (Retry at a connection dialog reloads it) ends with the protocol's "Inspected target
@@ -452,6 +483,8 @@ async function evaluateAt<Value>(
 async function evaluate<Value>(
   name: string,
   expression: string,
+  milliseconds?: number,
+  diagnosticsExpression?: string,
 ): Promise<Value> {
   const deadline = Date.now() + WAIT_MILLISECONDS;
   for (;;) {
@@ -460,6 +493,8 @@ async function evaluate<Value>(
         await pageOf(name),
         `window ${name}`,
         expression,
+        milliseconds,
+        diagnosticsExpression,
       );
     } catch (caught) {
       if (
@@ -472,6 +507,105 @@ async function evaluate<Value>(
       await new Promise(resolve => setTimeout(resolve, POLL_MILLISECONDS));
     }
   }
+}
+
+/**
+ * The reads of a focus wait, so a test can stand a display driver and a page in for the harness's: the grab, the
+ * page's own report of the focus, the window the display's active window is, and the display's windows at the row's
+ * instants.
+ */
+export interface FocusReads {
+  /** Asks the window manager to give window `name` the display's focus, bounded, so a manager that never confirms goes on as no answer. */
+  activate(name: string): Promise<ActivationOutcome>;
+  /** Whether the page of window `name` holds the focus. */
+  pageHasFocus(name: string): Promise<boolean>;
+  /** The window the display's active window is. */
+  activeWindowName(): Promise<string>;
+  /** The display's visible windows at named instants of the row, for the timeout readout; none while the row holds no instants. */
+  windowInstants?(): Promise<WindowInstant[]>;
+}
+
+/** The reads of a focus wait over the harness's own display and pages. */
+export function harnessFocusReads(): FocusReads {
+  return {
+    activate: name => activateWindowWithin(name, drive),
+    pageHasFocus: name => evaluate<boolean>(name, 'document.hasFocus()'),
+    activeWindowName,
+  };
+}
+
+/** What a focus wait last read of the display, for its timeout: the window it held, the display's windows for the name and their managedness, whether the manager confirmed it, the active window, and the display's windows at the row's instants. */
+interface FocusReadout {
+  windowId: string | undefined;
+  candidates: WindowCandidate[];
+  confirmed: boolean;
+  activeWindowName: string;
+  instants: WindowInstant[];
+}
+
+/** The focus wait's timeout, naming the window the display last held for the name, the display's windows for the name with their managedness, whether the manager confirmed it, the window the display's active window is, and the display's windows at the row's instants. */
+function focusTimeout(name: string, readout: FocusReadout): string {
+  const held =
+    readout.windowId === undefined
+      ? 'no visible window'
+      : `window ${readout.windowId}`;
+  const windows =
+    readout.candidates.length === 0
+      ? ''
+      : `, the display's windows for it ${readout.candidates
+          .map(
+            each => `${each.id} (${each.managed ? 'managed' : 'no WM_STATE'})`,
+          )
+          .join(', ')}`;
+  const instants =
+    readout.instants.length === 0
+      ? ''
+      : `, the display's windows ${readout.instants
+          .map(instant => `${instant.label} ${windowsOf(instant.windows)}`)
+          .join(', and ')}`;
+  return (
+    `window ${name} to hold the focus: the display last held ${held} for it${windows}, ` +
+    `its activation was ${readout.confirmed ? 'confirmed' : 'not confirmed'} by the window manager, ` +
+    `and the display's active window is ${readout.activeWindowName}${instants}`
+  );
+}
+
+/**
+ * Gives window `name` the display's focus through the window manager, as a click on the window does, and waits for
+ * the page to report the focus: a window the window manager left unfocused hides its quick input, and a palette run in
+ * it never shows. The manager's `--sync` activation is asked for on every pass, so the grab stays ordered against
+ * what the display does between the passes.
+ */
+export async function focusWindow(
+  name: string,
+  reads: FocusReads = harnessFocusReads(),
+  waitMilliseconds: number = WAIT_MILLISECONDS,
+): Promise<void> {
+  // The row's instants are its own fixed snapshots of the display, so the read asks them once; a read that fails is no answer.
+  const instants = await (
+    reads.windowInstants?.() ?? Promise.resolve([] as WindowInstant[])
+  ).catch(() => [] as WindowInstant[]);
+  const readout: FocusReadout = {
+    windowId: undefined,
+    candidates: [],
+    confirmed: false,
+    activeWindowName: 'unreadable',
+    instants,
+  };
+  await settled(
+    () => focusTimeout(name, readout),
+    async () => {
+      const outcome = await reads.activate(name);
+      readout.windowId = outcome.windowId;
+      readout.candidates = outcome.candidates;
+      readout.confirmed = outcome.confirmed;
+      readout.activeWindowName = await reads
+        .activeWindowName()
+        .catch((reading: unknown) => String(reading));
+      return (await reads.pageHasFocus(name)) || undefined;
+    },
+    waitMilliseconds,
+  );
 }
 
 /** How many terminals' text areas window `name`'s page holds and the titles of its terminal tabs. */
@@ -487,26 +621,16 @@ const PAGE_FACTS_MILLISECONDS = 10_000;
 export async function terminalPageFacts(
   name: string,
 ): Promise<TerminalPageFacts | 'unavailable'> {
-  let timer: NodeJS.Timeout | undefined;
-  const expired = new Promise<'unavailable'>(resolve => {
-    timer = setTimeout(() => {
-      resolve('unavailable');
-    }, PAGE_FACTS_MILLISECONDS);
-  });
-  try {
-    return await Promise.race([
-      evaluate<TerminalPageFacts>(
-        name,
-        `({
-          rows: document.querySelectorAll('.xterm-rows').length,
-          tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
-        })`,
-      ),
-      expired,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  return unavailableWhenNoAnswer(
+    evaluate<TerminalPageFacts>(
+      name,
+      `({
+        rows: document.querySelectorAll('.xterm-rows').length,
+        tabs: [...document.querySelectorAll('.terminal-tabs-entry')].map(each => (each.textContent ?? '').trim()),
+      })`,
+      PAGE_FACTS_MILLISECONDS,
+    ),
+  );
 }
 
 /** The page-side lookup of a view's pane by its header title; `undefined` when no pane has it. */
@@ -599,20 +723,29 @@ export async function renderedRows(
   );
 }
 
+/** The reads of a virtualized list's walk, and whether the walk stood at the list's top. */
+interface ViewRowsWalk {
+  settled: boolean;
+  reads: ViewRowRead[][];
+  probeReads?: number;
+}
+
 /**
  * The rows of view `viewName` in window `name`, in the order shown; `undefined` when the window has no such view. A
- * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read by
- * wheel-scrolling the container in steps and collecting every row it shows, then wheeling it back to where it was for
- * the next user action. The wheel's sign that scrolls the list down varies with the build, so it is probed, and a list
- * that overflows moves for exactly one of the two.
+ * virtualized list keeps only the rows of its viewport in the DOM, so a list that overflows its container is read
+ * from its top: the list is wheeled to its top first, since a read that stands mid-list never reaches the rows
+ * above it, and the top's read and the reads of the walk over the list are merged with the values of the read that
+ * first shows a row. The list is wheeled back to its top, so a later user action finds it there. The wheel's sign
+ * that scrolls a list varies with the build, so it is probed, and a list that overflows moves for exactly one of
+ * the two. A list that is still filling its rows tells the wheel no direction, so the read stands where the list
+ * stands, is told on stderr with the rows it shows, and the list is left where it is for the next read's own
+ * wheel.
  */
 export async function viewRows(
   name: string,
   viewName: string,
 ): Promise<ViewRow[] | undefined> {
-  const rows = await evaluate<Array<
-    Omit<ViewRow, 'expanded'> & {expanded: boolean | null}
-  > | null>(
+  const walk = await evaluate<ViewRowsWalk | null>(
     name,
     `(async () => {
       const pane = ${paneExpression(viewName)};
@@ -629,88 +762,114 @@ export async function viewRows(
             // null across the protocol: a row without the attribute is not expanded.
             expanded: row.hasAttribute('aria-expanded') ? row.getAttribute('aria-expanded') === 'true' : null,
           }));
-      const overflow = [...pane.querySelectorAll('*')].filter(el =>
-        el.scrollHeight > el.clientHeight + 1 &&
-        el.querySelector('[role="treeitem"]') !== null
-      );
-      const list = overflow.find(el =>
-        overflow.every(other => other === el || !other.contains(el))
-      );
+      ${LIST_CONTAINER}
       if (list === undefined) {
-        return read();
+        return {settled: true, reads: [read()]};
       }
-      const seen = new Map();
-      const order = [];
-      const collect = () => {
-        for (const row of read()) {
-          const key = String(row.level) + ':' + row.label;
-          // The first reading wins: the read starts at the list's top, so a header the scrolled view
-          // pins again keeps the values of its first reading.
-          if (!seen.has(key)) {
-            order.push(key);
-            seen.set(key, row);
-          }
+      ${ROW_LABELS}
+      ${WHEEL_SETTLE}
+      // The trace of this walk, for a read that no one answers: the page's clock at the expression's start, the
+      // page's visibility at the start and at each change, and each move's wall time against the 600 ms it set. It
+      // stands on the page, so a read that dies on its bound can still ask the page for it (the protocol's
+      // diagnostics read); a finished walk clears it.
+      const walkStart = Date.now();
+      const walkTrace = [
+        'pageStart ' + walkStart,
+        'visibilityState ' + document.visibilityState,
+      ];
+      let walkVisibility = document.visibilityState;
+      let walkStep = 0;
+      const markWalk = part => {
+        if (document.visibilityState !== walkVisibility) {
+          walkTrace.push(
+            'visibilityState ' + walkVisibility + ' -> ' + document.visibilityState,
+          );
+          walkVisibility = document.visibilityState;
         }
+        walkTrace.push(part);
       };
-      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-      // The first and the last rendered rows: a list that overflows by less than a row moves its last row in while the
-      // first stays, so the first alone does not tell that the list moved.
-      const first = () => {
-        const rows = [...pane.querySelectorAll('[role="treeitem"]')];
-        const label = row => row?.querySelector('.label-name')?.textContent ?? '';
-        return label(rows[0]) + '\u0000' + label(rows.at(-1));
-      };
-      // A wheel moves the list with a smooth scroll, so the next wheel waits for the move to settle.
+      window.remoteOssViewRowsTrace = walkTrace.join(' ');
       const move = async delta => {
         const before = first();
-        list.dispatchEvent(
-          new WheelEvent('wheel', {
-            bubbles: true,
-            cancelable: true,
-            deltaY: delta,
-            deltaMode: 0,
-          })
+        const waitStartedAt = Date.now();
+        await wheel(delta);
+        walkStep += 1;
+        markWalk(
+          'move ' +
+            walkStep +
+            ' +' +
+            (waitStartedAt - walkStart) +
+            'ms took ' +
+            (Date.now() - waitStartedAt) +
+            'ms',
         );
-        await wait(600);
+        window.remoteOssViewRowsTrace = walkTrace.join(' ');
         return first() !== before;
       };
+      ${WHEEL_TOP_PROBE}
+      if (!wheelTop.settled) {
+        // The list is still filling its rows, and its wheel tells no direction: the walk reads it where it stands
+        // and stands, so the read's wait may wheel it again once its rows have told.
+        window.remoteOssViewRowsTrace = undefined;
+        return {settled: false, reads: [read()], probeReads: wheelTop.reads};
+      }
+      await toTop(wheelTop.sign);
+      // The walk stands at the list's top now, where a fresh read would, so the reads after it read the list the
+      // way a fresh one would: the top's read, the read after the probe of the wheel that scrolls the list down,
+      // the reads of the walk over the list, and the read that closes it, once the list is wheeled back to its top
+      // for the next user action.
       const topFirst = first();
-      collect();
+      const reads = [read()];
       let down = 0;
       if (await move(-400)) {
         down = -400;
-        collect();
       } else if (await move(400)) {
         down = 400;
-        collect();
       }
-      let steps = 0;
-      while (down !== 0 && steps < 200) {
+      reads.push(read());
+      let downMoves = 0;
+      while (down !== 0 && downMoves < 200) {
         if (!(await move(down))) {
           break;
         }
-        collect();
-        steps += 1;
+        reads.push(read());
+        downMoves += 1;
       }
-      while (down !== 0 && steps < 200) {
+      let backMoves = 0;
+      while (down !== 0 && backMoves < 200) {
         await move(-down);
         if (first() === topFirst) {
           break;
         }
-        steps += 1;
+        backMoves += 1;
       }
       await wait(200);
-      collect();
-      return order.map(key => seen.get(key));
+      reads.push(read());
+      window.remoteOssViewRowsTrace = undefined;
+      return {settled: true, reads};
     })()`,
+    LONG_READ_MILLISECONDS,
+    'String(window.remoteOssViewRowsTrace ?? null)',
   );
-  // The protocol returns values as JSON, where `expanded: undefined` would drop: read it back as it is.
-  return (
-    rows?.map(each => ({
-      ...each,
-      expanded: each.expanded ?? undefined,
-    })) ?? undefined
-  );
+  if (walk === null) {
+    return undefined;
+  }
+  if (!walk.settled) {
+    process.stderr.write(
+      `window ${name}, view ${viewName}: the wheel to the top could not tell its direction in ${String(
+        walk.probeReads,
+      )} reads, and the list stands where it is, showing ${
+        shownLabels(walk.reads.flatMap(read => read.map(each => each.label))) ||
+        'no row'
+      }\n`,
+    );
+  }
+  // The protocol returns values as JSON, where `expanded: undefined` would drop: the null a read did not draw
+  // is no state.
+  return mergeReads(walk.reads).map(each => ({
+    ...each,
+    expanded: each.expanded ?? undefined,
+  }));
 }
 
 /**
@@ -760,9 +919,72 @@ async function clickAction(
 }
 
 /**
+ * Wheels the one row labelled `rowLabel` of view `viewName` in window `name` into the viewport of its virtualized
+ * list, so the row is drawn where an action on it is looked for: the list is wheeled to its top and then down over
+ * the row, and it stands where the row was found; a list that is still filling its rows is wheeled down over the
+ * row where it stands; `false` when the row is not drawn then, so the look for the action stands and fails naming
+ * it.
+ */
+async function ensureRowDrawn(
+  name: string,
+  viewName: string,
+  rowLabel: string,
+): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `(async () => {
+      const pane = ${paneExpression(viewName)};
+      if (pane === undefined) {
+        return false;
+      }
+      const drawn = () =>
+        [...pane.querySelectorAll('[role="treeitem"]')].some(
+          row =>
+            row.getAttribute('aria-level') !== null &&
+            row.querySelector('.label-name')?.textContent === ${JSON.stringify(rowLabel)}
+        );
+      if (drawn()) {
+        return true;
+      }
+      ${LIST_CONTAINER}
+      if (list === undefined) {
+        return false;
+      }
+      ${ROW_LABELS}
+      ${WHEEL_SETTLE}
+      const move = async delta => {
+        const before = first();
+        await wheel(delta);
+        return first() !== before;
+      };
+      ${WHEEL_TOP_PROBE}
+      if (wheelTop.settled) {
+        await toTop(wheelTop.sign);
+      }
+      let down = 0;
+      if (await move(-400)) {
+        down = -400;
+      } else if (await move(400)) {
+        down = 400;
+      }
+      let downMoves = 0;
+      while (down !== 0 && downMoves < 200 && !drawn()) {
+        if (!(await move(down))) {
+          break;
+        }
+        downMoves += 1;
+      }
+      return drawn();
+    })()`,
+    LONG_READ_MILLISECONDS,
+  );
+}
+
+/**
  * Clicks the inline action `actionTitle` of the one row labelled `rowLabel` in view `viewName` of window `name`. The
- * row's actions stay out of sight until it is hovered, so the row is hovered again before each re-read until they are
- * drawn.
+ * action is looked for where the row is drawn, and a virtualized list keeps only the rows of its viewport in the
+ * DOM, so the row is wheeled into the list's viewport first; the row's actions stay out of sight until it is
+ * hovered, so the row is hovered again before each re-read until they are drawn.
  */
 export async function rowAction(
   name: string,
@@ -770,6 +992,7 @@ export async function rowAction(
   rowLabel: string,
   actionTitle: string,
 ): Promise<void> {
+  await ensureRowDrawn(name, viewName, rowLabel);
   await clickAction(
     name,
     viewName,
@@ -838,7 +1061,7 @@ async function moveMouseTo(
   name: string,
   point: {x: number; y: number},
 ): Promise<void> {
-  await dispatchInput(await pageOf(name), name, [
+  await dispatchAt(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
       params: {type: 'mouseMoved', ...point},
@@ -909,7 +1132,7 @@ export async function clickRowLabel(
       return found ?? undefined;
     },
   );
-  await dispatchInput(
+  await dispatchAt(
     await pageOf(name),
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -955,7 +1178,7 @@ export async function actionTooltip(
       return found ?? undefined;
     },
   );
-  await dispatchInput(await pageOf(name), name, [
+  await dispatchAt(await pageOf(name), name, [
     {
       method: 'Input.dispatchMouseEvent',
       params: {type: 'mouseMoved', ...point},
@@ -1342,7 +1565,7 @@ export async function chatInputRows(
   if (point === null) {
     return [];
   }
-  await dispatchInput(
+  await dispatchAt(
     address,
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -1573,10 +1796,7 @@ export interface RenderedReadme {
  */
 export async function extensionReadmeOf(name: string): Promise<RenderedReadme> {
   const address = await pageOf(name);
-  const answer = await fetch(
-    `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-  );
-  const targets = (await answer.json()) as DebugTarget[];
+  const targets = await listedTargets(await debuggingPort());
   for (const target of targets.flatMap(each =>
     each.type === 'iframe' && each.webSocketDebuggerUrl !== undefined
       ? [each.webSocketDebuggerUrl]
@@ -1615,10 +1835,7 @@ export async function issueReporterExtensions(): Promise<string[]> {
   const address = await settled(
     () => 'the Issue Reporter window',
     async () => {
-      const answer = await fetch(
-        `http://127.0.0.1:${String(await debuggingPort())}/json/list`,
-      );
-      return ((await answer.json()) as DebugTarget[]).find(
+      return (await listedTargets(await debuggingPort())).find(
         target => target.type === 'page' && target.title === 'Issue Reporter',
       )?.webSocketDebuggerUrl;
     },
@@ -1777,6 +1994,7 @@ export async function portsRows(name: string): Promise<PortsRow[]> {
       }
       return order.map(key => seen.get(key));
     })()`,
+    LONG_READ_MILLISECONDS,
   );
   if (typeof rows === 'string') {
     throw new Error(`window ${name}: ${rows}`);
@@ -2671,6 +2889,57 @@ export async function vscodeWindowId(name: string): Promise<number | null> {
   );
 }
 
+/** One row of the Keyboard Shortcuts editor: the command's own text and the keybinding it shows, empty for none. */
+export interface KeybindingRow {
+  command: string;
+  keybinding: string;
+}
+
+/**
+ * The rows window `name`'s Keyboard Shortcuts editor shows once its search holds `query`, read when their number has
+ * stood for two seconds. The editor takes the keyboard focus in its search box when it opens, where the query is typed;
+ * a row's cells are an empty one for its actions, then the command, the keybinding, the `when` and the source. A table
+ * with no row fails with what the editor shows, so that an empty read is never taken for a list of commands without a
+ * keybinding.
+ */
+export async function keybindingRows(
+  name: string,
+  query: string,
+): Promise<KeybindingRow[]> {
+  await inWindow(name, 'workbench.action.openGlobalKeybindings');
+  await typeInFocus(name, query);
+  function read(): Promise<KeybindingRow[]> {
+    return evaluate<KeybindingRow[]>(
+      name,
+      `[...document.querySelectorAll('.keybindings-editor .monaco-table-tr')].map(row => {
+        const cells = [...row.querySelectorAll('.monaco-table-td')].map(cell => (cell.textContent ?? '').trim());
+        return {command: cells[1] ?? '', keybinding: cells[2] ?? ''};
+      })`,
+    );
+  }
+  let rows: KeybindingRow[] = [];
+  let steady = 0;
+  for (let attempt = 0; attempt < 60 && steady < 4; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const next = await read();
+    steady =
+      next.length > 0 && JSON.stringify(next) === JSON.stringify(rows)
+        ? steady + 1
+        : 0;
+    rows = next;
+  }
+  if (rows.length === 0) {
+    const shown = await evaluate<string>(
+      name,
+      `(document.querySelector('.keybindings-editor')?.innerText ?? '(no keybindings editor)').slice(0, 600)`,
+    );
+    throw new Error(
+      `window ${name}'s Keyboard Shortcuts editor shows no row for ${JSON.stringify(query)}: it shows ${JSON.stringify(shown)}`,
+    );
+  }
+  return rows;
+}
+
 /** Window `name`'s title, as its page has it. */
 export async function windowTitle(name: string): Promise<string> {
   return evaluate<string>(name, 'document.title');
@@ -3009,7 +3278,7 @@ export async function waitForDialogOfName(
         const address = page.webSocketDebuggerUrl;
         if (
           address !== undefined &&
-          titlesOfName(name, [page.title]).length > 0
+          titlesOfName(name, [withoutAdministratorMark(page.title)]).length > 0
         ) {
           const dialog = await evaluateAt<ShownDialog | null>(
             address,
@@ -3347,6 +3616,7 @@ export async function allQuickPickRows(
       reads.push(read());
       return reads;
     })()}`,
+    LONG_READ_MILLISECONDS,
   );
   return reads === null ? [] : combineQuickPickReads(reads);
 }
@@ -3412,15 +3682,47 @@ export async function chooseQuickPickItem(
   await pressKey(await pageOf(name), name, 'Enter');
 }
 
+/** The reads of a quick pick's row wait, so a test can stand a window's pick and the display's active window in for the harness's. */
+export interface PickReads {
+  /** Waits for the quick pick open in window `name`; a pick that does not show in time fails. */
+  quickPick(name: string): Promise<ShownQuickPick>;
+  /** The window the display's active window is. */
+  activeWindowName(): Promise<string>;
+}
+
+/** The reads of a quick pick's row wait over the harness's own pick and display. */
+function harnessPickReads(): PickReads {
+  return {
+    quickPick: name => waitForQuickPick(name, 30_000),
+    activeWindowName,
+  };
+}
+
 /**
  * Chooses the row labelled `label` of the quick pick open in window `name` by the keys a user presses: the arrow keys
- * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays.
+ * from the focused row to it, then Enter. Unlike {@link chooseQuickPickItem} it types no filter, so every row stays. A
+ * pick that does not settle fails naming the pages and the display's active window, so that a taker of the focus the
+ * pages cannot see is named with the failure.
  */
 export async function chooseQuickPickRow(
   name: string,
   label: string,
+  reads: PickReads = harnessPickReads(),
 ): Promise<void> {
-  await waitForQuickPick(name, 30_000);
+  try {
+    await reads.quickPick(name);
+  } catch (caught) {
+    const pages = await pageFocusFacts().catch((reading: unknown) => [
+      `unreadable: ${String(reading)}`,
+    ]);
+    const displayWindowName = await reads
+      .activeWindowName()
+      .catch((reading: unknown) => String(reading));
+    throw new Error(
+      `${String(caught)}; pages ${JSON.stringify(pages)}, the display's active window ${JSON.stringify(displayWindowName)}`,
+      {cause: caught},
+    );
+  }
   const address = await pageOf(name);
   for (let presses = 0; presses < 100; presses += 1) {
     const rows = await quickPickRows(name);
@@ -3491,16 +3793,26 @@ export async function moveQuickPickFocus(
 
 /** Sets the input of the quick pick open in window `name` to `text`, whether or not the list has a row. */
 async function setQuickPickInput(name: string, text: string): Promise<void> {
-  await evaluate<null>(
-    name,
-    `(() => {
+  // The check and the focus are one evaluate, and a pick that is not there yet or no more is waited for.
+  await settled(
+    () => `the input of the quick pick of window ${name}`,
+    async () =>
+      (await evaluate<boolean>(
+        name,
+        `(() => {
       const input = document.querySelector('${QUICK_WIDGET} .quick-input-box input');
+      if (input === null) {
+        return false;
+      }
       input.focus();
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       setter.call(input, ${JSON.stringify(text)});
       input.dispatchEvent(new Event('input', {bubbles: true}));
-      return null;
+      return true;
     })()`,
+      ))
+        ? true
+        : undefined,
   );
 }
 
@@ -3525,6 +3837,21 @@ export async function clearQuickPickInput(name: string): Promise<void> {
 /** Presses Enter in window `name` wherever its page has the focus, as the keyboard does. */
 export async function pressEnter(name: string): Promise<void> {
   await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** The modifier bit of Control in the protocol's key events. */
+const CONTROL = 2;
+
+/** Presses Ctrl+Enter in window `name`, which accepts the active item of the quick pick that is open as the item to open in a new window. */
+export async function pressControlEnter(name: string): Promise<void> {
+  await pressStroke(await pageOf(name), name, {
+    key: 'Enter',
+    code: 'Enter',
+    windowsVirtualKeyCode: VIRTUAL_KEY_CODES.Enter,
+    nativeVirtualKeyCode: VIRTUAL_KEY_CODES.Enter,
+    text: '\r',
+    modifiers: CONTROL,
+  });
 }
 
 /** Presses Enter in window `name`, which accepts the active item of the quick pick that is open. */
@@ -3717,6 +4044,49 @@ const FOLDER_DIALOG_READING = `(() => {
   };
 })()`;
 
+/** What a wait for a folder dialog to show a typed path has seen so far: since when it has held the path without listing the folder, and whether the path was typed again with a closing slash. */
+export interface FolderDialogWait {
+  waitingSince?: number | undefined;
+  slashed: boolean;
+}
+
+/** How long the dialog holds the typed path without listing the folder before the path is typed again with a closing slash. */
+const SLASH_AFTER_MILLISECONDS = 2000;
+
+/**
+ * What the wait for a folder dialog to show `typed` does with `reading` taken at `now`: `'shown'` when the input holds the
+ * path (a closing slash aside) and the list is the folder's own, the text `typed` again when the input does not hold it (the dialog
+ * fills it with its own folder once its first listing is in, which can come after the typing), the path with a closing slash
+ * once, after {@link SLASH_AFTER_MILLISECONDS}, when the input holds it and the list stays the parent's, as it does for a
+ * name that is not a folder (about one dialog in a hundred, measured on a folder that exists: the same text typed again
+ * changes nothing for the dialog, a closing slash makes it list the folder), and nothing otherwise. The input is then
+ * `typed/`, which the dialog takes for the same folder.
+ */
+export function retypingOf(
+  typed: string,
+  reading: FolderDialogReading,
+  wait: FolderDialogWait,
+  now: number,
+): 'shown' | {text: string} | undefined {
+  if (reading.value.replace(/\/$/, '') !== typed.replace(/\/$/, '')) {
+    wait.waitingSince = undefined;
+    return {text: typed};
+  }
+  if (reading.rows[0] === '..') {
+    return 'shown';
+  }
+  wait.waitingSince ??= now;
+  if (
+    !wait.slashed &&
+    !typed.endsWith('/') &&
+    now - wait.waitingSince > SLASH_AFTER_MILLISECONDS
+  ) {
+    wait.slashed = true;
+    return {text: `${typed}/`};
+  }
+  return undefined;
+}
+
 /** Reads until the dialog is closed, for at most {@link REPRESS_MILLISECONDS}, and gives the last reading. */
 async function closedWithin(
   read: () => Promise<FolderDialogReading>,
@@ -3779,23 +4149,33 @@ async function keyInFolderDialog(
     () => `the folder dialog of window ${name}`,
     async () => ((await folderDialogOpen(name)) ? true : undefined),
   );
-  /** Focuses the dialog's input and, when `typed` is given, sets its value as a user's typing would. */
-  function typeInto(): Promise<null> {
-    return evaluate<null>(
+  /**
+   * Focuses the dialog's input and, when `text` is given, sets its value as a user's typing would; false when the input
+   * is not in the page now. The check and the focus are one evaluate: an input that the page replaced between two of
+   * them was found and gone, as `Cannot read properties of null (reading 'focus')`.
+   */
+  function typeInto(text: string | undefined = typed): Promise<boolean> {
+    return evaluate<boolean>(
       name,
       `(() => {
       const input = ${FOLDER_DIALOG_INPUT};
+      if (input === null) {
+        return false;
+      }
       input.focus();
-      if (${JSON.stringify(typed ?? null)} !== null) {
+      if (${JSON.stringify(text ?? null)} !== null) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-        setter.call(input, ${JSON.stringify(typed ?? '')});
+        setter.call(input, ${JSON.stringify(text ?? '')});
         input.dispatchEvent(new Event('input', {bubbles: true}));
       }
-      return null;
+      return true;
     })()`,
     );
   }
-  await typeInto();
+  await settled(
+    () => `the input of the folder dialog of window ${name} to take focus`,
+    async () => ((await typeInto()) ? true : undefined),
+  );
   // A key the dialog took can take the window to the folder, and then no page has its name: that reads as closed.
   async function read(): Promise<FolderDialogReading> {
     const address = await pageOf(name, PAGE_LOOKUP_MILLISECONDS).catch(
@@ -3811,20 +4191,20 @@ async function keyInFolderDialog(
   }
   if (waiting !== undefined && typed !== undefined) {
     let lastReading: FolderDialogReading | undefined;
+    const wait: FolderDialogWait = {slashed: false};
     await settled(
       () =>
-        `the folder dialog of window ${name} to show ${typed}; it last read ${JSON.stringify(lastReading)}`,
+        `the folder dialog of window ${name} to show ${typed}${wait.slashed ? ' (typed again with a closing slash)' : ''}; it last read ${JSON.stringify(lastReading)}`,
       async () => {
         lastReading = await read();
-        const shown =
-          lastReading.value.replace(/\/$/, '') === typed.replace(/\/$/, '');
-        if (!shown) {
-          // The dialog fills its input with its own folder once its first listing is in, which can come after the typing:
-          // what was typed is typed again.
-          await typeInto();
-          return undefined;
+        const next = retypingOf(typed, lastReading, wait, Date.now());
+        if (next === 'shown') {
+          return true;
         }
-        return lastReading.rows[0] === '..' ? true : undefined;
+        if (next !== undefined) {
+          await typeInto(next.text);
+        }
+        return undefined;
       },
     );
   }
@@ -3860,50 +4240,13 @@ interface KeyStroke {
   modifiers?: number;
 }
 
-/** One protocol input command. */
-interface InputEvent {
-  method: 'Input.dispatchKeyEvent' | 'Input.dispatchMouseEvent';
-  params: Record<string, unknown>;
-}
-
-/** Sends the input commands `events` one after the other to the page at protocol address `address`, each awaiting its answer. */
-async function dispatchInput(
-  address: string,
-  owner: string,
-  events: readonly InputEvent[],
-): Promise<void> {
-  const socket = new WebSocket(address);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.addEventListener('open', () => {
-        resolve();
-      });
-      socket.addEventListener('error', () => {
-        reject(new Error(`no protocol connection to window ${owner}`));
-      });
-    });
-    for (const [index, event] of events.entries()) {
-      const answered = new Promise<void>(resolve => {
-        socket.addEventListener('message', function listener() {
-          socket.removeEventListener('message', listener);
-          resolve();
-        });
-      });
-      socket.send(JSON.stringify({id: index + 1, ...event}));
-      await answered;
-    }
-  } finally {
-    socket.close();
-  }
-}
-
 /** Sends `stroke` to the page at protocol address `address`, with its key down and up. */
 async function pressStroke(
   address: string,
   owner: string,
   stroke: KeyStroke,
 ): Promise<void> {
-  await dispatchInput(
+  await dispatchAt(
     address,
     owner,
     ['keyDown', 'keyUp'].map(type => ({
@@ -3940,7 +4283,7 @@ export async function clickQuickPickRow(
       `window ${name}: no quick pick row ${JSON.stringify(label)}`,
     );
   }
-  await dispatchInput(
+  await dispatchAt(
     await pageOf(name),
     name,
     ['mousePressed', 'mouseReleased'].map(type => ({
@@ -4329,6 +4672,29 @@ export async function terminalText(name: string): Promise<string> {
   );
 }
 
+/** One row of the active terminal: its text, and the texts of the runs in it that are drawn underlined, as a link is. */
+export interface TerminalRow {
+  text: string;
+  underlined: string[];
+}
+
+/** The rows of window `name`'s active terminal that are in view, each with its underlined runs. */
+export async function terminalRows(name: string): Promise<TerminalRow[]> {
+  return evaluate<TerminalRow[]>(
+    name,
+    `(() => {
+      const containers = document.querySelectorAll('.xterm-rows');
+      const rows = [...(containers[containers.length - 1]?.children ?? [])];
+      return rows.map(entry => ({
+        text: entry.innerText,
+        underlined: [...entry.querySelectorAll('span[class*="xterm-underline"]')].map(
+          span => span.textContent ?? '',
+        ),
+      }));
+    })()`,
+  );
+}
+
 /** A run of text in the active terminal, with the number of the palette colour it is drawn in; none for the default. */
 export interface TerminalSpan {
   text: string;
@@ -4420,6 +4786,14 @@ export async function quickPickTitle(name: string): Promise<string> {
   );
 }
 
+/** Whether the keyboard focus of window `name` is inside the quick input, as it is for a pick that holds focus. */
+export async function quickPickHasFocus(name: string): Promise<boolean> {
+  return evaluate<boolean>(
+    name,
+    `document.querySelector('${QUICK_WIDGET}')?.contains(document.activeElement) ?? false`,
+  );
+}
+
 /** Presses the Back button of the title bar of the quick pick open in window `name`. */
 export async function pressQuickPickBack(name: string): Promise<void> {
   await evaluate<null>(
@@ -4505,6 +4879,31 @@ export async function pressQuickPickOk(name: string): Promise<void> {
       return null;
     })()`,
   );
+}
+
+/**
+ * Clicks the button of the quick input open in window `name` whose text is `label`: a button of the input's own, as
+ * the folder dialog's "Show Local". It fails naming the buttons it found.
+ */
+export async function pressQuickInputButton(
+  name: string,
+  label: string,
+): Promise<void> {
+  const missing = await evaluate<string | null>(
+    name,
+    `(() => {
+      const buttons = [...document.querySelectorAll('${QUICK_WIDGET} .monaco-button')];
+      const button = buttons.find(each => each.textContent?.trim() === ${JSON.stringify(label)});
+      if (button === undefined) {
+        return 'no button ' + ${JSON.stringify(JSON.stringify(label))} + ' among ' + JSON.stringify(buttons.map(each => each.textContent));
+      }
+      button.click();
+      return null;
+    })()`,
+  );
+  if (missing !== null) {
+    throw new Error(`window ${name}: ${missing}`);
+  }
 }
 
 /** What the Settings editor shows for one setting. */

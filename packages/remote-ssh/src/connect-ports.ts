@@ -4,6 +4,7 @@
  * Node; the extension passes the real surfaces and the machine, and a test passes fakes.
  */
 
+import path from 'node:path';
 import {STEP_RULE} from './diagnostics/session-summary.ts';
 import type {Troubleshooting} from './diagnostics/troubleshooting.ts';
 import type {TunnelOpener} from './forwarding/default-forwards.ts';
@@ -30,6 +31,7 @@ import type {Scheduler} from 'lib-helper';
 import type {SettingHost} from 'lib-identifiers';
 import type {Logger} from 'lib-log';
 import {
+  MANUAL_BOOTSTRAP_ARCHIVE,
   OVERRIDE_POLICIES,
   type OverridePolicy,
   type ProductProfile,
@@ -43,6 +45,7 @@ import {
   type DownloadPort,
   hostLockLoopOf,
   type LicenceModal,
+  type LockFilePort,
   type AcceptanceStore,
 } from 'lib-server';
 import {
@@ -69,18 +72,24 @@ import {
 import {announcePlatform} from './connect/platform-notice.ts';
 import type {PlatformPickVariant} from './connect/platform-picker.ts';
 import type {RemotePlatform} from './pipeline/platform.ts';
+import type {HeldClientLocks} from './pipeline/client-lock-step.ts';
 import type {AcceptanceState} from './surfaces/acceptance-store.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {ownText} from './surfaces/own-strings.ts';
 import type {HintRecorder} from './diagnostics/hint-recorder.ts';
 import {downloadRefusalHint} from './diagnostics/download-refusal.ts';
+import {commandMissingHint} from './diagnostics/command-missing-hint.ts';
+import {installFolderHint} from './diagnostics/install-folder-hint.ts';
+import {prerequisitesHint} from './diagnostics/prerequisites-hint.ts';
+import {installPathHint} from './diagnostics/install-path-hint.ts';
+import {localDownloadHint} from './diagnostics/local-download-hint.ts';
+import {localBootstrapHint} from './diagnostics/local-bootstrap-hint.ts';
 import {invalidProxyHint} from './diagnostics/invalid-proxy.ts';
 import {
   openingAttached,
   type RefusalWatch,
   refusalWatchOf,
 } from './diagnostics/forwarding-refusal.ts';
-import {commands} from './identifiers.generated.ts';
 import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
@@ -93,8 +102,10 @@ import {
   agentForwardingOf,
   defaultForwardsOf,
   connectionSettingsOf,
+  effectiveUseExecServer,
   localDownloadModeOf,
   overrideOf,
+  listedSettings,
   serverSettingsOf,
   switchOf,
   terminalModeOf,
@@ -104,6 +115,7 @@ import {
   valueOf,
   x11ForwardingOf,
 } from './pipeline/connect-settings.ts';
+import {settingLines} from './diagnostics/log-content.ts';
 import type {ConnectionRequestEnvironment} from './pipeline/connection-request.ts';
 import type {LinkTerminals} from './pipeline/forwarding-step.ts';
 import {connectorOf, type SshConnector} from './pipeline/connector.ts';
@@ -148,6 +160,8 @@ export interface ConnectSurfaces {
   ) => Promise<RemotePlatform | undefined>;
   /** Sets the exact key for the alias in `remote.SSH.remotePlatform`, in the user's settings. */
   writePlatform: (alias: string, platform: RemotePlatform) => Promise<void>;
+  /** Sets the key in the user's settings; `undefined` removes it. */
+  writeUserSetting: (settingId: string, value: unknown) => Promise<void>;
   /** The non-modal notices, and the profile's record of the answers to them. */
   notice: NoticePort;
   noticeState: AcceptanceState;
@@ -165,6 +179,8 @@ export interface ConnectSurfaces {
   downloadProgress: DownloadProgressPort;
   /** Reveals the connection's log. */
   revealLog: () => void;
+  /** Writes the editor version, the extension and the platform to the log, once per window. */
+  writeWindowStart: () => void;
   /** Tells the user that the host's bind host entry is not valid; does not wait for the user. */
   rejectBindHost: (alias: string, configured: string) => void;
   /** The editor's strict URI parser, which throws for a text that is no URI. */
@@ -209,20 +225,26 @@ export interface ConnectMachine {
   credentials: CredentialsPort;
   scheduler: Scheduler;
   clock: Clock;
+  /** The client install lock's files. */
+  lockFiles: LockFilePort;
+  /** The client install locks this extension holds, which its end removes. */
+  clientLocks: HeldClientLocks;
   local: LocalPort;
   prober: PortProber;
   /** A new token, different in every window and in every call. */
   newTemporaryToken: () => string;
   /** A cryptographic random integer in 1..999999999, which names an agent link. */
   drawLinkNumber: () => number;
+  /** The status a server on this machine's `address` answers a request carrying `connectionToken` with. */
+  serverStatus: WiringPorts['serverStatus'];
 }
 
 /** The parts of a connect that show the connecting window. */
 export interface ConnectAssembly {
   connector: SshConnector;
   options: ResolverOptions;
-  /** Ends the local connection server of a host string; silent, also when none runs. */
-  killLocalServer(hostString: string): Promise<void>;
+  /** Ends the local connection server of a host string, reporting the record it looked up; also when none runs. */
+  killLocalServer(hostString: string): Promise<'found' | 'none'>;
   /** Runs the kill or the uninstall on a host in a connection of its own, outside any window. */
   maintain(
     action: 'kill' | 'uninstall',
@@ -239,6 +261,17 @@ function definedEnvironment(
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
+}
+
+/** `prober`, answering that each port of `skipped` is in use without probing it. */
+export function skipping(
+  prober: PortProber,
+  skipped: ReadonlySet<number>,
+): PortProber {
+  return {
+    probe: port =>
+      skipped.has(port) ? Promise.resolve('open') : prober.probe(port),
+  };
 }
 
 /** The window's local port: the first free one in the preferred range, else any free one; or why there is none. */
@@ -280,17 +313,21 @@ export function wiringPortsOf(
   refusal?: Pick<RefusalWatch, 'warned' | 'prohibited'>,
 ): WiringPorts {
   const {settings} = surfaces;
-  let refusedTold = false;
   /** What every login terminal shares: its questions, and whether it is shown. */
   const loginSurfaces = {
     attachQuestions: (login: TerminalLogin, input: ConnectInput) =>
       attachTerminalQuestions(login, surfaces.prompts, hostAlias(input.target)),
     revealLoginTerminals: () => switchOf(settings, 'showLoginTerminal'),
   };
-  /** A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free. */
-  function chooseWindowPort(): Promise<PortChoice> {
+  /**
+   * A loopback port for the window, the tunnel's or the CLI bridge's, in the preferred range when one is free, never one
+   * of `skipped`: the ports this connect already failed to listen on, which the search takes as busy without probing.
+   */
+  function chooseWindowPort(
+    skipped: ReadonlySet<number> = new Set(),
+  ): Promise<PortChoice> {
     return chooseLocalPort(
-      machine.prober,
+      skipping(machine.prober, skipped),
       valueOf(settings, 'preferredLocalPortRange'),
       logger,
     );
@@ -308,6 +345,11 @@ export function wiringPortsOf(
   };
   return {
     configuredHosts: () => surfaces.configuredHosts(),
+    legacySettings: {
+      read: key => settings.inspectSetting(key).globalValue,
+      write: surfaces.writeUserSetting,
+      logger,
+    },
     preconnect: {
       ...machine.preconnectFiles,
       spawner: machine.spawner,
@@ -317,19 +359,29 @@ export function wiringPortsOf(
       approvals: surfaces.preconnectApprovals,
       dialog: surfaces.preconnectDialog,
       logger,
+      recordHint: hint => {
+        surfaces.hints.record(hint);
+      },
     },
     settings: {
       preconnect: () => valueOf(settings, 'preconnect'),
       server: () => serverSettingsOf(settings),
       connection: () => connectionSettingsOf(settings),
       override: () => overrideOf(settings),
-      useExecServer: () => switchOf(settings, 'useExecServer'),
+      useExecServer: () => effectiveUseExecServer(settings),
       localDownloadMode: () => localDownloadModeOf(settings),
       agentForwarding: () => agentForwardingOf(settings),
       x11Forwarding: () => x11ForwardingOf(settings),
       defaultForwards: () => defaultForwardsOf(settings),
     },
+    warnManualBootstrap: () => {
+      void surfaces.notice.showWarning(
+        ownText({id: 'S088', values: []}, surfaces.translate),
+        [],
+      );
+    },
     tunnels: surfaces.tunnels,
+    serverStatus: machine.serverStatus,
     defaultRead: () =>
       waitForDefaultRead(surfaces.defaultReadEvents, machine.scheduler),
     terms: {
@@ -436,6 +488,36 @@ export function wiringPortsOf(
       onHostDownloadRefused: cause => {
         surfaces.hints.record(downloadRefusalHint(cause, surfaces.translate));
       },
+      onInstallFolderInvalid: value => {
+        surfaces.hints.record(installPathHint(value, surfaces.translate));
+      },
+      onInstallFolderRefused: () => {
+        surfaces.hints.record(installFolderHint());
+      },
+      onCommandMissing: program => {
+        surfaces.hints.record(commandMissingHint(program));
+      },
+      onPrerequisitesMissing: () => {
+        surfaces.hints.record(prerequisitesHint());
+      },
+      onLocalDownloadFailed: value => {
+        surfaces.hints.record(localDownloadHint(value, surfaces.translate));
+      },
+      bootstrapArchive: path.join(
+        machine.homeFolder,
+        BOOTSTRAP_FOLDER,
+        MANUAL_BOOTSTRAP_ARCHIVE,
+      ),
+      onLocalBootstrapFailed: failure => {
+        surfaces.hints.record(
+          localBootstrapHint(
+            failure.cause === 'missing'
+              ? textOfId('S069', surfaces.translate, [failure.path])
+              : failure.detail,
+            surfaces.translate,
+          ),
+        );
+      },
       lockLoop: hostLockLoopOf(
         machine.clock,
         HOST_LOCK_ATTEMPTS,
@@ -452,6 +534,12 @@ export function wiringPortsOf(
         surfaces.hints.record(invalidProxyHint(problem, surfaces.translate));
       },
       logger,
+    },
+    clientLock: {
+      port: machine.lockFiles,
+      folder: machine.folders.clientTemporary,
+      clock: machine.clock,
+      held: machine.clientLocks,
     },
     cliPath: {
       local: machine.local,
@@ -490,31 +578,14 @@ export function wiringPortsOf(
       chooseLocalPort: chooseWindowPort,
       warnedForwardingDisabled: () => refusal?.warned() ?? false,
       prohibitedForwarding: () => refusal?.prohibited() ?? false,
-      forwardRefused: () => {
-        // The extension host is the window's, so a flag of this assembly is a flag of the window.
-        if (refusedTold) {
-          return;
-        }
-        refusedTold = true;
-        // A link that runs the Show Log command in a message with no button, which core would not hide.
-        void surfaces.notice.showError(
-          ownText(
-            {
-              id: 'socksForwardingFailedNotice',
-              values: [
-                `[${ownText({id: 'showLogLinkText', values: []}, surfaces.translate)}](command:${commands.showLog.id})`,
-              ],
-            },
-            surfaces.translate,
-          ),
-          [],
-        );
-      },
       logger,
     },
     logger,
   };
 }
+
+/** The folder in the client's home where a manual bootstrap reads the user's server archive. */
+const BOOTSTRAP_FOLDER = 'vscode-remote-ssh-bootstrap';
 
 /** The name of the terminal a Kill or an Uninstall logs in with. */
 const MAINTENANCE_TERMINAL = 'Uninstall VS Code Server';
@@ -569,8 +640,15 @@ export function connectAssemblyOf(
       logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
-        return switchOf(surfaces.settings, 'useExecServer');
+        return effectiveUseExecServer(surfaces.settings);
       },
+      get manualBootstrap() {
+        return localDownloadModeOf(surfaces.settings) === 'manualBootstrap';
+      },
+      get settingLines() {
+        return settingLines(listedSettings(surfaces.settings));
+      },
+      writeWindowStart: surfaces.writeWindowStart,
     },
     revealLog: () => {
       tracker.revealDetails(

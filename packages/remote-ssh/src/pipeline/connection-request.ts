@@ -100,9 +100,9 @@ export function runBaseOf(
 
 /**
  * The acquire request of one connect, apart from the host string and the cancellation. Its preparation runs only in
- * the window that starts the helper: it checks the proxy settings with `checkProxy`, looks the client up with
- * `locate`, which fills `state`, and builds the helper's start values and the run facts from what was found. A check
- * or a lookup that fails refuses the start with its failure.
+ * the window that starts the helper: it checks the install folder with `checkInstallFolder` and the proxy settings
+ * with `checkProxy`, looks the client up with `locate`, which fills `state`, and builds the helper's start values and
+ * the run facts from what was found. A check or a lookup that fails refuses the start with its failure.
  */
 export function connectionRequestOf(
   input: ConnectInput,
@@ -112,11 +112,16 @@ export function connectionRequestOf(
   environment: ConnectionRequestEnvironment,
   locate: () => Promise<StepResult<ConnectWaits>>,
   checkProxy: () => StepResult<undefined>,
+  checkInstallFolder: () => StepResult<undefined>,
 ): Omit<ConnectionAcquireRequest<StepFailure>, 'hostString' | 'cancellation'> {
   return {
     folder: environment.registryFolder,
     script: environment.helperScript,
     prepare: async () => {
+      const folder = checkInstallFolder();
+      if (folder.kind === 'failed') {
+        return {kind: 'refused', refusal: folder.failure};
+      }
       const proxy = checkProxy();
       if (proxy.kind === 'failed') {
         return {kind: 'refused', refusal: proxy.failure};
@@ -143,6 +148,7 @@ export function connectionRequestOf(
           displayHost: hostAlias(input.target),
           externalAskpass: settings.externalAskpass && userAskpass !== '',
           askpassFirstMessageMilliseconds: DEFAULT_FIRST_MESSAGE_MILLISECONDS,
+          hostPlatform: terms.platform,
         },
       };
     },
@@ -170,8 +176,13 @@ export function installRequestOf(
   connectWait: ConnectWaitSettings,
 ): SshRequest {
   const {remoteProgram} = connectionStart(
-    sessionStartFor(connectWait, goesOnAfterLoginTimeout(terms)),
+    sessionStartFor(
+      connectWait,
+      goesOnAfterLoginTimeout(terms),
+      terms.platform,
+    ),
     terms.remoteCommandInEffect,
+    terms.platform,
   );
   return {
     ...runBaseOf(input, terms, state, settings, environment),

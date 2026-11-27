@@ -1,4 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
+import {explainedFailure, section} from '../windows/connect-failure.ts';
 import {closeAllButLocal} from '../windows/maintenance.ts';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
@@ -7,9 +8,11 @@ import {
   connectedWithin,
   connectionLog,
   openWindow,
+  readUserSettings,
   recordLines,
   waitFor,
 } from '../windows/harness.ts';
+import {tableShown} from '../windows/troubleshooting-support.ts';
 import {
   answerEntry,
   dialogLines,
@@ -106,13 +109,33 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
       },
       ...dismissals('pf23'),
     ]);
+    const mark = connectionLog().length;
     await withSetting(script, async () => {
       await openWindow('harness', 'pf23');
+      // On a timeout the failure also says what the window recorded and logged, which tells whether Retry started a
+      // second attempt at all (card #2719): the record of pf23 as the scripted answers left it, the script's marker and
+      // the end of the connection log since the row began.
       await waitFor(
         'the second failure dialog of pf23',
         () => recordLines('failureDialog', 'pf23').length >= 2,
         180_000,
-      );
+      ).catch(async (caught: unknown) => {
+        throw await explainedFailure(caught, () =>
+          Promise.resolve(
+            [
+              section('the record of pf23', () =>
+                recordLines(undefined, 'pf23')
+                  .map(line => JSON.stringify(line))
+                  .join('\n'),
+              ),
+              section("the script's marker", () => String(markerOf(script))),
+              section('the connection log since the row began', () =>
+                logSince(mark).slice(-60).join('\n'),
+              ),
+            ].join('\n'),
+          ),
+        );
+      });
     });
     deepStrictEqual(
       [
@@ -129,7 +152,17 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
     const script = writeScript('signal.sh', 'kill -9 $$');
     appendScript([answerEntry('pf24', 'Allow'), ...dismissals('pf24')]);
     const dialog = await withSetting(script, () => failureOf('pf24'));
-    deepStrictEqual(dialog.question, failedWith('ended by a signal'));
+    const {first} = await tableShown('pf24');
+    deepStrictEqual(
+      [dialog.question, first.slice(0, 2)],
+      [
+        failedWith('ended by a signal'),
+        [
+          'PreconnectScriptFailure',
+          'The pre-connect script has failed (ended by a signal)',
+        ],
+      ],
+    );
   });
 
   it('F-2108 AC-25 (not-executable): a file without the execute permission, and a folder, fail with the system’s spawn error and run nothing', async () => {
@@ -146,14 +179,21 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
       (await withSetting(plain, () => failureOf('pf25a'))).question,
       (await withSetting(folder, () => failureOf('pf25b'))).question,
     ];
+    // A long path wraps inside its cell, so the cell is compared without its spaces.
+    const {first} = await tableShown('pf25b');
     deepStrictEqual(
-      [questions, markerOf(plain)],
+      [questions, markerOf(plain), first[0], first[1]?.replaceAll(' ', '')],
       [
         [
           failedWith(`spawn ${plain} EACCES`),
           failedWith(`spawn ${folder} EACCES`),
         ],
         undefined,
+        'PreconnectScriptFailure',
+        `Thepre-connectscripthasfailed(spawn${folder}EACCES)`.replaceAll(
+          ' ',
+          '',
+        ),
       ],
     );
   });
@@ -184,16 +224,71 @@ describe('the pre-connection script that fails the connect (card connect-87)', f
     );
   });
 
-  it('F-2108 AC-27 (not-a-path): a number as the entry fails with the reason naming the host and the kind, with no dialog', async () => {
-    appendScript(dismissals('pf27'));
-    const dialog = await withSetting({harness: 7}, () => failureOf('pf27'));
-    deepStrictEqual(
-      [dialog.question, dialogLines('pf27').length],
+  it('F-2108 AC-27 (not-a-path): a number or true as the entry fails with no dialog and the PreconnectScriptFailure row, the detail naming the host and the kind and the dialog ending in the single period', async () => {
+    appendScript([...dismissals('pf27a'), ...dismissals('pf27b')]);
+    const seen: Array<
+      [string, number, string | undefined, string | undefined]
+    > = [];
+    for (const [name, value] of [
+      ['pf27a', 7],
+      ['pf27b', true],
+    ] as const) {
+      const dialog = await withSetting({harness: value}, () => failureOf(name));
+      // The detail wraps inside its cell, so the cell is compared without its spaces.
+      const {first} = await tableShown(name);
+      seen.push([
+        dialog.question,
+        dialogLines(name).length,
+        first[0],
+        first[1]?.replaceAll(' ', ''),
+      ]);
+    }
+    function detail(kind: string): string {
+      return `The value of remote.SSH.preconnect for "harness" is a ${kind}, not the path of a script`;
+    }
+    deepStrictEqual(seen, [
       [
-        failedWith(
-          'The value of remote.SSH.preconnect for "harness" is a number, not the path of a script',
-        ),
+        failedWith(detail('number')),
         0,
+        'PreconnectScriptFailure',
+        `The pre-connect script has failed (${detail('number')})`.replaceAll(
+          ' ',
+          '',
+        ),
+      ],
+      [
+        failedWith(detail('boolean')),
+        0,
+        'PreconnectScriptFailure',
+        `The pre-connect script has failed (${detail('boolean')})`.replaceAll(
+          ' ',
+          '',
+        ),
+      ],
+    ]);
+  });
+
+  it('F-2108 AC-20 (table): a script that exits with 1 leaves the PreconnectScriptFailure row of the troubleshooting table with its message and the three mitigations in order', async () => {
+    const script = writeScript('table-exit-one.sh', 'exit 1');
+    appendScript([answerEntry('pf20', 'Allow'), ...dismissals('pf20')]);
+    await withSetting(script, () => failureOf('pf20'));
+    const before = readUserSettings();
+    const {header, first} = await tableShown('pf20');
+    // A long cell wraps inside its column, so the mitigations are compared without their spaces.
+    deepStrictEqual(
+      [
+        header,
+        first[0],
+        first[1],
+        first[2]?.replaceAll(' ', ''),
+        readUserSettings(),
+      ],
+      [
+        ['Status', 'Message', 'Mitigations'],
+        'PreconnectScriptFailure',
+        'The pre-connect script has failed (non-zero exit code 1)',
+        '•Updatetheremote.SSH.preconnectsetting•Ensuretheprovidedpathisexecutableandthescriptexitssuccessfully(exitcode0)•ChecktheRemote-SSHlogforoutputfromthescript(prefixedwith[preconnect])',
+        before,
       ],
     );
   });

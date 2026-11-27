@@ -96,7 +96,11 @@ function surfacesWith(
       hosts: [{name: 'dev', file: '/h/.ssh/config'}],
     }),
     translate: template => template,
-    hintState: {get: () => undefined, update: () => Promise.resolve()},
+    hintEvents: {
+      read: () => ({records: []}),
+      record: () => Promise.resolve(),
+      clear: () => Promise.resolve(),
+    },
     documentation: () => 'https://docs.example/ssh',
     troubleshooting: {
       enabled: () => true,
@@ -116,6 +120,7 @@ function surfacesWith(
     },
     environmentHints: () => [],
     logMark: () => 0,
+    writeWindowStart: () => undefined,
     logText: () => '',
     parseUri: () => undefined,
     help: {
@@ -143,6 +148,7 @@ function surfacesWith(
         return Promise.resolve();
       },
     },
+    confirmationCopies: {read: () => undefined, write: () => Promise.resolve()},
     noticeState: {get: () => undefined, update: () => Promise.resolve()},
     logger: createLogger(calls.logged, {minimumLevel: () => 'info'}),
     applyTerminalEnvironment: () => undefined,
@@ -283,6 +289,22 @@ describe("the connect's surfaces over the editor", () => {
     await surfaces.writePlatform('devbox', 'linux');
     deepStrictEqual(calls.writes, [
       ['remote.SSH.remotePlatform', {buildbox: 'macOS', devbox: 'linux'}],
+    ]);
+  });
+
+  it("F-2506 6.3: a setting is written to the user's settings as given, and removed when it is undefined", async () => {
+    const {surfaces, calls} = surfacesWith();
+    await surfaces.writeUserSetting(
+      'remote.defaultExtensionsIfInstalledLocally',
+      ['a.b'],
+    );
+    await surfaces.writeUserSetting(
+      'remote.SSH.defaultExtensionsIfInstalledLocally',
+      undefined,
+    );
+    deepStrictEqual(calls.writes, [
+      ['remote.defaultExtensionsIfInstalledLocally', ['a.b']],
+      ['remote.SSH.defaultExtensionsIfInstalledLocally', undefined],
     ]);
   });
 

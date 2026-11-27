@@ -60,6 +60,13 @@ const MUX_SESSION =
 /** The failure of the extension's own connect wait (card connect-50). */
 const TIMED_OUT = {kind: 'timeout', reason: {id: 'sshTimedOut'}} as const;
 
+/** The failure of a question nobody recognises or answers before the connect wait ends: no reason of its own. */
+const UNANSWERED = {
+  kind: 'unknown',
+  logDetail:
+    'a question the extension does not recognise was left unanswered until the connect wait ended',
+} as const;
+
 function requestFor(socksPort: number | undefined): SshRequest {
   return {
     purpose: 'connection',
@@ -224,6 +231,12 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
       '[ssh] Warning: Permanently added h',
       '[ssh] Authenticated to dev ([10.0.0.1]:22) using "publickey".',
     ]);
+  });
+
+  it('F-2003 BR-6 item 5: terminal mode writes Started ssh when the login terminal is created', async () => {
+    const made = fixture();
+    await started(made);
+    deepStrictEqual(made.logged(), ['Started ssh']);
   });
 
   it('#2457, reading-2457-echo-line: an answer typed at a recognised prompt of the install terminal is not in the log, shown or hidden, and the next line is', async () => {
@@ -453,10 +466,10 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual([made.questions, made.questionsDisposed], [[], 0]);
   });
 
-  it('connect-108: with the login terminal shown a question nobody can reach after the handshake still times out', async () => {
+  it('connect-108, F-2308 AC-12: with the login terminal shown a question nobody can reach after the handshake ends the attempt with no reason', async () => {
     deepStrictEqual((await unreachable(true)).outcome, {
       kind: 'failed',
-      failure: TIMED_OUT,
+      failure: UNANSWERED,
     });
   });
 
@@ -552,10 +565,10 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     return which === 'still-open';
   }
 
-  it('F-2308 BR-5: a question nobody can reach after the handshake times out', async () => {
+  it('F-2308 BR-5, AC-12: a question nobody can reach after the handshake ends the attempt with no reason, not with the timed-out one', async () => {
     deepStrictEqual((await unreachable()).outcome, {
       kind: 'failed',
-      failure: TIMED_OUT,
+      failure: UNANSWERED,
     });
   });
 
@@ -581,7 +594,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(await notSettled(result), true);
   });
 
-  it('athena on #385: a host 0 fails the open question at the ceiling', async () => {
+  it('athena on #385, F-2308 AC-12: a host 0 fails the open question at the ceiling, with no reason', async () => {
     const made = fixture({timeoutSeconds: 0, fromHost: true});
     const {result, terminal} = await started(made);
     terminal.write('debug1: SSH2_MSG_NEWKEYS received\n');
@@ -589,7 +602,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     made.clock.advance(600_000);
     deepStrictEqual(await result, {
       kind: 'failed',
-      failure: TIMED_OUT,
+      failure: UNANSWERED,
     });
   });
 
@@ -826,7 +839,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(await result, {kind: 'failed', failure: TIMED_OUT});
   });
 
-  it("F-2105 7.E3: in terminal mode, the wait, the prompt reader and the bootstrap's timeout give the same reason", async () => {
+  it("F-2105 7.E3: in terminal mode, the wait and the bootstrap's timeout give the same reason, and a question nobody answers gives none (F-2308 AC-12)", async () => {
     const waited = fixture({timeoutSeconds: 10});
     const silent = await started(waited);
     waited.clock.advance(12_000);
@@ -839,7 +852,7 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
         (await unreachable()).outcome,
         await outlasted.result,
       ].map(outcome => (outcome.kind === 'failed' ? outcome.failure : outcome)),
-      [TIMED_OUT, TIMED_OUT, TIMED_OUT],
+      [TIMED_OUT, UNANSWERED, TIMED_OUT],
     );
   });
 
@@ -911,16 +924,20 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(made.questions, []);
   });
 
-  it('contracts: a lease answers and refuses nothing, since no notice carries a question', async () => {
+  it('contracts: a lease answers and refuses nothing, since no notice carries a question, and has no helper to check (F-2505 AC-25)', async () => {
     const made = fixture();
     const {result, terminal} = await started(made);
     terminal.write(AUTHENTICATED);
     const outcome = await result;
     deepStrictEqual(
       outcome.kind === 'done'
-        ? [await outcome.value.answer(1, 'x'), await outcome.value.refuse(1)]
+        ? [
+            await outcome.value.answer(1, 'x'),
+            await outcome.value.refuse(1),
+            await outcome.value.checkSession(),
+          ]
         : outcome,
-      [false, false],
+      [false, false, 'unchecked'],
     );
   });
 

@@ -29,6 +29,7 @@ import {
   type Sleeper,
   downloadWithRetry,
   privateAssetDownload,
+  retriedGhcrLayer,
   editorChoiceOf,
   chosenLaunches,
   selectionLine,
@@ -53,11 +54,11 @@ import {
   installsOf,
   packagedExtensions,
   removeBundles,
-  RETRY_PAUSE_MILLISECONDS,
   runAcceptance,
   runCommand,
   runLaunches,
   runTestCli,
+  engineHostVariable,
   standInEngines,
   archiveKindOf,
   releaseAssetUrlOf,
@@ -70,7 +71,7 @@ import {
   vscodiumConfigurations,
   vscodiumCliOf,
   vscodiumExecutableOf,
-  withOneRetry,
+  withRetries,
   markDownloadRequests,
   writeUserSettings,
 } from './acceptance.ts';
@@ -216,10 +217,17 @@ class FakeHarness implements HarnessDependencies {
         ? `${CONTAINER}\n`
         : programArguments[0] === 'port'
           ? '127.0.0.1:49153\n'
-          : programArguments[0] === 'inspect' &&
-              programArguments.some(argument => argument.includes('IPAddress'))
-            ? `${ROUTED_ADDRESS}\n`
-            : '';
+          : programArguments[0] === 'exec' &&
+              programArguments.includes(
+                '/proc/sys/net/ipv4/ip_local_port_range',
+              )
+            ? '47000\t60999\n'
+            : programArguments[0] === 'inspect' &&
+                programArguments.some(argument =>
+                  argument.includes('IPAddress'),
+                )
+              ? `${ROUTED_ADDRESS}\n`
+              : '';
     return {status: 0, stdout, stderr: ''};
   };
 
@@ -304,16 +312,21 @@ class FakeHarness implements HarnessDependencies {
   /** Whether each start of the download host was asked for the CLI archives. */
   readonly cliAsked: boolean[] = [];
 
+  /** Whether each start of the download host was asked for a stand-in CLI archive. */
+  readonly standInAsked: boolean[] = [];
+
   readonly startDownloads = (
     ...asked: [
       root?: string,
       runFolder?: string,
       earlier?: boolean,
       cli?: boolean,
+      standIn?: boolean,
     ]
   ): Promise<RunDownloads> => {
     this.earlierAsked.push(asked[2] ?? false);
     this.cliAsked.push(asked[3] ?? false);
+    this.standInAsked.push(asked[4] ?? false);
     this.calls.push('downloads started');
     return Promise.resolve({
       variables: {
@@ -539,10 +552,16 @@ const LAUNCH_ORDER = [
   'default-ports',
   'ssh-core',
   'ssh-newclient',
+  'ssh-newclient-pickers',
   'ssh-agents',
   'ssh-askpass',
   'ssh-askpass-env',
   'ssh-askpass-space',
+  'ssh-killed-12',
+  'ssh-killed-13',
+  'ssh-killed-14',
+  'ssh-locks',
+  'ssh-downloaders',
   'ssh-containers',
   'no-proposals',
   'wsl-linux',
@@ -1114,6 +1133,17 @@ describe('acceptance', () => {
     );
   });
 
+  it('card #3016: Host held is the harness account by key behind a ProxyCommand that never connects', () => {
+    deepStrictEqual(
+      [
+        accountBlock('held').startsWith('Host held\n'),
+        accountBlock('held').includes('\n  User harness\n'),
+        accountBlock('held').endsWith('\n  ProxyCommand sleep 3600'),
+      ],
+      [true, true, true],
+    );
+  });
+
   it('D-85: Host password-ask is the password account whose host key is asked, against its own known hosts', () => {
     strictEqual(
       accountBlock('password-ask'),
@@ -1321,6 +1351,15 @@ describe('acceptance', () => {
     strictEqual(
       accountBlock('mute'),
       [...sharedLines('mute', 'harness-mute'), ...KEY_ALIAS_LINES].join('\n'),
+    );
+  });
+
+  it('#2854: Host nofetch logs in to harness-nofetch with the run key', () => {
+    strictEqual(
+      accountBlock('nofetch'),
+      [...sharedLines('nofetch', 'harness-nofetch'), ...KEY_ALIAS_LINES].join(
+        '\n',
+      ),
     );
   });
 
@@ -1609,6 +1648,17 @@ describe('acceptance', () => {
       workspace.write('dist/remote-containers-0.1.0.vsix', '');
       workspace.write('dist/vscode-remote-extensionpack-0.1.0.vsix', '');
       /** The install of a launch that has the containers extension and nothing else beside the run's. */
+      function wslOnly(label: string) {
+        return {
+          folder: path.join('/run', `extensions-${label}`),
+          files: [
+            '/dist/remote-ssh.vsix',
+            '/run/window-agent.vsix',
+            path.join(workspace.root, 'dist', 'remote-wsl-0.0.0.vsix'),
+          ],
+          client: 'vscodium',
+        };
+      }
       function containersOnly(label: string) {
         return {
           folder: path.join('/run', `extensions-${label}`),
@@ -1634,17 +1684,9 @@ describe('acceptance', () => {
             client: 'vscodium',
           },
           containersOnly('ssh-containers'),
-          ...['wsl-linux', 'wsl-linux-web', 'wsl', 'wsl-linux-standdown'].map(
-            label => ({
-              folder: path.join('/run', `extensions-${label}`),
-              files: [
-                '/dist/remote-ssh.vsix',
-                '/run/window-agent.vsix',
-                path.join(workspace.root, 'dist', 'remote-wsl-0.0.0.vsix'),
-              ],
-              client: 'vscodium',
-            }),
-          ),
+          ...['wsl-linux', 'wsl-linux-web', 'wsl'].map(wslOnly),
+          containersOnly('containers-wsl'),
+          wslOnly('wsl-linux-standdown'),
           ...[
             'explorer',
             'explorer-alone',
@@ -2177,6 +2219,7 @@ describe('acceptance', () => {
           'docker build',
           'ssh-keygen -q',
           'docker run',
+          'docker exec',
           'docker port',
           'docker network',
           'docker network',
@@ -3261,24 +3304,44 @@ describe('acceptance', () => {
       deepStrictEqual(waits, [FRESH_RESOLVE_WAIT_MILLISECONDS]);
     });
 
-    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+    /** Runs the ports launch on a host whose docker commands fail with `failure`, and gives the error of its setup. */
+    async function setupFailing(
+      failure: Pick<CommandResult, 'stdout' | 'stderr'>,
+    ): Promise<unknown> {
       function command(program: string): CommandResult {
         return program === 'docker'
-          ? {status: 1, stdout: '', stderr: 'setup broke'}
+          ? {status: 1, ...failure}
           : {status: 0, stdout: '', stderr: ''};
       }
       const {sleep} = recordingSleeper();
-      await rejects(
-        runLaunches(
-          workspace.root,
-          '/run/ssh_config',
-          [PORTS],
-          command,
-          'c0ffee',
-          sleep,
-          () => Promise.resolve({exitCode: 0, output: ''}),
-        ),
-        /host setup failed: pkill -f 'n\[c\] -lk -p'; true\nsetup broke/,
+      return runLaunches(
+        workspace.root,
+        '/run/ssh_config',
+        [PORTS],
+        command,
+        'c0ffee',
+        sleep,
+        () => Promise.resolve({exitCode: 0, output: ''}),
+      ).then(
+        () => undefined,
+        (caught: unknown) => (caught as Error).message,
+      );
+    }
+
+    it('coverage-13: a failing host setup fails the attempt with its command and its output', async () => {
+      deepStrictEqual(
+        await setupFailing({stdout: '', stderr: 'setup broke'}),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nsetup broke",
+      );
+    });
+
+    it('#2683: a host setup that fails names what it printed on its standard output too, before its standard error', async () => {
+      deepStrictEqual(
+        await setupFailing({
+          stdout: 'port 45002 is still in use',
+          stderr: 'netstat broke',
+        }),
+        "host setup failed: pkill -f 'n[c] -lk -p'; true\nport 45002 is still in use\nnetstat broke",
       );
     });
 
@@ -3361,62 +3424,75 @@ describe('acceptance', () => {
     });
   });
 
-  describe('withOneRetry', () => {
+  describe('withRetries (card tooling-179)', () => {
     it('returns the step result without sleeping or reporting when the step resolves', async () => {
       const recorder = new RetryRecorder();
       const {step} = scriptedStep(['ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
+      const result = await withRetries(step, recorder.sleep, recorder.report);
       deepStrictEqual(
         [result, recorder.sleeps, recorder.lines],
         ['ok', [], []],
       );
     });
 
-    it('returns the retry result when the first attempt rejects', async () => {
+    it('tooling-179, #3197: after three failures the fourth try returns, each retry after its pause of 5, 15 and 180 s, each failure reported', async () => {
       const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      const result = await withOneRetry(step, recorder.sleep, recorder.report);
-      strictEqual(result, 'ok');
-    });
-
-    it('sleeps the retry pause before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.sleeps, [RETRY_PAUSE_MILLISECONDS]);
-    });
-
-    it('reports the failure and the pause in seconds before the one retry', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), 'ok']);
-      await withOneRetry(step, recorder.sleep, recorder.report);
-      deepStrictEqual(recorder.lines, [
-        'acceptance: busy; retrying once in 5 s',
+      const {step, called} = scriptedStep([
+        new Error('504'),
+        new Error('504'),
+        new Error('busy'),
+        'ok',
       ]);
-    });
-
-    it('rejects with the second error when the retry rejects too', async () => {
-      const recorder = new RetryRecorder();
-      const {step} = scriptedStep([new Error('busy'), new Error('down')]);
-      await rejects(
-        withOneRetry(step, recorder.sleep, recorder.report),
-        /down/,
+      const result = await withRetries(step, recorder.sleep, recorder.report);
+      deepStrictEqual(
+        [result, called(), recorder.sleeps, recorder.lines],
+        [
+          'ok',
+          4,
+          [5000, 15_000, 180_000],
+          [
+            'acceptance: 504; try 2 in 5 s',
+            'acceptance: 504; try 3 in 15 s',
+            'acceptance: busy; try 4 in 180 s',
+          ],
+        ],
       );
     });
 
-    it('runs the step once more after a rejection, and no more', async () => {
+    it("tooling-179: when every try fails it rejects with every try's error, and tries no more", async () => {
       const recorder = new RetryRecorder();
       const {step, called} = scriptedStep([
-        new Error('busy'),
-        new Error('busy'),
+        new Error('504'),
+        new Error('504'),
+        new Error('504'),
+        new Error('down'),
+        'never',
       ]);
-      let rejected = false;
+      let message = '';
       try {
-        await withOneRetry(step, recorder.sleep, recorder.report);
-      } catch {
-        rejected = true;
+        await withRetries(step, recorder.sleep, recorder.report);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
       }
-      deepStrictEqual([called(), rejected], [2, true]);
+      deepStrictEqual(
+        [message, called()],
+        ['try 1: 504; try 2: 504; try 3: 504; try 4: down', 4],
+      );
+    });
+
+    it('takes its pauses from the caller: none is one try', async () => {
+      const recorder = new RetryRecorder();
+      const {step, called} = scriptedStep([new Error('busy'), 'ok']);
+      let message = '';
+      try {
+        await withRetries(step, recorder.sleep, recorder.report, []);
+      } catch (error) {
+        message = error instanceof Error ? error.message : '';
+      }
+      deepStrictEqual(
+        [message, called(), recorder.sleeps],
+        ['try 1: busy', 1, []],
+      );
     });
   });
 
@@ -3616,9 +3692,88 @@ describe('acceptance', () => {
           [false, true],
           [],
           [
-            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/cli-${os}-${arch}.tar.gz',
+            'cli editor of codium-insiders: http://downloads:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
           ],
         ],
+      );
+    });
+
+    /** Makes the workspace's install cases one, `standin`, whose launch starts the CLI-source copy against a stand-in CLI. */
+    function writeStandInCase(): void {
+      workspace.write(
+        'tests/acceptance/suite-install/cases.json',
+        JSON.stringify({
+          cases: [
+            {
+              label: 'standin',
+              cite: 'F-2405 AC-8 (standin)',
+              cliStandIn: true,
+              settings: {},
+              outcome: 'any',
+            },
+          ],
+        }),
+      );
+    }
+
+    it('#2735: a run that chooses an install case with a stand-in CLI asks for the stand-in archives, not the pinned ones, and makes the CLI-source editor with the client’s loopback base, which the client can resolve', async () => {
+      writeStandInCase();
+      await runAcceptance(workspace.root, harness, 'vscodium', [
+        'install-standin',
+      ]);
+      deepStrictEqual(
+        [
+          harness.cliAsked,
+          harness.standInAsked,
+          harness.calls.filter(call => call.startsWith('cli editor')),
+        ],
+        [
+          [false],
+          [true],
+          [
+            'cli editor of codium-insiders: http://127.0.0.1:8080/cli/${os}-${arch}/${commit}/cli-${os}-${arch}.tar.gz',
+          ],
+        ],
+      );
+    });
+
+    it('#2735: a run that names cli-path and an install case with a stand-in CLI fails before anything starts, naming both', async () => {
+      writeStandInCase();
+      const {result, lines} = await withErrorLines(() =>
+        runAcceptance(workspace.root, harness, 'vscodium', [
+          'cli-path',
+          'install-standin',
+        ]),
+      );
+      deepStrictEqual(
+        [result, lines, harness.calls],
+        [
+          2,
+          [
+            'acceptance: the run names a launch with real CLI archives (cli-path) and one with a stand-in CLI (install-standin): the CLI-source copy has one template, so name them in separate runs',
+          ],
+          [],
+        ],
+      );
+    });
+
+    it('#2735: a run that chooses no stand-in case asks for no stand-in archive, and the launch of a stand-in case starts the CLI-source copy where the run made one', () => {
+      writeStandInCase();
+      function started(environment: Record<string, string>): string[] {
+        return vscodiumConfigurations(
+          workspace.root,
+          {...CONFIGURATION_ENVIRONMENT, ...environment},
+          EXECUTABLE,
+        )
+          .filter(configuration => configuration.label === 'install-standin')
+          .map(configuration => configuration.useInstallation.fromPath);
+      }
+      deepStrictEqual(
+        [
+          started({HARNESS_CLI_EDITOR_EXECUTABLE: '/run/cli-editor/codium'}),
+          started({}),
+        ],
+        [['/run/cli-editor/codium'], [EXECUTABLE]],
       );
     });
 
@@ -4427,6 +4582,7 @@ describe('acceptance', () => {
       await rejects(
         vscodiumExecutableOf(workspace.root, 'linux', 'x64', {
           download: () => Promise.resolve(new Uint8Array([1, 2, 3])),
+          writeFile: writeFileSync,
           unpack: () => undefined,
         }),
         {message: 'the VSCodium download does not match its checksum'},
@@ -4446,6 +4602,7 @@ describe('acceptance', () => {
         'x64',
         {
           download: () => Promise.resolve(archive),
+          writeFile: writeFileSync,
           unpack: (bytes, folder) => {
             unpacked.push(folder);
           },
@@ -4485,9 +4642,91 @@ describe('acceptance', () => {
           downloads += 1;
           return Promise.resolve(new Uint8Array());
         },
+        writeFile: writeFileSync,
         unpack: () => undefined,
       });
       strictEqual(downloads, 0);
+    });
+
+    /** The pinned linux-x64 asset's path in the run's download cache. */
+    function cachedAsset(): string {
+      return path.join(
+        workspace.root,
+        '.vscode-test',
+        'downloads',
+        VSCODIUM_PLATFORMS['linux-x64']?.asset ?? '',
+      );
+    }
+
+    /**
+     * The linux-x64 build from a download cache holding `cached`, with the pinned sha256 that of [1, 2, 3]: the
+     * addresses downloaded, the bytes unpacked and the cache's asset after.
+     */
+    async function fromCache(cached: Uint8Array): Promise<unknown[]> {
+      mkdirSync(path.dirname(cachedAsset()), {recursive: true});
+      writeFileSync(cachedAsset(), cached);
+      const pinned = new Uint8Array([1, 2, 3]);
+      const downloaded: string[] = [];
+      const unpacked: number[][] = [];
+      await vscodiumExecutableOf(
+        workspace.root,
+        'linux',
+        'x64',
+        {
+          download: url => {
+            downloaded.push(url);
+            return Promise.resolve(pinned);
+          },
+          writeFile: writeFileSync,
+          unpack: bytes => {
+            unpacked.push([...bytes]);
+          },
+        },
+        {'linux-x64': createHash('sha256').update(pinned).digest('hex')},
+      );
+      return [downloaded, unpacked, [...readFileSync(cachedAsset())]];
+    }
+
+    it('#3197: a release asset in the download cache with the pinned sha256 is unpacked with no download', async () => {
+      deepStrictEqual(await fromCache(new Uint8Array([1, 2, 3])), [
+        [],
+        [[1, 2, 3]],
+        [1, 2, 3],
+      ]);
+    });
+
+    it('#3197: an asset in the download cache with other bytes is downloaded again, replaced, and the download unpacked', async () => {
+      deepStrictEqual(await fromCache(new Uint8Array([9])), [
+        [releaseAssetUrlOf(VSCODIUM_PLATFORMS['linux-x64']?.asset ?? '')],
+        [[1, 2, 3]],
+        [1, 2, 3],
+      ]);
+    });
+
+    it('#3197: a checked download is kept in the download cache under its asset name, where CI caches it', async () => {
+      await fetchedForLinuxX64();
+      deepStrictEqual([...readFileSync(cachedAsset())], [1, 2, 3]);
+    });
+
+    it('#3197: a download that does not match leaves nothing in the download cache', async () => {
+      const failure = await vscodiumExecutableOf(
+        workspace.root,
+        'linux',
+        'x64',
+        {
+          download: () => Promise.resolve(new Uint8Array([4])),
+          writeFile: writeFileSync,
+          unpack: () => undefined,
+        },
+      ).then(
+        () => 'resolved',
+        (caught: unknown) =>
+          caught instanceof Error ? caught.message : String(caught),
+      );
+      deepStrictEqual(
+        [failure, existsSync(cachedAsset())],
+        ['the VSCodium download does not match its checksum', false],
+      );
     });
 
     it('#657: a build of another architecture is not taken for this one', async () => {
@@ -4533,6 +4772,7 @@ describe('acceptance', () => {
       await rejects(
         vscodiumExecutableOf(workspace.root, 'win32', 'arm64', {
           download: () => Promise.resolve(new Uint8Array()),
+          writeFile: writeFileSync,
           unpack: () => undefined,
         }),
         {message: 'no VSCodium build is pinned for win32-arm64'},
@@ -4556,6 +4796,7 @@ describe('acceptance', () => {
               url = target;
               return Promise.resolve(archive);
             },
+            writeFile: writeFileSync,
             unpack: () => {
               unpacks += 1;
             },
@@ -4604,26 +4845,105 @@ describe('acceptance', () => {
       );
     });
 
-    it('#253 Q14: a download that answers with an error status throws after its one retry', async () => {
+    it('#253 Q14, tooling-179: a download that answers with an error status throws after its four tries, with each one', async () => {
+      const failure = 'https://example.invalid/a: 404';
       await rejects(
         downloadWithRetry(
           'https://example.invalid/a',
           () => Promise.resolve(new Response('', {status: 404})),
           () => Promise.resolve(),
         ),
-        {message: 'https://example.invalid/a: 404'},
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
       );
     });
 
-    it('#253 Q14: a download returns the bytes the server sent', async () => {
+    it('#2927: a template layer whose token request is dropped once is read on the next try, after the first pause', async () => {
+      const pauses: number[] = [];
+      let calls = 0;
+      function fakeFetch(): Promise<Response> {
+        calls += 1;
+        // The first token request is dropped; the second answers with a token and the layer request with the layer.
+        if (calls === 1) {
+          return Promise.reject(
+            new TypeError('fetch failed', {
+              cause: new Error('read ECONNRESET'),
+            }),
+          );
+        }
+        return Promise.resolve(
+          calls === 2
+            ? Response.json({token: 'pull-token'})
+            : new Response(new Uint8Array([5, 6])),
+        );
+      }
+      const layer = await retriedGhcrLayer(fakeFetch, milliseconds => {
+        pauses.push(milliseconds);
+        return Promise.resolve();
+      })({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'});
       deepStrictEqual(
-        await downloadWithRetry(
-          'https://example.invalid/a',
-          () => Promise.resolve(new Response(new Uint8Array([7, 8]))),
-          () => Promise.resolve(),
-        ),
-        new Uint8Array([7, 8]),
+        [layer, pauses, calls],
+        [new Uint8Array([5, 6]), [5000], 3],
       );
+    });
+
+    it('#2927: a template layer that ghcr.io never gives fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://ghcr.io/token?scope=repository:devcontainers/templates/tiny:pull: fetch failed (read ECONNRESET)';
+      await rejects(
+        retriedGhcrLayer(
+          () =>
+            Promise.reject(
+              new TypeError('fetch failed', {
+                cause: new Error('read ECONNRESET'),
+              }),
+            ),
+          () => Promise.resolve(),
+        )({name: 'tiny', version: '1.2.3', layerDigest: 'sha256:00'}),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it('#253 Q14, #3197: a download returns the bytes the server sent, and reports its address once, before its first try', async () => {
+      const lines: string[] = [];
+      const bytes = await downloadWithRetry(
+        'https://example.invalid/a',
+        () => Promise.resolve(new Response(new Uint8Array([7, 8]))),
+        () => Promise.resolve(),
+        line => lines.push(line),
+      );
+      deepStrictEqual(
+        [bytes, lines],
+        [
+          new Uint8Array([7, 8]),
+          ['acceptance: downloading https://example.invalid/a'],
+        ],
+      );
+    });
+
+    it('#3197: a download that fails once reports its address, then the retry, through the same report', async () => {
+      const lines: string[] = [];
+      let calls = 0;
+      await downloadWithRetry(
+        'https://example.invalid/a',
+        () => {
+          calls += 1;
+          return Promise.resolve(
+            calls === 1
+              ? new Response('', {status: 403})
+              : new Response(new Uint8Array([7])),
+          );
+        },
+        () => Promise.resolve(),
+        line => lines.push(line),
+      );
+      deepStrictEqual(lines, [
+        'acceptance: downloading https://example.invalid/a',
+        'acceptance: https://example.invalid/a: 403; try 2 in 5 s',
+      ]);
     });
 
     /** How a private asset download with `token` over `fetcher` ends: its failure's message, or `resolved`. */
@@ -4642,6 +4962,48 @@ describe('acceptance', () => {
           caught instanceof Error ? caught.message : String(caught),
       );
     }
+
+    /** A rejection as undici's `fetch` gives it for a request with no answer. */
+    function droppedRequest(): Promise<Response> {
+      return Promise.reject(
+        new TypeError('fetch failed', {cause: new Error('read ECONNRESET')}),
+      );
+    }
+
+    it('#2927: a download whose requests get no answer fails after its four tries, each naming the address and the reason', async () => {
+      const failure =
+        'https://example.invalid/a: fetch failed (read ECONNRESET)';
+      await rejects(
+        downloadWithRetry('https://example.invalid/a', droppedRequest, () =>
+          Promise.resolve(),
+        ),
+        {
+          message: `try 1: ${failure}; try 2: ${failure}; try 3: ${failure}; try 4: ${failure}`,
+        },
+      );
+    });
+
+    it("#2927: a private asset whose signed address gets no answer names the asset's address, never the signed one", async () => {
+      const failure = await assetFailureOf('secret', (address, init) =>
+        init === undefined
+          ? droppedRequest()
+          : Promise.resolve(
+              new Response(null, {
+                status: 302,
+                headers: {location: 'https://signed.example.invalid/x?sig=1'},
+              }),
+            ),
+      );
+      const each =
+        'https://api.example.invalid/assets/41 (its signed address): fetch failed (read ECONNRESET)';
+      deepStrictEqual(
+        [failure, failure.includes('signed.example.invalid')],
+        [
+          `try 1: ${each}; try 2: ${each}; try 3: ${each}; try 4: ${each}`,
+          false,
+        ],
+      );
+    });
 
     it('tooling-111: a private asset is asked for with the token, and its signed address is fetched without it', async () => {
       const asked: unknown[] = [];
@@ -4696,7 +5058,7 @@ describe('acceptance', () => {
       );
     });
 
-    it('tooling-111: an asset the token may not read throws after its one retry, and a redirect with no address is an error', async () => {
+    it('tooling-111, tooling-179: an asset the token may not read throws after its four tries, and a redirect with no address is an error', async () => {
       const outcomes = await Promise.all(
         [
           new Response(null, {status: 404}),
@@ -4705,10 +5067,17 @@ describe('acceptance', () => {
           assetFailureOf('secret', () => Promise.resolve(answer.clone())),
         ),
       );
-      deepStrictEqual(outcomes, [
-        'https://api.example.invalid/assets/41: 404',
-        'https://api.example.invalid/assets/41: 302',
-      ]);
+      deepStrictEqual(
+        outcomes,
+        ['404', '302'].map(status =>
+          [1, 2, 3, 4]
+            .map(
+              tries =>
+                `try ${String(tries)}: https://api.example.invalid/assets/41: ${status}`,
+            )
+            .join('; '),
+        ),
+      );
     });
 
     it('tooling-111: with no token the download fails at once and names the variable', async () => {
@@ -5425,5 +5794,18 @@ describe('the harness of the windows suites, bundled for the editor', () => {
     } finally {
       rmSync(folder, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the run’s own engine (card #2830)', () => {
+  it('#2830: the run names the DOCKER_HOST it started with, which a launch may replace for its editor, and none when it has none', () => {
+    deepStrictEqual(
+      [
+        engineHostVariable({DOCKER_HOST: 'tcp://127.0.0.1:2375'}),
+        engineHostVariable({DOCKER_HOST: ''}),
+        engineHostVariable({}),
+      ],
+      [{HARNESS_ENGINE_HOST: 'tcp://127.0.0.1:2375'}, {}, {}],
+    );
   });
 });

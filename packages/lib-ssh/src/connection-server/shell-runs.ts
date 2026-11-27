@@ -5,18 +5,20 @@
  * status. One run is on the session at a time; the others wait their turn in the order they came.
  */
 
+import {posix} from 'node:path';
 import type {Scheduler} from 'lib-helper';
-import {posixQuote} from 'lib-host';
-import {environmentPrefix} from '../process/remote-program.ts';
-
-/** The characters of base64 text on one line of the input. */
-const BASE64_LINE_LENGTH = 76;
+import {type Interpreter, posixQuote, type SessionLock} from 'lib-host';
+import {base64Lines, environmentPrefix} from '../process/remote-program.ts';
+import {powershellCommandsFor} from './powershell-session.ts';
 
 const SESSION_ENDED: RunEnd = {
   kind: 'failed',
   reason: 'channelClosed',
   detail: 'the session ended',
 };
+
+/** The fact a script prints when it has locked the session shell's descriptor. */
+export const SESSION_LOCK_TAKEN = 'server.lockHeld=yes';
 
 /** What a run is asked to do. */
 export interface ShellRun {
@@ -27,6 +29,8 @@ export interface ShellRun {
   inputBase64: string | null;
   /** How long the script may take once it has started, in milliseconds. */
   deadlineMilliseconds: number;
+  /** The session-wide host lock of this run; absent for a run that takes none. */
+  sessionLock?: SessionLock;
 }
 
 /** How a run ended: the script's exit status, or why there is none. */
@@ -43,6 +47,8 @@ export interface ShellRunsOptions {
   newMarker(): string;
   /** A run went past its deadline: the session cannot be trusted with another and has to end. */
   onWedged(): void;
+  /** What the session runs its scripts with: a POSIX `sh`, or the PowerShell loop of a Windows host. */
+  interpreter: Interpreter;
 }
 
 /** A run that waits, or that is on the session. */
@@ -52,22 +58,62 @@ interface Queued {
   settle: (end: RunEnd) => void;
 }
 
+/** The line that has the session shell open descriptor 9 on `path`, unless it holds the lock already; a path it cannot open leaves the descriptor shut. */
+function openLockLine(path: string): string {
+  const quoted = posixQuote(path);
+  return `[ -n "\${REMOTE_OSS_LOCK_HELD:-}" ] || { ( exec 9>>${quoted} ) 2>/dev/null && exec 9>>${quoted}; }`;
+}
+
+/** The command that removes `path` only while it is still the file that descriptor 9 holds, so a path another file took stays. */
+function removeIfHeldCommand(path: string): string {
+  const quoted = posixQuote(path);
+  return `[ ${quoted} -ef /dev/fd/9 ] && rm -f ${quoted}`;
+}
+
+/** The line that records that the shell holds the lock and removes the file when the shell ends in order. */
+function armLockLine(path: string): string {
+  return `REMOTE_OSS_LOCK_HELD=1; trap ${posixQuote(removeIfHeldCommand(path))} EXIT HUP`;
+}
+
+/**
+ * The commands that give the descriptor up: the file goes when the shell held the lock, or when nobody does (the
+ * descriptor is still the file at the path and a lock on it is free), and then the lock's folder and the `bin` folder
+ * above it go when they are empty, so a lock that came to nothing leaves nothing behind.
+ */
+function releaseLockCommands(path: string): string {
+  const quoted = posixQuote(path);
+  const folder = posixQuote(posix.dirname(path));
+  const parent = posixQuote(posix.dirname(posix.dirname(path)));
+  const removeUnheld = `{ [ ${quoted} -ef /dev/fd/9 ] && flock -n 9 && rm -f ${quoted}; }`;
+  return [
+    `if [ -n "\${REMOTE_OSS_LOCK_HELD:-}" ]; then ${removeIfHeldCommand(path)}; else ${removeUnheld}; fi 2>/dev/null`,
+    'exec 9>&-',
+    `case ${folder} in */bin/*) rmdir ${folder} 2>/dev/null && rmdir ${parent} 2>/dev/null ;; esac`,
+    'unset REMOTE_OSS_LOCK_HELD; trap - EXIT HUP',
+  ].join('; ');
+}
+
 /** The commands of one run: the start marker, the script with its input, and the end marker with the status. */
 export function commandsFor(marker: string, request: ShellRun): string {
+  const {sessionLock} = request;
+  const opening =
+    sessionLock?.action === 'open' ? `${openLockLine(sessionLock.path)}\n` : '';
   const start = `printf '%s%s\\n' ${posixQuote(`${marker}:st`)} 'art'`;
-  const script = `${environmentPrefix(request.environment)}sh -c ${posixQuote(request.script)}`;
+  // Only the run that takes the lock keeps the descriptor: a process another run leaves behind must not hold the lock.
+  const closing = sessionLock?.action === 'open' ? '' : ' 9>&-';
+  const script = `${environmentPrefix(request.environment)}sh -c ${posixQuote(request.script)}${closing}`;
   const body =
-    request.inputBase64 === null
-      ? `${script} </dev/null`
-      : [
-          `base64 -d <<'${marker}_input' | ${script}`,
-          ...(request.inputBase64.match(
-            new RegExp(`.{1,${String(BASE64_LINE_LENGTH)}}`, 'gu'),
-          ) ?? []),
-          `${marker}_input`,
-        ].join('\n');
+    sessionLock?.action === 'release'
+      ? releaseLockCommands(sessionLock.path)
+      : request.inputBase64 === null
+        ? `${script} </dev/null`
+        : [
+            `base64 -d <<'${marker}_input' | ${script}`,
+            ...base64Lines(request.inputBase64),
+            `${marker}_input`,
+          ].join('\n');
   const end = `printf '%s%s %s\\n' ${posixQuote(`${marker}:e`)} 'nd' "$?"`;
-  return `${start}\n${body}\n${end}\n`;
+  return `${opening}${start}\n${body}\n${end}\n`;
 }
 
 /** The runs of one session. */
@@ -75,7 +121,13 @@ export class ShellRuns {
   private readonly options: ShellRunsOptions;
   private readonly waiting: Queued[] = [];
   private active:
-    | {queued: Queued; marker: string; started: boolean; cancel: () => void}
+    | {
+        queued: Queued;
+        marker: string;
+        started: boolean;
+        taken: boolean;
+        cancel: () => void;
+      }
     | undefined;
   private over = false;
 
@@ -114,6 +166,7 @@ export class ShellRuns {
     }
     const endAt = line.indexOf(endMark);
     if (endAt < 0) {
+      active.taken ||= line === SESSION_LOCK_TAKEN;
       active.queued.onLine(line);
       return;
     }
@@ -160,8 +213,12 @@ export class ShellRuns {
         this.options.onWedged();
       },
     );
-    this.active = {queued, marker, started: false, cancel};
-    this.options.write(commandsFor(marker, queued.request));
+    this.active = {queued, marker, started: false, taken: false, cancel};
+    this.options.write(
+      this.options.interpreter === 'powershell'
+        ? powershellCommandsFor(marker, queued.request)
+        : commandsFor(marker, queued.request),
+    );
   }
 
   private finish(end: RunEnd): void {
@@ -171,6 +228,11 @@ export class ShellRuns {
     }
     active.cancel();
     this.active = undefined;
+    const {sessionLock} = active.queued.request;
+    if (active.taken && sessionLock !== undefined) {
+      // Written before the next run, so no run can reopen the descriptor between the script's lock and this line.
+      this.options.write(`${armLockLine(sessionLock.path)}\n`);
+    }
     active.queued.settle(end);
     this.startNext();
   }

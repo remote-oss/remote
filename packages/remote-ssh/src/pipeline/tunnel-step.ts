@@ -16,7 +16,7 @@ import {
   type TunnelSettings,
   type WaitLimits,
 } from 'lib-forwarding';
-import type {HostChannel} from 'lib-host';
+import {type HostChannel, linesOfScript} from 'lib-host';
 import type {Logger} from 'lib-log';
 import type {StartedServer} from 'lib-server';
 import {
@@ -63,8 +63,8 @@ export interface TunnelStepDependencies {
   limits: WaitLimits;
   /** The dialer through the connection's SOCKS relay on `socksPort`; the extension gives lib-forwarding's `socksDialer`. */
   dialerFor(socksPort: number): Dialer;
-  /** The window's port on this machine's loopback, or why none is free. */
-  chooseLocalPort(): Promise<PortChoice>;
+  /** The window's port on this machine's loopback, never one of `skipped`, or why none is free. */
+  chooseLocalPort(skipped?: ReadonlySet<number>): Promise<PortChoice>;
   /** The window's environment for the connection that is being set up. */
   environment(): WindowEnvironment;
   /** The login terminals of the editor. */
@@ -80,8 +80,6 @@ export interface TunnelStepDependencies {
     login: TerminalLogin,
     input: ConnectInput,
   ): {onQuestion(text: string): void; dispose(): void};
-  /** Tells the user, once for the window, that the host refuses the forwarding the SOCKS relay needs. */
-  forwardRefused(): void;
   /** Whether ssh has warned, in this connect, that it disabled port forwarding itself after a changed host key. */
   warnedForwardingDisabled(): boolean;
   /** Whether ssh has reported, in this connect, that the host's sshd prohibited a forward. */
@@ -467,20 +465,14 @@ async function serverListens(
   port: number,
   cancellation: AbortSignal,
 ): Promise<boolean | undefined> {
-  const lines: string[] = [];
-  const outcome = await channel.runScript(
-    {
-      script: LISTEN_SCRIPT,
-      interpreter: 'posixShell',
-      environment: {SERVER_PORT: String(port)},
-      input: {kind: 'text', text: ''},
-      cancellation,
-    },
-    line => {
-      lines.push(line);
-    },
-  );
-  if (outcome.kind === 'failed' || outcome.status !== 0) {
+  const lines = await linesOfScript(channel, {
+    script: LISTEN_SCRIPT,
+    interpreter: 'posixShell',
+    environment: {SERVER_PORT: String(port)},
+    input: {kind: 'text', text: ''},
+    cancellation,
+  });
+  if (lines === undefined) {
     return undefined;
   }
   const answer = lines.find(line => line.startsWith('remote-oss-listening='));
@@ -539,6 +531,9 @@ function refusalLine(
     : "the relay cannot be reached and the connection's ssh has ended: not a refused forward";
 }
 
+/** How many times a window port taken before its listen is chosen again, within the range, before the connect fails. */
+const LISTEN_RETRIES = 20;
+
 /** The failure of a connect that was cancelled while the tunnel was being opened. */
 const CANCELLED: TunnelResult = {kind: 'failed', failure: {kind: 'cancelled'}};
 
@@ -563,12 +558,12 @@ export function openTunnelStep(
     if (path !== 'socks') {
       return openTerminalTunnel(dependencies, path, given);
     }
-    const chosen = await dependencies.chooseLocalPort();
+    const skipped = new Set<number>();
+    let chosen = await dependencies.chooseLocalPort(skipped);
     if (!('port' in chosen)) {
       return notOpenedFor(chosen);
     }
     onSettingUp?.();
-    const localPort = chosen.port;
     const dialer = dependencies.dialerFor(lease.socksPort);
     let connectionLost = false;
     const stopNotices = lease.onNotice(notice => {
@@ -576,30 +571,51 @@ export function openTunnelStep(
         connectionLost = true;
       }
     });
-    const outcome = await openRelayTunnel({
-      dialer,
-      local: dependencies.local,
-      scheduler: dependencies.scheduler,
-      target: {kind: 'port', port: portOf(server)},
-      localPort,
-      limits: dependencies.limits,
-      onLine: line => {
-        dependencies.logger.info(line);
-      },
-      onWaiting,
-      // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
-      confirmRefusal: async cause => {
-        const fact =
-          cause === 'closedBeforeReply'
-            ? await serverListens(lease.channel, portOf(server), cancellation)
-            : !connectionLost;
-        dependencies.logger.info(refusalLine(cause, fact, portOf(server)));
-        return fact === true;
-      },
-    });
+    function openOn(localPort: number) {
+      return openRelayTunnel({
+        dialer,
+        local: dependencies.local,
+        scheduler: dependencies.scheduler,
+        target: {kind: 'port', port: portOf(server)},
+        localPort,
+        limits: dependencies.limits,
+        onLine: line => {
+          dependencies.logger.info(line);
+        },
+        onWaiting,
+        // One check at the end of the run of closed probes: when its fact does not hold, the probing goes on to the bound.
+        confirmRefusal: async cause => {
+          const fact =
+            cause === 'closedBeforeReply'
+              ? await serverListens(lease.channel, portOf(server), cancellation)
+              : !connectionLost;
+          dependencies.logger.info(refusalLine(cause, fact, portOf(server)));
+          return fact === true;
+        },
+      });
+    }
+    let outcome = await openOn(chosen.port);
+    // Another window can take the chosen port between its search and this listen, as both search by connecting.
+    for (
+      let retries = 0;
+      outcome.kind === 'listenFailed' &&
+      outcome.code === 'EADDRINUSE' &&
+      retries < LISTEN_RETRIES;
+      retries++
+    ) {
+      skipped.add(chosen.port);
+      dependencies.logger.info(
+        `the window port ${String(chosen.port)} was taken before its listen (EADDRINUSE): choosing another`,
+      );
+      chosen = await dependencies.chooseLocalPort(skipped);
+      if (!('port' in chosen)) {
+        stopNotices();
+        return notOpenedFor(chosen);
+      }
+      outcome = await openOn(chosen.port);
+    }
     stopNotices();
     if (outcome.kind === 'relayRefused') {
-      dependencies.forwardRefused();
       return {kind: 'failed', failure: refusedFailure(dependencies)};
     }
     if (outcome.kind !== 'open') {

@@ -238,10 +238,11 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-14 (ruling-1606-no-tty-warning): with the setting on and no RequestTTY in the shared mode there is no -T, no warning, no terminal, and the window connects', async () => {
+  it("F-2106 AC-14 (c1835-unknown-warning): with the setting on, no RequestTTY and the platform unknown in the shared mode there is no -T, ssh's warning is an [ssh] line of the log as ssh wrote it, there is no terminal, and the window connects as a Linux host", async () => {
     await keepingSettings(async () => {
-      const found = await ptyConnect('c86-no-warning', 'harness', {
+      const found = await ptyConnect('c1835-unknown-warning', 'harness', {
         [PERMIT]: true,
+        'remote.SSH.remotePlatform': {},
       });
       deepStrictEqual(
         [
@@ -249,8 +250,17 @@ describe('F-2106: pseudo-terminal allocation', function () {
           found.commands.map(hasNoTty),
           found.sessions,
           found.logged.filter(line => line.includes('Pseudo-terminal')),
+          found.logged.filter(line => line.startsWith('Platform: ')),
         ],
-        [true, [false], ['notty'], []],
+        [
+          true,
+          [false],
+          ['notty'],
+          [
+            '[ssh] Pseudo-terminal will not be allocated because stdin is not a terminal.',
+          ],
+          ['Platform: linux'],
+        ],
       );
     });
   });
@@ -258,8 +268,11 @@ describe('F-2106: pseudo-terminal allocation', function () {
   it('F-2106 AC-7, AC-9 (c86-force): with the setting on and RequestTTY force a terminal is allocated, with the exec server and without it', async () => {
     await keepingSettings(async () => {
       const seen: unknown[] = [];
+      // What each connect showed, told when the row fails so that the red names the connect that did not connect and why.
+      const told: string[] = [];
       for (const settings of [{}, {}, {'remote.SSH.useExecServer': false}]) {
         await closeAllButLocal();
+        const started = Date.now();
         const found = await ptyConnect('c86-force', 'pty-force', {
           [PERMIT]: true,
           ...settings,
@@ -268,12 +281,19 @@ describe('F-2106: pseudo-terminal allocation', function () {
           found.connected,
           found.sessions.some(each => each.startsWith('pts')),
         ]);
+        told.push(
+          `connect ${String(seen.length)} (${'remote.SSH.useExecServer' in settings ? 'without' : 'with'} the exec server) took ${String(Math.round((Date.now() - started) / 1000))} s: connected ${String(found.connected)}, sessions ${JSON.stringify(found.sessions)}, the last lines of its log: ${JSON.stringify(found.logged.slice(-12))}`,
+        );
       }
-      deepStrictEqual(seen, [
-        [true, true],
-        [true, true],
-        [true, true],
-      ]);
+      deepStrictEqual(
+        seen,
+        [
+          [true, true],
+          [true, true],
+          [true, true],
+        ],
+        `the connects of the row as [connected, a terminal on the host] were ${JSON.stringify(seen)}; ${told.join('; ')}`,
+      );
     });
   });
 
@@ -312,7 +332,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-15 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
+  it('F-2106 AC-7 (reading-1779-forced-pty): with the setting on and RequestTTY force the window connects on a terminal of the host with no failure dialog', async () => {
     await keepingSettings(async () => {
       const found = await ptyConnect('c86-force-dialog', 'pty-force', {
         [PERMIT]: true,
@@ -328,7 +348,7 @@ describe('F-2106: pseudo-terminal allocation', function () {
     });
   });
 
-  it('F-2106 AC-8 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
+  it('F-2106 AC-7 (reading-1779-forced-pty): a window on RequestTTY force reconnects by itself after its connection is killed, on a terminal of the host, with no Cannot reconnect dialog and no failure dialog', async () => {
     await keepingSettings(async () => {
       await userSettings({...PLATFORMS, [PERMIT]: true});
       await freshHost();

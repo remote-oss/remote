@@ -47,6 +47,7 @@ describe('the recording setup ports', () => {
       await ports.argvEdited(),
       await ports.installedFamilyIds(),
       [ports.flags.dismissed(), ports.flags.attemptPending()],
+      await ports.flags.claimAttemptPending(),
     ];
     await ports.flags.setDismissed(true);
     await ports.flags.setAttemptPending(true);
@@ -64,6 +65,7 @@ describe('the recording setup ports', () => {
           false,
           ['a.b'],
           [false, false],
+          true,
         ],
         ['claim', 'notice', 'failure broke'],
       ],

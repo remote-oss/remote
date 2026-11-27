@@ -178,7 +178,7 @@ describe('the hosts of a configuration file in the SSH group (card coverage-25c,
     );
   });
 
-  it('F-5102 AC-26 (ruling-f2202-empty-host): a missing Include, free text, a HostName before any Host, a bad Port and other keyword forms show no notification and every concrete alias, and a Host line with no pattern lists nothing and leaves the hosts after it listed', async () => {
+  it('F-5102 AC-26 (odd-lines): a missing Include, free text, a HostName before any Host, a bad Port and other keyword forms show no notification and every concrete alias, and a Host line with no pattern, followed by an option line, leaves the hosts before it and every host after the option line listed', async () => {
     const oddLines = [
       `Include ${path.join(casesFolder(), 'ac26-missing.conf')}`,
       'this is free text',
@@ -201,9 +201,10 @@ describe('the hosts of a configuration file in the SSH group (card coverage-25c,
       written('ac26-empty-host.conf', [
         ...oddLines,
         'Host',
-        'Host after-empty',
+        '    User after-the-empty-line',
+        'Host after-option',
       ]),
-      [...expected, 'after-empty'],
+      [...expected, 'after-option'],
     );
     deepStrictEqual(await notifications(window), []);
   });

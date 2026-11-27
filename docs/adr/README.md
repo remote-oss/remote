@@ -19,6 +19,9 @@ and does not re-decide it.
 | [0011](0011-lifecycle-runs-in-a-terminal.md) | Lifecycle commands run in a real terminal, through the editor's own node-pty | accepted (the user, 2026-10-16) |
 | [0012](0012-lifecycle-pty-on-macos.md) | Lifecycle commands run in a real terminal on macOS too | accepted (the user, 2026-10-16) |
 | [0013](0013-platform-split.md) | Platform differences are data behind the existing seams, built and unit-tested on Linux before a host exists | accepted (D-105) |
+| [0014](0014-dev-tunnels-protocol-source.md) | The tunnel service and its host speak the dev tunnels protocol, read from its MIT code | accepted (the user, 2026-11-22, D-107) |
+| [0015](0015-relay-language.md) | The tunnel relay is written in TypeScript on dev-tunnels-ssh, with Rust as the fallback | accepted (T.6, 2026-11-23) |
+| [0016](0016-host-agent-build.md) | The tunnel host agent is our own TypeScript program on the dev tunnels SDK and lib-server | accepted (2026-11-24) |
 
 Planned, in this order (titles may change):
 

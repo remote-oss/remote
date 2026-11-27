@@ -161,7 +161,7 @@ describe('the script parameters', () => {
         lock: {
           method: 'flock',
           inTemporaryFolder: false,
-          filePrefix: 'remote-lock.alex',
+          filePrefix: 'vscode-remote-lock.alex',
         },
       },
     );
@@ -216,6 +216,22 @@ describe('the script parameters', () => {
     deepStrictEqual(
       [parameters.installRoot, parameters.start.port],
       ['/data', '4000-4010'],
+    );
+  });
+
+  it('F-2701 AC-18: name the launcher batch file on a Windows host and the launcher script on every other', () => {
+    deepStrictEqual(
+      (['win32', 'linux', 'darwin', undefined] as const).map(
+        hostOperatingSystem =>
+          scriptParametersFor(input(settingsOf(), {hostOperatingSystem}))
+            .launcher,
+      ),
+      [
+        `${input(settingsOf()).names.launcher}.cmd`,
+        input(settingsOf()).names.launcher,
+        input(settingsOf()).names.launcher,
+        input(settingsOf()).names.launcher,
+      ],
     );
   });
 

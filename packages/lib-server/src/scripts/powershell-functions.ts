@@ -82,7 +82,7 @@ const COMMON_FUNCTIONS: readonly string[] = [
   '}',
   '$DATA_DIR = [System.IO.Path]::Combine($DATA_ROOT, $DATA_FOLDER)',
   "$INSTALL_DIR = [System.IO.Path]::Combine($DATA_DIR, 'bin', $COMMIT)",
-  "$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT)",
+  "$CLI_STAGING = [System.IO.Path]::Combine($DATA_DIR, 'cli-bin', $COMMIT + '.' + $STAGING_SUFFIX + '.' + $PID)",
   '$CLI_FILE = [System.IO.Path]::Combine($DATA_DIR, $CLI_NAME)',
   "$BOOT_PREFIX = [System.IO.Path]::Combine($DATA_DIR, '.' + $COMMIT)",
   "if ($INSTALL_TREE -ne '') {",

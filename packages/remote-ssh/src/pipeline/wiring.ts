@@ -78,6 +78,14 @@ import {
 import type {PreconnectPorts} from '../preconnect/ports.ts';
 import {preconnectStep} from './preconnect-step.ts';
 import {
+  type LegacyExtensionPorts,
+  migrateLegacyExtensions,
+} from '../settings/legacy-extensions.ts';
+import {
+  type ClientLockStepDependencies,
+  holdClientLockStep,
+} from './client-lock-step.ts';
+import {
   createServerSteps,
   type ServerStepDependencies,
 } from './server-steps.ts';
@@ -140,13 +148,29 @@ interface CliWiring {
   downloadProgress(): ServerDownloadProgress;
 }
 
+/** The status a VS Code server answers a request whose connection token is not its own with: Forbidden. */
+const TOKEN_REFUSED = 403;
+
 /** What the steps of every connect are made from. */
 export interface WiringPorts {
   /** The hosts of the configuration files in effect, the reading the host pick uses: the connect's first check. */
   configuredHosts(): HostListResult;
   /** The pre-connection step's machine and editor ports. */
   preconnect: PreconnectPorts;
+  /** The user's settings, where the legacy extensions key is moved from. */
+  legacySettings: LegacyExtensionPorts;
   settings: WiringSettings;
+  /** Shows the warning that the manual bootstrap is on and the exec server is off, without waiting for it. */
+  warnManualBootstrap(): void;
+  /**
+   * The HTTP status the server on `address` gives a request that carries `connectionToken`, through the window's
+   * tunnel; none when nothing answers within the bound.
+   */
+  serverStatus(
+    address: {host: string; port: number},
+    connectionToken: string,
+    cancellation: AbortSignal,
+  ): Promise<number | undefined>;
   /** The editor's tunnel service, which the default forwarded ports are opened through. */
   tunnels: TunnelOpener;
   /** Resolves with what ended the wait before the default forwards are read: the window has its remote settings by then. */
@@ -191,6 +215,8 @@ export interface WiringPorts {
     'environment' | 'connectWait' | 'tunnelInvocation' | 'tunnelInput'
   >;
   cliPath: CliWiring;
+  /** The client install lock's files, folder and clock, apart from the log. */
+  clientLock: Omit<ClientLockStepDependencies, 'logger'>;
   /** The window's forwarding, apart from the settings and the log: its draw, its earlier link and its terminals. */
   forwarding: Omit<
     ForwardingDependencies,
@@ -369,6 +395,7 @@ export function stepsOf(
         ports.requestEnvironment,
         () => locateClient(input),
         () => serverSteps(input).checkProxy(input),
+        () => serverSteps(input).checkInstallFolder(input),
       ),
     adoptRunFacts: runFacts => {
       state.programs ??= {
@@ -466,6 +493,12 @@ export function stepsOf(
     validate: input => serverSteps(input).validate(input),
     checkInstallFolder: input => serverSteps(input).checkInstallFolder(input),
     checkProxy: input => serverSteps(input).checkProxy(input),
+    migrateLegacySettings: () => migrateLegacyExtensions(ports.legacySettings),
+    warnOfDownloadMode: () => {
+      if (ports.settings.localDownloadMode() === 'manualBootstrap') {
+        ports.warnManualBootstrap();
+      }
+    },
     preconnect: preconnectStep({
       setting: ports.settings.preconnect,
       ports: ports.preconnect,
@@ -476,6 +509,10 @@ export function stepsOf(
     }),
     decideTerms: terms.decideTerms,
     pickAfterBrokenPipe: terms.pickAfterBrokenPipe,
+    holdClientLock: holdClientLockStep({
+      ...ports.clientLock,
+      logger: ports.logger,
+    }),
     lookupBeforeConnection: () => ports.locate.mode() === 'terminal',
     locateClient,
     holdLookupFailure: (failed, cancellation) => {
@@ -624,9 +661,21 @@ export function stepsOf(
       void ports.cliPath.presenter.present(failed);
     },
     maintain: (input, ...rest) => serverSteps(input).maintain(input, ...rest),
+    heldServer: (input, ...rest) =>
+      serverSteps(input).heldServer(input, ...rest),
+    certainlyDirect: (input, host) =>
+      serverSteps(input).certainlyDirect(input, host),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
     ...tunnelStep,
+    serverAnswers: async (address, connectionToken, cancellation) => {
+      const status = await ports.serverStatus(
+        address,
+        connectionToken,
+        cancellation,
+      );
+      return status !== undefined && status !== TOKEN_REFUSED;
+    },
     rememberPlatform: terms.rememberPlatform,
     applyDefaults: async () => {
       const signal = await ports.defaultRead();

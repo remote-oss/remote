@@ -5,6 +5,7 @@
  */
 
 import type {Scheduler} from 'lib-helper';
+import type {Interpreter} from 'lib-host';
 import type {SessionRun, SessionRunEnd} from '../connection-server/client.ts';
 import type {SessionRunner} from '../connection-server/shared-channel.ts';
 import {
@@ -24,6 +25,8 @@ export interface TerminalRunnerOptions {
   prelude: string;
   /** A marker no script can guess and no earlier run used. */
   newMarker(): string;
+  /** What the session runs its scripts with, from the host's platform. */
+  interpreter: Interpreter;
   /** Hears the bootstrap's first report: ready, or the end of the login shell's startup. Never a run's output. */
   onBootstrap(event: BootstrapEvent): void;
 }
@@ -43,6 +46,7 @@ export class TerminalSessionRunner implements SessionRunner {
       },
       scheduler: options.scheduler,
       newMarker: () => options.newMarker(),
+      interpreter: options.interpreter,
       onWedged: () => {
         terminal.dispose();
       },

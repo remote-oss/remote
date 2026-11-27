@@ -11,8 +11,11 @@ function files(size: number, digest: string): ClientFilePort {
   return {
     remove: () => Promise.resolve(),
     exists: () => Promise.resolve(true),
+    entryExists: () => Promise.resolve(true),
     size: () => Promise.resolve(size),
     sha256: () => Promise.resolve(digest),
+    stage: () =>
+      Promise.resolve({kind: 'failed', detail: 'nothing is staged here'}),
     rename: () => Promise.resolve({kind: 'renamed'}),
   };
 }

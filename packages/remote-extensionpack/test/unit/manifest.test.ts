@@ -400,6 +400,34 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
+  it('F-9002 AC-7 (words): the readme says by display name that one Remote Development pack is to be used, not two, that the family’s extensions stay inactive with one warning each next to extensions with the same identifiers, and that an extension pack or an extension that lists another publisher’s Remote Development extensions installs those; the readme, the description and the keywords hold no other publisher’s name or extension id, no word of the reference’s origin, no affiliation or trademark notice and no claim to copy or replace Microsoft’s extensions', () => {
+    const everything = [
+      readme(),
+      tableOf().description,
+      manifestOf().keywords.join(' '),
+    ].join('\n');
+    deepStrictEqual(
+      [
+        flat(readme()).includes(
+          'Install one Remote Development pack, not two.',
+        ),
+        flat(readme()).includes(
+          "Running Dev Containers, Remote - SSH, Remote Explorer or Remote - SSH: Editing Configuration Files next to another publisher's extensions with the same identifiers isn't supported: this family's extensions stand down there, staying inactive with one warning each.",
+        ),
+        flat(readme()).includes(
+          "An extension pack or an extension that lists another publisher's Remote Development extensions installs those, not this family's. Install this pack directly.",
+        ),
+        /Microsoft|ms-vscode|ms-azuretools|Visual Studio/i.test(everything),
+        /reimplementation|clean[- ]room/i.test(everything),
+        /trademark|®|™|affiliated|endorsed|official/i.test(everything),
+        /\b(copy|clone|replacement|substitute|fork) (of|for)\b/i.test(
+          everything,
+        ),
+      ],
+      [true, true, true, false, false, false, false],
+    );
+  });
+
   it('F-9002 AC-8, AC-23: the member list has exactly Dev Containers and Remote - SSH, each linking to its folder with a line of purpose, and WSL and Remote - Tunnels are named only as not part of this release', () => {
     const members = sectionOf('The members');
     const items = members
@@ -458,17 +486,16 @@ describe('the pack’s package (card pack-01)', () => {
     );
   });
 
-  it('F-9002 AC-11, F-9901 AC-7, AC-13: the installation says what the pack installs, that two packs are unsupported and the family stands down, that a missing member is skipped, and that uninstalling removes the members; the readme says there is no telemetry', () => {
+  it('F-9002 AC-11, F-9901 AC-7, AC-13: the installation says what the pack installs, that running the family’s extensions next to another publisher’s with the same identifiers is unsupported and the family stands down there, that an extension pack or extension listing another publisher’s Remote Development extensions installs those and not the family’s, that a missing member is skipped, and that uninstalling removes the members; the readme says there is no telemetry and names no other publisher', () => {
     const installation = sectionOf('Installation');
     deepStrictEqual(
       [
         flat(installation).includes('Dev Containers and Remote - SSH'),
         flat(installation).includes(
-          'Install one Remote Development pack, not two.',
+          "Running Dev Containers, Remote - SSH, Remote Explorer or Remote - SSH: Editing Configuration Files next to another publisher's extensions with the same identifiers isn't supported: this family's extensions stand down there, staying inactive with one warning each.",
         ),
-        flat(installation).includes('unsupported'),
         flat(installation).includes(
-          "this family's extensions stand down next to extensions with those identifiers",
+          "An extension pack or an extension that lists another publisher's Remote Development extensions installs those, not this family's. Install this pack directly.",
         ),
         flat(installation).includes('installs without it and says nothing'),
         flat(installation).includes('uninstalls the members it installed'),
@@ -478,8 +505,9 @@ describe('the pack’s package (card pack-01)', () => {
         flat(readme()).includes(
           "so a pack that lists another publisher's extension ids installs those",
         ),
+        /ms-vscode-remote|Microsoft|Visual Studio Code/.test(readme()),
       ],
-      [true, true, true, true, true, true, true, true],
+      [true, true, true, true, true, true, true, false],
     );
   });
 
