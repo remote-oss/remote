@@ -169,6 +169,7 @@
   "ignoreBinaries": [
     "mkfifo",
     "pwsh",
+    "reg",
     "shellcheck",
     "ssh-add",
     "ssh-agent",

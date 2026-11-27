@@ -41,6 +41,9 @@ const SHELLS = {
 
 type Shell = keyof typeof SHELLS;
 
+/** A shell that does not exist on the host: a connect under it fails in the host-side step. */
+const NO_SUCH_SHELL = 'C:\\Windows\\System32\\no-such-shell.exe';
+
 /** How long a connect may take, the server install included, in milliseconds. */
 const CONNECT_MILLISECONDS = 240_000;
 
@@ -206,30 +209,6 @@ async function connectSeen(name: string): Promise<Seen> {
       };
 }
 
-/**
- * A copy of the run's ssh_config whose `winhost` block waits `seconds` for the connection: the extension takes a
- * host's `ConnectTimeout` as its connect wait, and the run's block has 10.
- */
-function configWaiting(seconds: number): string {
-  const text = readFileSync(variable('HARNESS_SSH_CONFIG'), 'utf8');
-  const start = text.indexOf(`\nHost ${ALIAS}\n`);
-  const file = path.join(
-    variable('HARNESS_RUN_FOLDER'),
-    `ssh_config_${ALIAS}_${String(seconds)}`,
-  );
-  writeFileSync(
-    file,
-    text.slice(0, start) +
-      text
-        .slice(start)
-        .replace(
-          /^(\s+)ConnectTimeout \d+$/m,
-          `$1ConnectTimeout ${String(seconds)}`,
-        ),
-  );
-  return file;
-}
-
 /** The last lines of the connection log, for a failure to show. */
 function logTail(): string {
   return JSON.stringify(connectionLog().slice(-60));
@@ -276,15 +255,6 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         settings: {...mapped, 'remote.SSH.useLocalServer': true},
       },
       {
-        label: 'c2678-term-ps-long',
-        shell: 'windowsPowershell',
-        settings: {
-          ...mapped,
-          'remote.SSH.useLocalServer': false,
-          'remote.SSH.configFile': configWaiting(120),
-        },
-      },
-      {
         label: 'c2678-term-ps',
         shell: 'windowsPowershell',
         settings: {...mapped, 'remote.SSH.useLocalServer': false},
@@ -310,18 +280,14 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         },
       },
     ];
-    const seen: Array<Seen & {shellRead: string}> = [];
+    const seen: Seen[] = [];
     // One write per connect, every setting it needs in it: a second write right after a first can go unseen by the window.
     for (const each of connects) {
       await userSettings(each.settings);
       useShell(SHELLS[each.shell]);
-      const shellRead = defaultShell();
-      const measured = {...(await connectSeen(each.label)), shellRead};
-      console.log(`c2678-mapped connect: ${JSON.stringify(measured)}`);
-      seen.push(measured);
+      seen.push(await connectSeen(each.label));
       await closeAllButLocal();
     }
-    console.log(`c2678-mapped measured: ${JSON.stringify(seen)}`);
     deepStrictEqual(
       seen.map(each => ({
         name: each.name,
@@ -339,32 +305,57 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
     );
   });
 
-  it('F-2701 AC-5 (c2678-picked-part): with no platform entry, in terminal mode, picking Windows in the platform pick goes on to the host-side step under the Windows program, with no POSIX-shell error, and connects', async () => {
+  it('F-2701 AC-5 (c2678-picked): with no platform entry, in terminal mode, picking Windows in the platform pick goes on to the host-side step under the Windows program, with no POSIX-shell error, and connects; when the step fails, the choice is not stored', async () => {
     await userSettings({
       'remote.SSH.useLocalServer': false,
       'remote.SSH.remotePlatform': {},
       'remote.SSH.windowsRemotes': [],
     });
-    useShell(SHELLS.windowsPowershell);
     writeFileSync(
       variable('REMOTE_OSS_ACCEPTANCE_SCRIPT'),
       JSON.stringify({
         entries: [{surface: 'platformPick', match: ALIAS, answer: 'windows'}],
       }),
     );
+    // The failing connect runs first: its host-side step starts under a shell that does not exist, so it cannot, and
+    // the succeeding connect may store the choice, which the criterion allows.
+    useShell(NO_SUCH_SHELL);
+    let failed: Seen;
+    try {
+      failed = await connectSeen('c2678-picked-fails');
+    } finally {
+      useShell(SHELLS.windowsPowershell);
+    }
+    const settings = JSON.parse(readUserSettings() ?? '{}') as Record<
+      string,
+      unknown
+    >;
+    const platform = settings['remote.SSH.remotePlatform'] as
+      Record<string, string> | undefined;
     const seen = await connectSeen('c2678-picked');
     const asked = recordLines('platformPick');
-    console.log(
-      `c2678-picked measured: ${JSON.stringify({seen, asked: asked.slice(-1)})}`,
-    );
     deepStrictEqual(
       {
+        failed: {
+          connected: failed.connected,
+          picked: recordLines('platformPick', 'c2678-picked-fails').map(
+            line => line.answer,
+          ),
+          stored: platform?.[ALIAS] ?? 'absent',
+        },
         connected: seen.connected,
-        answers: asked.map(line => line.answer),
+        picked: recordLines('platformPick', 'c2678-picked').map(
+          line => line.answer,
+        ),
         posixErrors: seen.posixErrors,
       },
-      {connected: true, answers: ['windows'], posixErrors: []},
-      `${JSON.stringify({seen, asked})}; the last log lines: ${logTail()}`,
+      {
+        failed: {connected: false, picked: ['windows'], stored: 'absent'},
+        connected: true,
+        picked: ['windows'],
+        posixErrors: [],
+      },
+      `${JSON.stringify({failed, seen, asked, platform})}; the last log lines: ${logTail()}`,
     );
   });
 });
