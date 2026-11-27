@@ -2,6 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import path from 'node:path';
+import {promisify} from 'node:util';
 import {
   acceptedKeyLogins,
   appendScript,
@@ -47,6 +48,8 @@ import {
 import {PLATFORMS} from '../windows/tunnel-support.ts';
 
 /** The command that reloads the window it runs in onto a picked host. */
+const execFileAsync = promisify(execFile);
+
 const SWITCH = 'opensshremotes.openEmptyWindowInCurrentWindow';
 
 /** The folder `name` of the launch's run, made. */
@@ -242,23 +245,73 @@ async function rowClean(
   }
 }
 
-/** Whether the held window's ProxyCommand still runs on the runner: true while its `sleep 3600` runs, false when it is gone, and an error when pgrep says neither. */
+/** The command line of the held window's ProxyCommand: the sleep its held connect leaves running. */
+const HELD_SLEEP = '^sleep 3600$';
+
+/**
+ * Whether the held window's ProxyCommand still runs under the run's own user: true while its `sleep 3600`
+ * runs, false when it is gone, and an error when pgrep says neither. The run's uid scopes the check, so a
+ * `sleep 3600` of another user on the same machine, such as the lab's janitor, never holds it.
+ */
 async function stillHeld(): Promise<boolean> {
   const status = await new Promise<number>(resolve => {
-    execFile('pgrep', ['-f', '^sleep 3600$'], error => {
-      if (error === null) {
-        resolve(0);
-      } else if (typeof error.code === 'number') {
-        resolve(error.code);
-      } else {
-        resolve(-1);
-      }
-    });
+    execFile(
+      'pgrep',
+      ['-u', String(process.getuid?.() ?? 0), '-f', HELD_SLEEP],
+      error => {
+        if (error === null) {
+          resolve(0);
+        } else if (typeof error.code === 'number') {
+          resolve(error.code);
+        } else {
+          resolve(-1);
+        }
+      },
+    );
   });
   if (status !== 0 && status !== 1) {
     throw new Error(`the held check's pgrep exited ${String(status)}`);
   }
   return status === 0;
+}
+
+/** The process ids of every user whose command line matches the held check's pattern: the machine-wide pgrep the check is scoped against. */
+async function unscopedHeldIds(): Promise<number[]> {
+  const {stdout} = await execFileAsync('pgrep', ['-f', HELD_SLEEP]).catch(
+    () => ({stdout: ''}),
+  );
+  return stdout
+    .split('\n')
+    .filter(line => line !== '')
+    .map(Number)
+    .sort((smaller, larger) => smaller - larger);
+}
+
+/**
+ * The row's foreign `sleep 3600`, started under the user nobody so a check scoped to the run's own uid misses
+ * it: its process id. The row needs a passwordless sudo to start it.
+ */
+async function startForeignSleep(): Promise<number> {
+  const {stdout} = await execFileAsync('sudo', [
+    '-n',
+    '-u',
+    'nobody',
+    'sh',
+    '-c',
+    'sleep 3600 >/dev/null 2>&1 & echo $!',
+  ]).catch((error: unknown) => {
+    throw new Error(
+      `the row needs a passwordless sudo to start a sleep under the user nobody, and \`sudo -n -u nobody sh -c 'sleep 3600 >/dev/null 2>&1 & echo $!'\` failed: ${String(error)}`,
+      {cause: error},
+    );
+  });
+  const foreignPid = Number(stdout.trim());
+  if (!Number.isInteger(foreignPid) || foreignPid <= 0) {
+    throw new Error(
+      `sudo printed no process id for the foreign sleep: ${JSON.stringify(stdout)}`,
+    );
+  }
+  return foreignPid;
 }
 
 /**
@@ -857,6 +910,40 @@ describe('Connect Current Window to Host', function () {
       await userSettings({});
       await closeWindow('c3017-inflight').catch(() => undefined);
       await closeWindow(next).catch(() => undefined);
+    }
+  });
+});
+
+describe('the held check scoped to the run’s own user (harness)', function () {
+  this.timeout(120_000);
+
+  it('harness (c3314-held-foreign): a sleep 3600 of another user on the runner does not hold the held check', async () => {
+    await closeAllButLocal();
+    const baseline = await stillHeld();
+    const foreignPid = await startForeignSleep();
+    try {
+      await waitFor(
+        'the foreign sleep to show to the unscoped pgrep',
+        async () => (await unscopedHeldIds()).includes(foreignPid),
+        10_000,
+      );
+      const held = await stillHeld();
+      deepStrictEqual(
+        [baseline, (await unscopedHeldIds()).includes(foreignPid), held],
+        [false, true, false],
+      );
+    } finally {
+      await execFileAsync('sudo', [
+        '-n',
+        'kill',
+        '-9',
+        String(foreignPid),
+      ]).catch(() => undefined);
+      await waitFor(
+        'the foreign sleep to be gone',
+        async () => !(await unscopedHeldIds()).includes(foreignPid),
+        10_000,
+      );
     }
   });
 });
