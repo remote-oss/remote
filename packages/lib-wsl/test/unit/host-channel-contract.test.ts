@@ -12,6 +12,7 @@ import {
   type ContractScenario,
   type StagedChannel,
 } from 'lib-host/testing/channel-contract';
+import {wslProcessOf} from '../../src/child-process.ts';
 import {createWslHostChannel} from '../../src/host-channel.ts';
 import type {
   WslProcess,
@@ -162,38 +163,12 @@ function localShellSpawner(
   return new Promise<WslProcess>((resolve, reject) => {
     child.once('error', reject);
     child.once('spawn', () => {
-      child.stdin.on('error', () => undefined);
+      const live = wslProcessOf(child);
       resolve({
-        onOutput: listener =>
-          child.stdout.on('data', (chunk: Buffer) => {
-            listener(new Uint8Array(chunk));
-          }),
-        onError: listener =>
-          child.stderr.on('data', (chunk: Buffer) => {
-            listener(new Uint8Array(chunk));
-          }),
-        onExit: listener => {
-          child.once('close', (status: number | null) => {
-            listener(status ?? undefined);
-          });
-        },
+        ...live,
         write: data => {
           largestWriteSeen = Math.max(largestWriteSeen, data.length);
-          return new Promise<void>((written, failed) => {
-            child.stdin.write(data, caught => {
-              if (caught === undefined || caught === null) {
-                written();
-              } else {
-                failed(caught);
-              }
-            });
-          });
-        },
-        endInput: () => {
-          child.stdin.end();
-        },
-        kill: () => {
-          child.kill();
+          return live.write(data);
         },
       });
     });
