@@ -98,6 +98,11 @@ const PLANS: {
   digestsInput: () => [digests()],
   missingInputFile: () => [prints([], 0)],
   clientFile: () => [prints([], 0)],
+  backgroundsThenWaits: () => [],
+  detachesThenWaits: () => [],
+  printsBothStreams: () => [],
+  printsLongLine: () => [],
+  copiesLarge: () => [],
 };
 
 function scenarioScripts(scenario: ContractScenario): SpawnPlan[] {
