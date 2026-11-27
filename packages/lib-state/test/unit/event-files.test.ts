@@ -8,8 +8,8 @@ import {
   isRecord,
   newSession,
   NODE_EVENT_FILES,
-} from '../../src/state/event-files.ts';
-import {MemoryFiles} from './event-files.fixture.ts';
+} from '../../src/event-files.ts';
+import {MemoryFiles} from '../../src/testing/memory-files.ts';
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 

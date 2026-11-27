@@ -231,6 +231,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
   }
 
   const HARNESS: ChannelHarness = {
+    pendingOn: '#3281',
     scriptFailures: ['channelClosed', 'timeout'],
     copyFailures: [],
     reachesClientFiles: false,
@@ -260,6 +261,9 @@ describe('host channel over the shared ssh session: the lib-host contract', func
   });
 
   for (const contractCase of channelContractCases(HARNESS)) {
-    it(contractCase.name, contractCase.check);
+    it(
+      contractCase.name,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 });

@@ -5,6 +5,12 @@
 
 export {ABSOLUTE_HOST_PATH} from './absolute-path.ts';
 export {
+  BoundedLines,
+  JOINED_ERRORS,
+  LONGEST_PENDING_LINE,
+  TREE_KILL_SCRIPT,
+} from './channel-rules.ts';
+export {
   posixQuote,
   powershellQuote,
   preludeCommand,

@@ -26,8 +26,10 @@ family's own form, and gives the label the resource label formatter uses.
   the window's one notification for the family only when it has something to tell, and carries the user through the
   setup notice, the edit of the runtime arguments, the restart offer and the failed-attempt notice. It returns at once
   with the decision and an `interaction` that never rejects (a failing port is logged once and ends it) and that the activation does not wait for. An extension the runtime arguments already
-  list offers only the restart. The dismissal and pending-attempt flags are written only when they change, and a probe
-  that succeeds deletes them.
+  list offers only the restart. The dismissal flag is written only when it changes. The pending attempt is a file of the extension's own
+  storage (`handoffs/gate-attempt/`), which the window that wins the claim takes and tells the failed attempt from, so that the
+  others tell nothing; a value an earlier version kept in the global state is read once and cleared by the claim. A probe
+  that succeeds deletes both flags.
 - `windowClaimOf(host, subscriptions)` is the claim on the window's notification: the extension that registers the
   claim command holds the window, the others ask it who that is, and a holder that went away is replaced once.
 - `registerAuthorityLabel(host, decoded, suffix)` registers the resource label formatter of a window's authority: the

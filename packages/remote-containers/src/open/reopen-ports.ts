@@ -11,7 +11,7 @@ import type {ProblematicPorts} from '../features/problematic-check.ts';
 import type {ConfigurationPorts} from '../config/choose-configuration.ts';
 import type {Translate} from '../surfaces/engine-dialogs.ts';
 import type {EngineDialogPort, FirstCheckResult} from '../engine/preflight.ts';
-import type {IntentMemento} from '../state/timed-store.ts';
+import type {RebuildHandoffs} from './rebuild-intent.ts';
 import type {TrustOutcome} from '../trust/trust-gate.ts';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
 import type {AuthoringPort} from './author-first.ts';
@@ -53,7 +53,7 @@ export interface ReopenPorts extends AuthoringPort, WorkspaceFolderPorts {
   /** The trust check of the window's folder, which asks the editor's dialog when the folder isn't trusted yet. */
   ensureTrusted(commandTitle: string): Promise<TrustOutcome>;
   /** Where a rebuild leaves its intent for the resolve that follows the reload. */
-  intents: IntentMemento;
+  intents: RebuildHandoffs;
   now(): number;
   config: Omit<ConfigurationPorts, 'cli' | 'logger'>;
   settings: {

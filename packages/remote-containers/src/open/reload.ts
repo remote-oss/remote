@@ -11,10 +11,13 @@ import {
   devContainerPayloadOf,
   type SerializedUri,
 } from '../authority/payload.ts';
-import type {IntentMemento} from '../state/timed-store.ts';
 import type {PreReloadProgress} from './pre-reload-progress.ts';
 import type {PinnedEngine} from '../engine/effective-engine.ts';
-import {type RebuildOptions, storeRebuildIntent} from './rebuild-intent.ts';
+import {
+  type RebuildHandoffs,
+  type RebuildOptions,
+  storeRebuildIntent,
+} from './rebuild-intent.ts';
 
 /** What the reload reads of the editor and calls. */
 export interface ReloadPorts {
@@ -50,7 +53,7 @@ export interface ReloadRequest {
   /** The progress of the checks, which closes before the reload. */
   progress: PreReloadProgress;
   /** Set by a rebuild command: the intent to leave, and where. */
-  rebuild?: {options: RebuildOptions; intents: IntentMemento; now(): number};
+  rebuild?: {options: RebuildOptions; intents: RebuildHandoffs};
 }
 
 /** Opens the window of this command on the folder's container; a refusal or a store that fails is logged, not thrown. */
@@ -70,12 +73,7 @@ export async function reloadIntoContainer(
   });
   if (rebuild !== undefined) {
     try {
-      await storeRebuildIntent(
-        rebuild.intents,
-        payload,
-        rebuild.options,
-        rebuild.now(),
-      );
+      await storeRebuildIntent(rebuild.intents, payload, rebuild.options);
     } catch (error) {
       logger.warn(
         `the rebuild intent could not be stored: ${error instanceof Error ? error.message : String(error)}`,
