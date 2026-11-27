@@ -82,7 +82,7 @@ function harnessFor(shell: string): ChannelHarness {
     boundedCopy: {
       kind: 'notApplicable',
       reason:
-        'the copy is a file-to-file stream pipeline that waits for the writer to drain itself; the channel makes no writes of its own to measure',
+        "met by Node's stream pipeline, which waits for drain and reads 64 KiB pieces; the channel makes no writes of its own to measure",
     },
     stage: (scenario: ContractScenario): Promise<StagedChannel> => {
       const folder = mkdtempSync(path.join(tmpdir(), 'lib-host-local-'));
