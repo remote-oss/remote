@@ -6,7 +6,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {existsSync, mkdirSync, readFileSync} from 'node:fs';
+import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {openFolderWindow} from '../windows/folder-windows.ts';
 import {closeWindow, inWindow, variable, waitFor} from '../windows/harness.ts';
@@ -15,6 +15,7 @@ import {
   extensionsViewSections,
   notifications,
 } from '../windows/renderer.ts';
+import {obsoleteFoldersOf} from './obsolete-folders.ts';
 import {installing, launcher, PACK_ID} from './pack-support.ts';
 
 /** The pack's display name. */
@@ -39,10 +40,9 @@ function launchProfile() {
 
 /** The extension folders core has marked for deletion at its next start. */
 function obsoleteFolders(): string[] {
-  const file = path.join(variable('HARNESS_EXTENSIONS_FOLDER'), '.obsolete');
-  return existsSync(file)
-    ? Object.keys(JSON.parse(readFileSync(file, 'utf8')) as object).toSorted()
-    : [];
+  return obsoleteFoldersOf(
+    path.join(variable('HARNESS_EXTENSIONS_FOLDER'), '.obsolete'),
+  );
 }
 
 /** Puts the launch's installed set back from the VSIX files, whatever a row uninstalled. */
