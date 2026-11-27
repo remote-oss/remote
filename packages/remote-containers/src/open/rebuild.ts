@@ -5,8 +5,11 @@
  */
 
 import type {Logger} from 'lib-log';
-import {type RebuildOptions, storeRebuildIntent} from './rebuild-intent.ts';
-import type {IntentMemento} from '../state/timed-store.ts';
+import {
+  type RebuildHandoffs,
+  type RebuildOptions,
+  storeRebuildIntent,
+} from './rebuild-intent.ts';
 
 /** The prefix of a dev-container window's remote authority. */
 const AUTHORITY_PREFIX = 'dev-container+';
@@ -19,8 +22,7 @@ export interface RebuildPorts {
     remoteAuthority(): string | undefined;
     reload(): PromiseLike<unknown>;
   };
-  intents: IntentMemento;
-  now(): number;
+  intents: RebuildHandoffs;
   /** Tells the shutdown helper that this window leaves the container it holds, before the reload. */
   shutdown: {leave(): Promise<void>};
   logger: Logger;
@@ -57,7 +59,6 @@ export function rebuildContainer(
         ports.intents,
         authority.slice(AUTHORITY_PREFIX.length),
         options,
-        ports.now(),
       );
     } catch (error) {
       logger.warn(
