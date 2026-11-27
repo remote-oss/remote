@@ -264,7 +264,7 @@ export async function placeCliFiles(
       line => {
         const [field = '', name = ''] = line.split('\t');
         if (field.startsWith('sum=')) {
-          hashed.set(name, field.slice('sum='.length).toLowerCase());
+          hashed.set(name, field.slice('sum='.length));
         }
       },
     );
