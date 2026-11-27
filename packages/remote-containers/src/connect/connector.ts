@@ -108,7 +108,10 @@ import {
 import {portAttributeSettings} from '../ports/port-attributes.ts';
 import {devPortOf} from './dev-port.ts';
 import {idLabels} from '../lifecycle/labels.ts';
-import {takeRebuildIntent} from '../open/rebuild-intent.ts';
+import {
+  type RebuildHandoffs,
+  takeRebuildIntent,
+} from '../open/rebuild-intent.ts';
 import {takePausedRetry} from '../state/paused-retry.ts';
 import type {IntentMemento} from '../state/timed-store.ts';
 import {
@@ -432,8 +435,10 @@ export interface ContainerConnectorDependencies {
   ): Promise<OpenRelay | {kind: 'failed'; failure: Failed}>;
   /** What shows the lifecycle commands' terminal and progress. */
   lifecyclePresenter: LifecyclePresenter;
-  /** The extension's own store, where a rebuild command left its intent. */
-  intents: IntentMemento;
+  /** Where a rebuild command left its intent, in a file of the extension's own storage. */
+  intents: RebuildHandoffs;
+  /** The extension's own store, where the failure dialog left the retry of a paused container. */
+  pausedRetries: IntentMemento;
   /** The editor's workspace trust, which the connect asks before anything runs for the folder. */
   trust: TrustPort;
   trustNeeds: Omit<TrustNeeds, 'commandTitle'>;
@@ -987,7 +992,7 @@ export function containerConnectorOf(
     rebuild: {buildNoCache: boolean} | undefined;
     failure: Failed | undefined;
   }> {
-    const rebuild = await takenRebuild(input);
+    const rebuild = takenRebuild(input);
     phases.tell({name: 'initializing'});
     const checked = await secondCheck(
       {
@@ -1008,17 +1013,16 @@ export function containerConnectorOf(
   }
 
   /** The rebuild the window asked for before its reload, taken once on the first attempt of a connect. */
-  async function takenRebuild(
+  function takenRebuild(
     input: ConnectInput,
-  ): Promise<{buildNoCache: boolean} | undefined> {
+  ): {buildNoCache: boolean} | undefined {
     if (input.attempt !== 1 || input.isReconnection) {
       return undefined;
     }
     try {
-      const intent = await takeRebuildIntent(
+      const intent = takeRebuildIntent(
         dependencies.intents,
         input.rawHostString,
-        dependencies.clock(),
       );
       if (intent !== undefined) {
         logger.info(
@@ -1038,7 +1042,7 @@ export function containerConnectorOf(
   async function takenPausedRetry(containerId: string): Promise<boolean> {
     try {
       const retried = await takePausedRetry(
-        dependencies.intents,
+        dependencies.pausedRetries,
         containerId,
         dependencies.clock(),
       );

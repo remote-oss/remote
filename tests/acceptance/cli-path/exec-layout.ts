@@ -6,6 +6,7 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
+import {redact} from 'lib-log';
 import {applicationNameOf} from '../../../tools/acceptance-cli-editor.ts';
 import {
   closeWindow,
@@ -14,13 +15,14 @@ import {
   editorProduct,
   onHostAs,
   openWindow,
+  recordLines,
   userSettings,
   variable,
 } from '../windows/harness.ts';
 import {DATA_FOLDER, freshHost} from '../windows/maintenance.ts';
 import {dialogOf, notifications} from '../windows/renderer.ts';
 import {PLATFORMS} from '../windows/tunnel-support.ts';
-import {stamped} from './stamped-steps.ts';
+import {failedWithReadout, stamped} from './stamped-steps.ts';
 
 /** What the host holds and runs after a connect, as the rows compare it. */
 export interface ExecFacts {
@@ -132,6 +134,52 @@ export async function freshExecHost(): Promise<void> {
   );
 }
 
+/** How long the readout of a connect that did not finish may take, in milliseconds. */
+const READOUT_MILLISECONDS = 60_000;
+
+/** How long the stalled connect's two samples of the CLI's folder are apart, in milliseconds. */
+const SAMPLE_GAP_MILLISECONDS = 5000;
+
+/** The size of the CLI's folder in kilobytes, and the newest entries below it with their sizes (the host's busybox has no find -printf). */
+async function cliFolderSample(): Promise<string> {
+  return onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    `du -sk '${DATA_FOLDER}/cli' 2>&1; ls -lAtR '${DATA_FOLDER}/cli' 2>&1 | head -30; true`,
+  );
+}
+
+/**
+ * What a reader of a connect that did not finish needs to tell a stall from a slow download: the stages the window
+ * showed, the CLI's folder sampled twice a few seconds apart (a download in progress grows), the tail of the CLI's own
+ * logs and its processes (card #3276: a window stopped at Downloading VS Code Server and the log said no more), redacted
+ * the way the log is: the CI logs are public and the CLI's own log can hold the control token.
+ */
+async function stalledConnectText(name: string): Promise<string> {
+  const stages = recordLines(undefined, name)
+    .filter(line => line.surface === 'progress')
+    .map(line => line.question);
+  const first = await cliFolderSample();
+  await new Promise(resolve => setTimeout(resolve, SAMPLE_GAP_MILLISECONDS));
+  const second = await cliFolderSample();
+  const logs = await onHostAs(
+    'harness',
+    'sh',
+    '-c',
+    `for file in '${DATA_FOLDER}'/.cli.*.log; do echo "== $file"; tail -n 30 "$file"; done 2>&1; true`,
+  );
+  return redact(
+    [
+      `the stages ${name} showed: ${JSON.stringify([...new Set(stages)])}`,
+      `the CLI's folder, then ${String(SAMPLE_GAP_MILLISECONDS)} ms later:\n${first}\n--\n${second}`,
+      `the tail of the CLI's logs:\n${logs}`,
+      `the CLI processes: ${JSON.stringify(await cliProcessLines())}`,
+    ].join('\n'),
+    [],
+  );
+}
+
 /** What a window that connected shows of the extension's own messages: a dialog and the notifications. */
 export interface Messages {
   dialog: unknown;
@@ -157,7 +205,14 @@ export async function execConnect(
   try {
     await stamped(rowName, 'the connect', 130_000, () =>
       connectedWithin(name, 120_000),
-    );
+    ).catch(async (failure: unknown) => {
+      throw await failedWithReadout(
+        rowName,
+        failure,
+        () => stalledConnectText(name),
+        READOUT_MILLISECONDS,
+      );
+    });
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
       told: `the connect's lines about the install: ${JSON.stringify(

@@ -11,6 +11,8 @@ interface Seen {
   warnings: Array<{text: string; buttons: readonly string[]}>;
   informations: Array<{text: string; buttons: readonly string[]}>;
   stored: Map<string, boolean>;
+  /** Whether an attempt is handed over in the extension's storage. */
+  attempt: {handed: boolean};
   files: string[];
 }
 
@@ -27,6 +29,7 @@ function surroundings(
     warnings: [],
     informations: [],
     stored: new Map(),
+    attempt: {handed: false},
     files: [],
   };
   const probeApi: ProbeApi = {
@@ -60,6 +63,18 @@ function surroundings(
       update: (key, value) => {
         seen.stored.set(key, value);
         return Promise.resolve();
+      },
+    },
+    attempt: {
+      pending: () => seen.attempt.handed,
+      leave: () => {
+        seen.attempt.handed = true;
+        return Promise.resolve();
+      },
+      take: () => {
+        const handed = seen.attempt.handed;
+        seen.attempt.handed = false;
+        return handed;
       },
     },
     documents: {
@@ -161,6 +176,70 @@ describe('the ports of the proposed-API setup', () => {
     deepStrictEqual(
       [before, flags.dismissed(), flags.attemptPending()],
       [[false, false], true, true],
+    );
+  });
+
+  it('the pending attempt is handed over in the extension’s storage, not the global state, and claimed once', async () => {
+    const {editor, identity, seen} = surroundings();
+    const {flags} = setupPortsOf(editor, identity);
+    await flags.setAttemptPending(true);
+    const handed = [
+      flags.attemptPending(),
+      seen.attempt.handed,
+      [...seen.stored],
+    ];
+    const claims = [
+      await flags.claimAttemptPending(),
+      await flags.claimAttemptPending(),
+    ];
+    deepStrictEqual(
+      [handed, claims, flags.attemptPending()],
+      [[true, true, []], [true, false], false],
+    );
+  });
+
+  it('an attempt that an earlier version kept in the global state is read once, cleared by the claim and never written true again', async () => {
+    const {editor, identity, seen} = surroundings();
+    seen.stored.set('gate.attemptPending', true);
+    const {flags} = setupPortsOf(editor, identity);
+    const before = flags.attemptPending();
+    const claims = [
+      await flags.claimAttemptPending(),
+      await flags.claimAttemptPending(),
+    ];
+    deepStrictEqual(
+      [before, claims, seen.stored.get('gate.attemptPending')],
+      [true, [true, false], false],
+    );
+  });
+
+  it('an attempt in the file and one of an earlier version are one attempt, claimed once and cleared from both', async () => {
+    const {editor, identity, seen} = surroundings();
+    const {flags} = setupPortsOf(editor, identity);
+    await flags.setAttemptPending(true);
+    seen.stored.set('gate.attemptPending', true);
+    const claims = [
+      await flags.claimAttemptPending(),
+      await flags.claimAttemptPending(),
+    ];
+    deepStrictEqual(
+      [claims, seen.attempt.handed, seen.stored.get('gate.attemptPending')],
+      [[true, false], false, false],
+    );
+  });
+
+  it('clearing the pending attempt takes the file’s and the earlier version’s, and a clear with none writes nothing', async () => {
+    const {editor, identity, seen} = surroundings();
+    const {flags} = setupPortsOf(editor, identity);
+    await flags.setAttemptPending(false);
+    const untouched = [...seen.stored];
+    await flags.setAttemptPending(true);
+    seen.stored.set('gate.attemptPending', true);
+    await flags.setAttemptPending(false);
+    await flags.setAttemptPending(false);
+    deepStrictEqual(
+      [untouched, seen.attempt.handed, seen.stored.get('gate.attemptPending')],
+      [[], false, false],
     );
   });
 
