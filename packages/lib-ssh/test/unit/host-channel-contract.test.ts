@@ -268,10 +268,11 @@ const SSH_HARNESS: ChannelHarness = {
 
 describe('host channel over SSH: a PowerShell host', () => {
   // The tree-kill mechanism is measured on a Windows host (run 46038744923): `taskkill /T /F /PID <pid>` leaves no
-  // descendant of a cancelled PowerShell run, and host-channel.test.ts runs it for the PowerShell plan. Pending: the
-  // same measurement of a start that ended, whose server must survive a later cancel.
+  // descendant of a cancelled PowerShell run, and host-channel.test.ts runs it for the PowerShell plan. The case of a
+  // server whose start ended is the shared session's (#3307): on Windows a process a run starts ends with the run's ssh
+  // session (#3308, run 46052893935), so a run of this channel leaves none.
   it(
-    'leaves a server whose start ended running after a cancel (pending #3308)',
+    'leaves a process the script detached from its tree running after a cancel: not applicable, a process a run starts ends with that run’s ssh session (#3308, run 46052893935)',
   );
 });
 
