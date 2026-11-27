@@ -376,13 +376,20 @@ describe('Show Details and the Details section’s single slot (card containers-
     await rowGone('local', base);
     await titleAction('local', base, 'Refresh');
     await sectionShown('local', DETAILS_NAME);
+    // The section is retitled when the Refresh is answered, and its tree is drawn again a moment after: the rows are
+    // waited for, and a section that keeps its rows fails here with the rows it kept.
+    await waitFor(
+      `no rows under ${DETAILS_NAME}`,
+      async () => (await rowsOf('local', DETAILS_NAME)).length === 0,
+      30_000,
+    );
     deepStrictEqual(
       [
-        (await viewRows('local', DETAILS_NAME))?.length,
+        await rowsOf('local', DETAILS_NAME),
         await sectionsTitled('local', base),
         await notifications('local'),
       ],
-      [0, 0, []],
+      [[], 0, []],
     );
   });
 

@@ -548,6 +548,36 @@ export const CONFIG_FILE_LAUNCHES: readonly string[] = [
   'ssh-askpass-space',
 ];
 
+/**
+ * The environment of a run: `base` with its search path under the one key `PATH` and `variables` over it. A Windows
+ * process names the variable `Path`, and a copy of its environment keeps that key, so a `<path>` read from `PATH` would
+ * be empty, and a launch's own `PATH` would stand beside the key `Path`, of which Node passes the first in sorted order
+ * to a child: when both casings are present, `PATH` is the one that is kept.
+ */
+export function runEnvironmentOf(
+  base: Readonly<Record<string, string | undefined>>,
+  variables: object,
+): Record<string, string | undefined> {
+  const keys = pathKeysOf(base);
+  const [first] = keys;
+  return {
+    ...Object.fromEntries(
+      Object.entries(base).filter(([key]) => !keys.includes(key)),
+    ),
+    ...(first === undefined ? {} : {PATH: base[first]}),
+    ...variables,
+  };
+}
+
+/** The keys of `base` that name the search path, in sorted order, as the Windows job's log records them. */
+export function pathKeysOf(
+  base: Readonly<Record<string, string | undefined>>,
+): string[] {
+  return Object.keys(base)
+    .filter(key => key.toUpperCase() === 'PATH')
+    .sort();
+}
+
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
 
@@ -1427,6 +1457,19 @@ export function launchesOf(root: string): Launch[] {
       suite: 'containers-wsl',
       namedOnly: true,
       windowsClient: true,
+    },
+    // Dev Containers on a Windows client with Docker Desktop's WSL 2 engine; the platform workflow's Windows job only,
+    // by name.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-desktop',
+      suite: 'containers-desktop',
+      namedOnly: true,
+      windowsClient: true,
+      // The image's own docker.exe drives Windows containers, so Docker Desktop's client comes first.
+      environment: {
+        PATH: 'C:\\Program Files\\Docker\\Docker\\resources\\bin;<path>',
+      },
     },
     {
       ...RENDERER_LAUNCH,

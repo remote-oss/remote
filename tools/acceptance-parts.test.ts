@@ -297,7 +297,7 @@ describe('acceptance-parts (card tooling-159)', () => {
     );
   });
 
-  it("tooling-159, #2355, #3203: the repository's parts make every launch but the genuine ones, wsl, windows-host and containers-wsl, cli-path among them, each test file of a split launch exactly once, the same parts each time", () => {
+  it("tooling-159, #2355, #3203: the repository's parts make every launch but the genuine ones, wsl, windows-host, containers-wsl and containers-desktop, cli-path among them, each test file of a split launch exactly once, the same parts each time", () => {
     const launches = launchesOf(REPOSITORY_ROOT);
     const table = JSON.parse(readFileSync(PARTS_TABLE, 'utf8')) as PartsTable;
     const parts = partsOfTable(launches, table, suiteFilesIn(REPOSITORY_ROOT));
@@ -325,6 +325,7 @@ describe('acceptance-parts (card tooling-159)', () => {
       '!wsl',
       '!windows-host',
       '!containers-wsl',
+      '!containers-desktop',
     ]);
     deepStrictEqual(
       [
