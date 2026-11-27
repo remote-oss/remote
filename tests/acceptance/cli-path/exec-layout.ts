@@ -156,7 +156,7 @@ async function cliFolderSample(): Promise<string> {
  * logs and its processes (card #3276: a window stopped at Downloading VS Code Server and the log said no more), redacted
  * the way the log is: the CI logs are public and the CLI's own log can hold the control token.
  */
-export async function stalledConnectText(name: string): Promise<string> {
+async function stalledConnectText(name: string): Promise<string> {
   const stages = recordLines(undefined, name)
     .filter(line => line.surface === 'progress')
     .map(line => line.question);
