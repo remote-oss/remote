@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import {HISTORY_FOLDER, legacyOf, windowOn} from './history-files.fixture.ts';
-import {MemoryFiles} from './event-files.fixture.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
 
 /** The history entry of a folder. */
 function folder(entryPath: string): {path: string; kind: 'folder'} {

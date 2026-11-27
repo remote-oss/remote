@@ -144,6 +144,7 @@ function schedulerFor(scenario: ContractScenario): {
 }
 
 const SSH_HARNESS: ChannelHarness = {
+  pendingOn: '#3281',
   scriptFailures: ['channelClosed', 'spawnFailed', 'timeout'],
   copyFailures: ['copyToolMissing', 'copyFailed', 'channelClosed', 'timeout'],
   reachesClientFiles: false,
@@ -171,7 +172,10 @@ const SSH_HARNESS: ChannelHarness = {
 describe('host channel over SSH: the lib-host contract', function () {
   this.timeout(20000);
   for (const contractCase of channelContractCases(SSH_HARNESS)) {
-    it(contractCase.name, contractCase.check);
+    it(
+      contractCase.name,
+      contractCase.pending === true ? undefined : contractCase.check,
+    );
   }
 });
 

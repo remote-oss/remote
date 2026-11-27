@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-7902",
+  "issue": 41,
+  "repo": "remote-wsl",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: where the server comes from for WSL distros",
+  "epic": "E79",
+  "acCount": 34
+ }
+]

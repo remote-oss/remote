@@ -54,3 +54,23 @@ export async function stamped<Value>(
     clearTimeout(timer);
   }
 }
+
+/**
+ * The failure `failure` of a step as a message that carries what `readout` tells after it, for a reader who needs to
+ * know what the host held. The failure comes first, and the readout is bounded and may fail: a host that is gone, the
+ * very case of a connect that stalled, gives a line saying the readout did not finish, and never replaces the failure.
+ */
+export async function failedWithReadout(
+  rowName: string,
+  failure: unknown,
+  readout: () => Promise<string>,
+  limitMilliseconds: number,
+): Promise<Error> {
+  const told = await stamped(
+    rowName,
+    'the readout of the step that failed',
+    limitMilliseconds,
+    readout,
+  ).catch((caught: unknown) => `the readout did not finish: ${String(caught)}`);
+  return new Error(`${String(failure)}\n${told}`, {cause: failure});
+}

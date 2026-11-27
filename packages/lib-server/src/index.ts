@@ -207,6 +207,7 @@ export {
   type WatchedExecServer,
   watchedExecServer,
 } from './cli-control/exec-server.ts';
+export {execServerChannel} from './cli-control/exec-host-channel.ts';
 export {
   GROUP_SCRIPT,
   type HostProcess,

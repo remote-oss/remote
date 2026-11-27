@@ -1,0 +1,81 @@
+[
+ {
+  "id": "F-6003",
+  "issue": 14,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Help, feedback and issue reporting",
+  "epic": "E60",
+  "acCount": 22,
+  "surfaces": {
+   "commands": [
+    "remote-wsl.getHelp",
+    "remote-wsl.provideFeedback",
+    "remote-wsl.reportIssue"
+   ],
+   "settings": [],
+   "views": [
+    "~remote.helpPanel (core)"
+   ],
+   "menus": [
+    "commandPalette#9",
+    "commandPalette#11",
+    "commandPalette#12"
+   ],
+   "contextKeys": [
+    "wslFeatureInstalled",
+    "isWindows",
+    "isWeb"
+   ],
+   "authorities": [],
+   "other": [
+    "contributes.remoteHelp with getStarted, documentation, issues, remoteName",
+    "walkthrough id wslWalkthrough"
+   ]
+  },
+  "external": {
+   "stableApi": [
+    "env.openExternal",
+    "commands.executeCommand workbench.action.openIssueReporter"
+   ],
+   "proposedApi": [
+    "contribRemoteHelp"
+   ],
+   "processes": [],
+   "network": [
+    "documentation URL",
+    "feedback URL",
+    "issue list URL",
+    "bugs URL (all ours per R-31)"
+   ],
+   "remoteFiles": [],
+   "localFiles": []
+  },
+  "cites": [
+   "remote-wsl#F-7901",
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6005",
+   "remote-wsl#F-6101",
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6002",
+   "remote-containers#F-1403",
+   "remote-containers#F-0109",
+   "remote-wsl#F-6201"
+  ],
+  "coreUi": true,
+  "candidateComponent": "wsl.help-contrib",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 4,
+  "notes": "Three URL-opening commands plus a manifest-only remoteHelp block. Help rows need a proposed API with no stable substitute. Family-wide pattern: same help block per room with our own URLs.",
+  "questions": [
+   "Which hosts will our help, feedback and issue URLs use given the link-protection dialog (Q3)?",
+   "Is contribRemoteHelp enabled via argv.json route, and do the commands work without it?",
+   "Is one shared help-contribution template wanted across all rooms?",
+   "Spec cites material not for the clean side; keep to ids and own phrases."
+  ]
+ }
+]

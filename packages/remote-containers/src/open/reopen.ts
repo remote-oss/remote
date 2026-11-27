@@ -37,6 +37,16 @@ function titleOf(rebuild: RebuildOptions | undefined): string {
     : 'Rebuild and Reopen in Container';
 }
 
+/** The id of the command that runs: Reopen in Container, or one of its two rebuild variants. */
+function commandIdOf(rebuild: RebuildOptions | undefined): string {
+  if (rebuild === undefined) {
+    return 'remote-containers.reopenInContainer';
+  }
+  return rebuild.buildNoCache
+    ? 'remote-containers.rebuildNoCacheAndReopenInContainer'
+    : 'remote-containers.rebuildAndReopenInContainer';
+}
+
 /**
  * The handlers of the command over `ports`: the one it gives for `rebuild` is that rebuild variant, which leaves the
  * intent for the resolve right before the reload. The handlers share one flag, so a call made while any of them runs
@@ -53,11 +63,14 @@ export function reopenHandlersOf(
    * the workspace file and the file in it. An unsaved workspace is told to be saved first, and any other window gets
    * nothing.
    */
-  async function targetToReopen(title: string): Promise<Target | undefined> {
+  async function targetToReopen(
+    title: string,
+    commandId: string,
+  ): Promise<Target | undefined> {
     const folders = window.folders();
     const [only] = folders;
     const workspaceFile = window.workspaceFile();
-    if (window.remoteName() !== undefined) {
+    if (!window.admits(commandId)) {
       logger.info(`${title} does nothing in this window`);
       return undefined;
     }
@@ -99,7 +112,7 @@ export function reopenHandlersOf(
     if (!(await openPathAllowed(ports.gate, title))) {
       return;
     }
-    const target = await targetToReopen(title);
+    const target = await targetToReopen(title, commandIdOf(rebuild));
     if (
       target === undefined ||
       (await ports.ensureTrusted(title)) !== 'trusted'
@@ -160,11 +173,7 @@ export function reopenHandlersOf(
         ...(rebuild === undefined
           ? {}
           : {
-              rebuild: {
-                options: rebuild,
-                intents: ports.intents,
-                now: () => ports.now(),
-              },
+              rebuild: {options: rebuild, intents: ports.intents},
             }),
       });
     } finally {

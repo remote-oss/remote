@@ -149,16 +149,17 @@ export function heldTogether(table: PartsTable): (launch: Launch) => boolean {
 }
 
 /**
- * Whether the parts leave a launch out: the genuine group's, which have a job of their own, and a launch with WSL distros
- * or the Windows SSH host, which needs a Windows client and runs in the platform workflow's Windows job. A launch of the
- * CLI-source editor is in: its parts are the CLI archives' ones (`fetch-cli-archives --mark-parts`), whose job holds
- * the archives' token in the step that fetches them.
+ * Whether the parts leave a launch out: the genuine group's, which have a job of their own, and a launch with WSL
+ * distros, the Windows SSH host or any other need of a Windows client, which runs in the platform workflow's Windows
+ * job. A launch of the CLI-source editor is in: its parts are the CLI archives' ones (`fetch-cli-archives
+ * --mark-parts`), whose job holds the archives' token in the step that fetches them.
  */
 function leftOut(launch: Launch): boolean {
   return (
     launchGroupOf(launch) === 'genuine' ||
     launch.wslDistros === true ||
-    launch.windowsHost === true
+    launch.windowsHost === true ||
+    launch.windowsClient === true
   );
 }
 

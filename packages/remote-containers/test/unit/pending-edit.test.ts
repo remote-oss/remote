@@ -1,6 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
 import {
   openPendingEdit,
   PENDING_EDITS_KEY,
@@ -8,22 +9,17 @@ import {
   takePendingEdit,
 } from '../../src/open/pending-edit.ts';
 import type {IntentMemento} from '../../src/state/timed-store.ts';
+import {
+  handoffFolderOf,
+  pendingEditHandoffsOn,
+  writeRawHandoff,
+} from './handoff-kinds.fixture.ts';
 
-/** A memento over one map. */
-function memento(initial?: unknown): {
-  port: IntentMemento;
-  held: () => unknown;
-} {
-  let held = initial;
+/** A memento over one map of an earlier version. */
+function earlierMemento(initial?: unknown): IntentMemento {
   return {
-    port: {
-      get: key => (key === PENDING_EDITS_KEY ? held : undefined),
-      update: (key, value) => {
-        held = value;
-        return Promise.resolve();
-      },
-    },
-    held: () => held,
+    get: key => (key === PENDING_EDITS_KEY ? initial : undefined),
+    update: () => Promise.resolve(),
   };
 }
 
@@ -31,49 +27,98 @@ const CONFIG = '/w/proj/.devcontainer/devcontainer.json';
 const LOG_FILE = '/logs/dev-containers-attempt-20261101T120000.log';
 
 describe('the pending edit (card containers-11)', () => {
-  it('F-0410 AC-4: a stored edit is taken once for the same folder', async () => {
-    const store = memento();
-    await storePendingEdit(store.port, '/w/proj', CONFIG, 1000);
+  it('F-0410 AC-4: a stored edit is taken once for the same folder, and its file is gone', async () => {
+    const files = new MemoryFiles();
+    const handoffs = pendingEditHandoffsOn(files);
+    await storePendingEdit(handoffs, '/w/proj', CONFIG);
+    const first = takePendingEdit(handoffs, '/w/proj');
     deepStrictEqual(
       [
-        await takePendingEdit(store.port, '/w/proj', 2000),
-        await takePendingEdit(store.port, '/w/proj', 2000),
+        first,
+        takePendingEdit(handoffs, '/w/proj'),
+        files.names(handoffFolderOf('pending-edit')),
       ],
-      [{configFile: CONFIG}, undefined],
+      [{configFile: CONFIG}, undefined, []],
     );
   });
 
   it("F-0410 AC-4: another folder's edit is not taken", async () => {
-    const store = memento();
-    await storePendingEdit(store.port, '/w/a', CONFIG, 1000);
+    const handoffs = pendingEditHandoffsOn(new MemoryFiles());
+    await storePendingEdit(handoffs, '/w/a', CONFIG);
     deepStrictEqual(
-      [
-        await takePendingEdit(store.port, '/w/b', 1000),
-        await takePendingEdit(store.port, '/w/a', 1000),
-      ],
+      [takePendingEdit(handoffs, '/w/b'), takePendingEdit(handoffs, '/w/a')],
       [undefined, {configFile: CONFIG}],
     );
   });
 
-  it('contracts: a value of another shape is dropped', async () => {
-    const store = memento({'/w/p': {storedAt: 1000, value: {configFile: 3}}});
-    deepStrictEqual(await takePendingEdit(store.port, '/w/p', 1000), undefined);
-  });
-
-  it('F-0410 AC-4: an edit older than five minutes is not taken', async () => {
-    const store = memento();
-    await storePendingEdit(store.port, '/w/p', CONFIG, 0);
+  it('contracts: a file or an earlier value of another shape is dropped', () => {
+    const files = new MemoryFiles();
+    const earlier = pendingEditHandoffsOn(
+      files,
+      earlierMemento({'/w/p': {storedAt: 1000, value: {configFile: 3}}}),
+    );
+    writeRawHandoff(
+      files,
+      'pending-edit',
+      '/w/q',
+      JSON.stringify({storedAt: 1000, value: {configFile: 3}}),
+    );
     deepStrictEqual(
-      await takePendingEdit(store.port, '/w/p', 300_001),
-      undefined,
+      [takePendingEdit(earlier, '/w/p'), takePendingEdit(earlier, '/w/q')],
+      [undefined, undefined],
     );
   });
 
-  it('R-27: the key is the extension’s own', () => {
+  it('F-0410 AC-4: an edit older than five minutes is not taken', async () => {
+    const files = new MemoryFiles();
+    const handoffs = pendingEditHandoffsOn(files);
+    await storePendingEdit(handoffs, '/w/p', CONFIG);
+    files.clock += 300_001;
+    deepStrictEqual(takePendingEdit(handoffs, '/w/p'), undefined);
+  });
+
+  it('R-27: the key an earlier version kept it under is the extension’s own', () => {
     deepStrictEqual(
       PENDING_EDITS_KEY,
       'remote-oss.remote-containers.pendingEdits',
     );
+  });
+
+  it('F-0410 AC-4: an edit that an earlier version kept in the global state is taken, and left where it is', () => {
+    const handoffs = pendingEditHandoffsOn(
+      new MemoryFiles(),
+      earlierMemento({'/w/p': {storedAt: 1000, value: {configFile: CONFIG}}}),
+    );
+    deepStrictEqual(
+      [takePendingEdit(handoffs, '/w/p'), takePendingEdit(handoffs, '/w/p')],
+      [{configFile: CONFIG}, {configFile: CONFIG}],
+    );
+  });
+
+  it('F-0410 AC-4: the window that reloads leaves the edit, another window writes the global state from a stale copy, and the window it switches to still takes the edit; the control: the same edit in the global state is lost', async () => {
+    const files = new MemoryFiles();
+    const leaving = pendingEditHandoffsOn(files);
+    const arriving = pendingEditHandoffsOn(files);
+    await storePendingEdit(leaving, '/w/proj', CONFIG);
+    const shared: {value: Record<string, unknown>} = {value: {}};
+    const stale = {...shared.value};
+    shared.value = {'/w/proj': {storedAt: 1000, value: {configFile: CONFIG}}};
+    shared.value = {...stale, other: 1};
+    deepStrictEqual(
+      [takePendingEdit(arriving, '/w/proj'), shared.value['/w/proj']],
+      [{configFile: CONFIG}, undefined],
+    );
+  });
+
+  it('F-0410 AC-4: two windows that activate at once on the same folder, one opens the edit', async () => {
+    const files = new MemoryFiles();
+    const leaving = pendingEditHandoffsOn(files);
+    await storePendingEdit(leaving, '/w/proj', CONFIG);
+    const taken = [
+      pendingEditHandoffsOn(files),
+      pendingEditHandoffsOn(files),
+    ].map(window => takePendingEdit(window, '/w/proj'));
+    deepStrictEqual(taken, [{configFile: CONFIG}, undefined]);
   });
 });
 
@@ -88,22 +133,16 @@ describe('the pending edit at activation (card containers-11)', () => {
       logExists?: boolean;
     } = {},
   ) {
-    const store = memento();
-    await storePendingEdit(
-      store.port,
-      '/w/proj',
-      CONFIG,
-      1000,
-      options.logFile,
-    );
+    const files = new MemoryFiles();
+    const handoffs = pendingEditHandoffsOn(files);
+    await storePendingEdit(handoffs, '/w/proj', CONFIG, options.logFile);
     const opened: string[] = [];
     const events: string[] = [];
     const sink = new MemorySink();
     await openPendingEdit({
-      memento: store.port,
+      handoffs,
       remoteName: () => options.remoteName,
       folders: () => options.folders ?? [{scheme: 'file', fsPath: '/w/proj'}],
-      now: () => 2000,
       openLog: file => {
         events.push(`openLog ${file}`);
         return Promise.resolve();
@@ -123,13 +162,13 @@ describe('the pending edit at activation (card containers-11)', () => {
       opened,
       events,
       lines: sink.lines.map(line => `${line.level}: ${line.message}`),
-      left: store.held(),
+      left: files.names(handoffFolderOf('pending-edit')),
     };
   }
 
   it('F-0410 AC-4: a local window with one file folder opens its pending edit', async () => {
     const seen = await activated();
-    deepStrictEqual([seen.opened, seen.left], [[CONFIG], {}]);
+    deepStrictEqual([seen.opened, seen.left], [[CONFIG], []]);
   });
 
   it('F-0410: a window with a remoteName takes nothing', async () => {
@@ -155,10 +194,7 @@ describe('the pending edit at activation (card containers-11)', () => {
     const seen = await activated({
       folders: [{scheme: 'file', fsPath: '/w/other'}],
     });
-    deepStrictEqual(
-      [seen.opened, Object.keys(seen.left as object)],
-      [[], ['/w/proj']],
-    );
+    deepStrictEqual([seen.opened, seen.left.length], [[], 1]);
   });
 
   it('F-0410: a failed open is logged at warn, and the activation goes on', async () => {
@@ -204,19 +240,20 @@ describe('the pending edit at activation (card containers-11)', () => {
   });
 
   it('F-0410 AC-4: the log file is stored with the configuration and comes back with it, an old record without one still parses, and a log file that is no text is dropped', async () => {
-    const store = memento();
-    await storePendingEdit(store.port, '/w/a', CONFIG, 1000, LOG_FILE);
-    const earlier = memento({
-      '/w/b': {storedAt: 1000, value: {configFile: CONFIG}},
-    });
-    const malformed = memento({
-      '/w/c': {storedAt: 1000, value: {configFile: CONFIG, logFile: 3}},
-    });
+    const files = new MemoryFiles();
+    const stored = pendingEditHandoffsOn(
+      files,
+      earlierMemento({
+        '/w/b': {storedAt: 1000, value: {configFile: CONFIG}},
+        '/w/c': {storedAt: 1000, value: {configFile: CONFIG, logFile: 3}},
+      }),
+    );
+    await storePendingEdit(stored, '/w/a', CONFIG, LOG_FILE);
     deepStrictEqual(
       [
-        await takePendingEdit(store.port, '/w/a', 1000),
-        await takePendingEdit(earlier.port, '/w/b', 1000),
-        await takePendingEdit(malformed.port, '/w/c', 1000),
+        takePendingEdit(stored, '/w/a'),
+        takePendingEdit(stored, '/w/b'),
+        takePendingEdit(stored, '/w/c'),
       ],
       [
         {configFile: CONFIG, logFile: LOG_FILE},
@@ -226,14 +263,14 @@ describe('the pending edit at activation (card containers-11)', () => {
     );
   });
 
-  /** The log lines of an activation whose memento read fails by `failure`. */
+  /** The log lines of an activation whose read of the handoff fails by `failure`. */
   async function linesAfterFailedRead(failure: () => never): Promise<string[]> {
     const sink = new MemorySink();
+    const handoffs = pendingEditHandoffsOn(new MemoryFiles());
     await openPendingEdit({
-      memento: {get: failure, update: () => Promise.resolve()},
+      handoffs: {...handoffs, store: {...handoffs.store, take: failure}},
       remoteName: () => undefined,
       folders: () => [{scheme: 'file', fsPath: '/w/proj'}],
-      now: () => 2000,
       open: () => Promise.resolve(),
       openLog: () => Promise.resolve(),
       exists: () => Promise.resolve(true),

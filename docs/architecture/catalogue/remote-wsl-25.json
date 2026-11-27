@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6206",
+  "issue": 25,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Recommendations: open in WSL, WSL file system, WSL 2",
+  "epic": "E62",
+  "acCount": 26
+ }
+]
