@@ -39,7 +39,8 @@ export type ContractScenario =
   | {kind: 'clientFile'; reachable: boolean}
   // The script backgrounds a long `sleep`, prints its pid, then waits.
   | {kind: 'backgroundsThenWaits'}
-  // The script starts a long `sleep` as the product starts its server (`nohup … </dev/null >/dev/null 2>&1 &`), prints its pid and ends normally.
+  // The script starts a long `sleep` as the product starts its server (`nohup … </dev/null >/dev/null 2>&1 &`), prints its pid,
+  // waits until the process says it is ready, and ends normally.
   | {kind: 'startsDetached'}
   // The script prints `out one` to standard output, `err one` to standard error, then `out two` to standard output.
   | {kind: 'printsBothStreams'}
@@ -411,7 +412,16 @@ export function ruleScriptOf(scenario: ContractScenario): string | undefined {
     case 'backgroundsThenWaits':
       return `sleep 40 & printf '%s\\n' "$!"; wait`;
     case 'startsDetached':
-      return `nohup sleep 40 </dev/null >/dev/null 2>&1 & printf '%s\\n' "$!"`;
+      return [
+        'READY=/tmp/channel-contract-ready.$$',
+        'export READY',
+        'rm -f "$READY"',
+        `nohup sh -c 'echo ready >"$READY"; exec sleep 40' </dev/null >/dev/null 2>&1 &`,
+        `printf '%s\\n' "$!"`,
+        'waited=0',
+        'while [ ! -e "$READY" ] && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$((waited + 1)); done',
+        'rm -f "$READY"',
+      ].join('\n');
     case 'printsBothStreams':
       return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
     case 'printsLongLine':

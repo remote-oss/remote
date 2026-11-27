@@ -169,4 +169,62 @@ describe('what real WSL does to a process a run started (card #3312, ruling-3312
   it('readout: each way of starting a process, beside a run that stays attached (a stand-in for a connected window)', async () => {
     strictEqual((await startAndWatch(true)).length, VARIANTS.length);
   });
+
+  /** How many of `count` runs of `script` left a process alive right after the run and 5 s after the last run. */
+  async function repeated(
+    name: string,
+    script: string,
+    count: number,
+  ): Promise<{right: number; later: number}> {
+    const processes: number[] = [];
+    let right = 0;
+    for (let index = 0; index < count; index += 1) {
+      const finished = await runLines(
+        channel,
+        script,
+        new AbortController().signal,
+      );
+      const processId = Number(finished.lines[0]);
+      started.push(processId);
+      processes.push(processId);
+      right += observe(
+        `${name} #${String(index + 1)}`,
+        processId,
+        'right after its run ended',
+      )
+        ? 1
+        : 0;
+    }
+    await wait(5);
+    const later = processes.filter(processId =>
+      observe(name, processId, '5 s later'),
+    ).length;
+    readout(
+      distro,
+      `${name}: of ${String(count)} runs, ${String(right)} alive right after, ${String(later)} alive 5 s later`,
+    );
+    return {right, later};
+  }
+
+  it('readout: the contract script run ten times ends at once; the same with a 1 s wait before it ends; setsid measured by the sleep itself', async () => {
+    const immediate = await repeated(
+      'immediate',
+      `nohup sleep 40 </dev/null >/dev/null 2>&1 & printf '%s\\n' "$!"`,
+      10,
+    );
+    const waiting = await repeated(
+      'wait 1 s',
+      `nohup sleep 40 </dev/null >/dev/null 2>&1 & printf '%s\\n' "$!"; sleep 1`,
+      10,
+    );
+    const setsid = await repeated(
+      'setsid, the sleep itself',
+      "setsid sleep 4001 </dev/null >/dev/null 2>&1 & sleep 0.5; pgrep -n -f '[s]leep 4001'",
+      3,
+    );
+    strictEqual(
+      [immediate, waiting, setsid].every(each => each.right >= 0),
+      true,
+    );
+  });
 });

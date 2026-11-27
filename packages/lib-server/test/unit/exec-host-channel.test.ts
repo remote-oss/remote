@@ -9,6 +9,7 @@ import {
   channelContractCases,
   LARGE_COPY_LENGTH,
   LONG_LINE_LENGTH,
+  ruleScriptOf,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
@@ -167,7 +168,7 @@ function scriptOf(scenario: ContractScenario): string {
     case 'backgroundsThenWaits':
       return `sleep 40 & printf '%s\\n' "$!"; wait`;
     case 'startsDetached':
-      return `nohup sleep 40 </dev/null >/dev/null 2>&1 & printf '%s\\n' "$!"`;
+      return ruleScriptOf(scenario) ?? 'true';
     case 'printsBothStreams':
       return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
     case 'printsLongLine':

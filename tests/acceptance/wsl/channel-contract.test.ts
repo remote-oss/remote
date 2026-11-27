@@ -26,10 +26,6 @@ import {
 /** The cases of the rules of `ruling-3269-channel-contract`: the cancel, the error stream and the bounds. */
 const RULE_CASES = 5;
 
-/** The case that stays pending on real WSL until athena rules on what its readouts show. */
-const DETACHED =
-  'leaves a process an ended run started with nohup running after a later run is cancelled';
-
 /** The largest write the staged run's `wsl.exe` was handed, which the bounded-copy case reads. */
 let largestWriteSeen = 0;
 
@@ -101,9 +97,6 @@ describe('the host channel over real WSL meets the shared contract (card #3312)'
   });
 
   for (const contractCase of cases) {
-    it(
-      `contracts §1: ${contractCase.name}${contractCase.name === DETACHED ? ' (pending ruling-3312-detached-case: see detached-readout.test.ts)' : ''}`,
-      contractCase.name === DETACHED ? undefined : contractCase.check,
-    );
+    it(`contracts §1: ${contractCase.name}`, contractCase.check);
   }
 });
