@@ -523,10 +523,7 @@ async function installServerFiles(
     commit: profile.commit,
     serverDataFolderName: serverDataFolderNameOrDefault(profile),
     launcher: `bin/${profile.serverApplicationName}`,
-    installPathSetting:
-      request.installRoot === undefined || request.installRoot === ''
-        ? undefined
-        : request.installRoot,
+    installPathSetting: undefined,
     placement: CONTAINERS_POLICY.downloadPlacement,
     useExecServerSetting: false,
     installTree,
