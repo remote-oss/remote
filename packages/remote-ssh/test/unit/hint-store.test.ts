@@ -4,7 +4,7 @@ import {
   hintEventsOf,
   type SessionRecord,
 } from '../../src/diagnostics/hint-store.ts';
-import {MemoryFiles} from './event-files.fixture.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
 
 /** The folder of the rows' hint files. */
 const FOLDER = '/profile/globalStorage/remote-oss.remote-ssh/connection-hints';

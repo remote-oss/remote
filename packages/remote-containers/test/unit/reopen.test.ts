@@ -1,10 +1,7 @@
 import {deepStrictEqual} from 'node:assert';
 import {devContainerTargetOf} from '../../src/authority/payload.ts';
 import {reopenHandlersOf} from '../../src/open/reopen.ts';
-import {
-  REBUILD_INTENTS_KEY,
-  type RebuildOptions,
-} from '../../src/open/rebuild-intent.ts';
+import {type RebuildOptions} from '../../src/open/rebuild-intent.ts';
 import type {ReopenPorts} from '../../src/open/reopen-ports.ts';
 import {pendingOf, settled} from './pending.ts';
 import {
@@ -875,13 +872,8 @@ describe('Reopen in Container', () => {
       [
         [
           [
-            REBUILD_INTENTS_KEY,
-            {
-              [authority.slice('dev-container+'.length)]: {
-                storedAt: 1000,
-                value: {removeExistingContainer: true, buildNoCache: false},
-              },
-            },
+            authority.slice('dev-container+'.length),
+            {removeExistingContainer: true, buildNoCache: false},
           ],
         ],
         [

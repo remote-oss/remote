@@ -8,12 +8,7 @@
  */
 
 import type {HistoryEntry, HostHistory} from 'lib-companion';
-import {
-  type EventFiles,
-  eventStoreOf,
-  isRecord,
-  type Winner,
-} from '../state/event-files.ts';
+import {type EventFiles, eventStoreOf, isRecord, type Winner} from 'lib-state';
 
 /** The key in the extension's global state where an earlier version kept the whole history. */
 export const FOLDER_HISTORY_KEY = 'folder.history.v1';

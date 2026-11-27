@@ -18,7 +18,11 @@ export type SetupAnswer = 'configure' | 'notNow';
 /** What the user answered to the restart notice. */
 export type RestartAnswer = 'quit' | 'later';
 
-/** Two flags the extension keeps in its global state, which the profile shares and settings sync does not carry. */
+/**
+ * The two flags of the setup: the dismissal, which the extension keeps in its global state, and the pending attempt,
+ * which it hands from one run of the editor to the next in a file of its own storage, so that no window's write of the
+ * global state can drop it.
+ */
 export interface SetupFlags {
   /** The user declined the setup; it silences warnings at activation until a probe succeeds. */
   dismissed(): boolean;
@@ -26,6 +30,11 @@ export interface SetupFlags {
   /** The user edited the runtime arguments and the next probe has not run yet. */
   attemptPending(): boolean;
   setAttemptPending(value: boolean): PromiseLike<void>;
+  /**
+   * Takes the pending attempt, once for all the windows that ask: true for the one window that took it, false for
+   * every other, and for all when none is pending.
+   */
+  claimAttemptPending(): PromiseLike<boolean>;
 }
 
 /** Who shows the one notification of the window. */
@@ -168,8 +177,12 @@ export async function runSetup(
       interaction: guarded(ports, () => offerRestart(ports)),
     };
   }
-  if (attemptPending) {
-    await ports.flags.setAttemptPending(false);
+  if (attemptPending && !(await ports.flags.claimAttemptPending())) {
+    // Another window took the attempt and tells its failure: this one adds nothing.
+    return {
+      decision: {kind: 'silent', missing: decision.missing},
+      interaction: Promise.resolve('finished'),
+    };
   }
   const notice: SetupNotice = attemptPending
     ? {kind: 'failedAttempt'}

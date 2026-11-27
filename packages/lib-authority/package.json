@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "lib-log": "workspace:*"
+    "lib-log": "workspace:*",
+    "lib-state": "workspace:*"
   },
   "exports": {
     ".": {
