@@ -231,7 +231,7 @@ describe('host channel over the shared ssh session: the lib-host contract', func
   }
 
   const HARNESS: ChannelHarness = {
-    pendingOn: '#3281',
+    pendingOn: 'the shell-runs card',
     scriptFailures: ['channelClosed', 'timeout'],
     copyFailures: [],
     reachesClientFiles: false,
