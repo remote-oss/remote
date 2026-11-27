@@ -39,6 +39,7 @@ A library exists only when at least two packages need the same behaviour; everyt
 | `lib-wsl` | The `wsl.exe` runner, distro inventory, path mapper and the WSL host-channel implementation (added 2026-10-06, area D dossier) | wsl; containers for Docker-in-WSL (F-0204, F-0207, F-1301) | `lib-host`, `lib-log` |
 | `lib-helper` | The detached-helper pattern: a client, a runtime with end policies as data (grace, delayed check with an action, idle), a registry per profile or per user with atomic claim and nonce (added 2026-10-06, area A draft, area C reviews); and the askpass relay (endpoint, launcher, program, environment), whose question classifier is the caller's (moved from lib-ssh for group 13, 2026-11-03) | lib-ssh (the local connection server), containers (the F-0417 watchdog, and the askpass relay for git's prompts) | `lib-host`, `lib-log` |
 | `lib-forwarding` | The window tunnel to the server (local port range search, relay or socket); the resolver's tunnel factory; default and static forwards (`tunnels` proposal); port attributes | ssh, wsl, containers, server | `lib-log` |
+| `lib-state` | The state many windows of one profile add to, in files of an extension's global storage folder given as a path: the per-window event files (each window writes only its own; a read merges them, the newest event of a key deciding; a day-old file is folded by a claim rename), the reload handoffs (one file for each, taken by a claim rename so that exactly one window acts) and the file port both use; no `vscode` import (`ruling-3099-lib-state`, `ruling-3100-gate-handoff`) | ssh (the folder history, the session hints), containers (the reload handoffs), `lib-authority` (the gate's attempt flag) | nothing |
 
 Not a library, by the two-consumer rule: the tunnel client (service calls through the shipped executable, sign-in
 through `vscode.authentication`, the tunnel picker) lives in `remote-server`; the containers engine (dev container
@@ -52,15 +53,15 @@ remote-extensionpack  ->  (nothing)
 remote-ssh-edit       ->  lib-identifiers   (no log by F-4002 AC-14; no stand-down by F-4901 §6)
 remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-authority (gate only)   (no log by F-5901 §6; no product use)
 remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-forwarding, lib-companion, lib-log
-remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-log
+remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-state, lib-log
 remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log
-remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log  (+ lib-ssh if F-1302 lands the hop here)
+remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-state, lib-log  (+ lib-ssh if F-1302 lands the hop here)
 tunnel-agent          ->  lib-identifiers, lib-server, lib-host, lib-log   (a service, ADR-0016; outside the editor)
 
 lib-ssh -> lib-host, lib-helper, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log
-lib-authority -> lib-identifiers, lib-standdown, lib-log       lib-companion -> lib-identifiers, lib-log
+lib-authority -> lib-identifiers, lib-standdown, lib-state, lib-log       lib-companion -> lib-identifiers, lib-log
 lib-standdown -> lib-identifiers           lib-product -> (nothing)       lib-forwarding -> lib-log
-lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log       lib-helper -> lib-host, lib-log
+lib-state -> (nothing)       lib-host -> (nothing)       lib-identifiers -> (nothing)       lib-log -> (nothing)       lib-wsl -> lib-host, lib-log       lib-helper -> lib-host, lib-log
 ```
 
 No cycles; `lib-log`, `lib-identifiers`, `lib-host` and `lib-product` are the roots (neither identifiers nor stand-down logs anything under the specs: the warning and the R-46 line are UI, 2026-10-06). The lint of ADR-0002 enforces the edges once the packages exist.

@@ -105,7 +105,7 @@ function fakeEditor(commands: string[], shown: Shown, extensionPath: string) {
 function contextOf(): Pick<
   vscode.ExtensionContext,
   'globalState' | 'subscriptions' | 'extension'
-> {
+> & {globalStorageUri: Pick<vscode.Uri, 'fsPath'>} {
   const stored = new Map<string, unknown>();
   return {
     globalState: {
@@ -117,6 +117,7 @@ function contextOf(): Pick<
       },
       setKeysForSync: () => undefined,
     },
+    globalStorageUri: {fsPath: '/profile/globalStorage/fixture'},
     subscriptions: [],
     extension: {id: EXTENSION_ID} as unknown as vscode.Extension<unknown>,
   };
