@@ -166,8 +166,8 @@ function scriptOf(scenario: ContractScenario): string {
       return "sha256sum | cut -d ' ' -f 1";
     case 'backgroundsThenWaits':
       return `sleep 40 & printf '%s\\n' "$!"; wait`;
-    case 'detachesThenWaits':
-      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+    case 'startsDetached':
+      return `nohup sleep 40 </dev/null >/dev/null 2>&1 & printf '%s\\n' "$!"`;
     case 'printsBothStreams':
       return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
     case 'printsLongLine':

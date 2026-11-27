@@ -105,12 +105,10 @@ function setupFor(scenario: ContractScenario): RecordingSetup {
         ...BASE,
         scripts: answered([String(TREE_CHILD)], {kind: 'holdUntilCancelled'}),
       };
-    case 'detachesThenWaits':
+    case 'startsDetached':
       return {
         ...BASE,
-        scripts: answered([String(DETACHED_CHILD)], {
-          kind: 'holdUntilCancelled',
-        }),
+        scripts: answered([String(DETACHED_CHILD)], {kind: 'exit', status: 0}),
       };
     case 'printsBothStreams':
       return {
@@ -142,7 +140,7 @@ function setupFor(scenario: ContractScenario): RecordingSetup {
 /** The pid the fake's backgrounding script prints, a process its cancel ends. */
 const TREE_CHILD = 111;
 
-/** The pid the fake's detaching script prints, a process outside the script's tree. */
+/** The pid the fake's detaching script prints, a process its run left running when it ended. */
 const DETACHED_CHILD = 222;
 
 /** The fake host's running processes: only the detached child, until a case ends it. */
@@ -219,7 +217,7 @@ describe('host channel contract cases', () => {
         'ends a copy cancelled before the call as cancelled',
         'gives no host path for a client file the host cannot read directly',
         "ends a cancelled script's whole tree: a backgrounded child is gone",
-        'leaves a process the script detached from its tree running after a cancel',
+        'leaves a process an ended run started with nohup running after a later run is cancelled',
         'delivers standard error with standard output, in the order the script wrote them',
         'delivers a line with no line end in parts of at most 65536 characters, all of it',
         'writes a large copy in pieces of at most 65536 bytes',
@@ -322,14 +320,14 @@ describe('ruleScriptOf (card #3312)', () => {
   it('gives a script for each scenario a real shell plays out, and none for the others', () => {
     const scripts = [
       {kind: 'backgroundsThenWaits'},
-      {kind: 'detachesThenWaits'},
+      {kind: 'startsDetached'},
       {kind: 'printsBothStreams'},
       {kind: 'printsLongLine'},
       {kind: 'copiesLarge'},
     ].map(scenario => ruleScriptOf(scenario as ContractScenario));
     deepStrictEqual(
       scripts.map(script => script?.slice(0, 5)),
-      ['sleep', '(sets', 'print', 'head ', undefined],
+      ['sleep', 'nohup', 'print', 'head ', undefined],
     );
   });
 });

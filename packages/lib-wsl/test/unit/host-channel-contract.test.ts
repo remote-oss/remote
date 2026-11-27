@@ -113,7 +113,7 @@ function runsFor(scenario: ContractScenario): () => FakeRun {
 /** The scenarios a real shell plays out: the distro's side, on this machine's `sh`. */
 const REAL_SHELL_SCENARIOS = new Set<ContractScenario['kind']>([
   'backgroundsThenWaits',
-  'detachesThenWaits',
+  'startsDetached',
   'printsBothStreams',
   'printsLongLine',
   'copiesLarge',

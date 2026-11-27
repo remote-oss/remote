@@ -99,7 +99,7 @@ const PLANS: {
   missingInputFile: () => [prints([], 0)],
   clientFile: () => [prints([], 0)],
   backgroundsThenWaits: () => [],
-  detachesThenWaits: () => [],
+  startsDetached: () => [],
   printsBothStreams: () => [],
   printsLongLine: () => [],
   copiesLarge: () => [],
