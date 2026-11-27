@@ -113,7 +113,9 @@ function setupEditor(
 function contextOf(
   stored: Map<string, boolean>,
   subscriptions: Array<{dispose(): void}>,
-): Pick<vscode.ExtensionContext, 'globalState' | 'subscriptions'> {
+): Pick<vscode.ExtensionContext, 'globalState' | 'subscriptions'> & {
+  globalStorageUri: Pick<vscode.Uri, 'fsPath'>;
+} {
   const globalState: vscode.ExtensionContext['globalState'] = {
     keys: () => [...stored.keys()],
     get: (key: string) => stored.get(key) as never,
@@ -123,7 +125,11 @@ function contextOf(
     },
     setKeysForSync: () => undefined,
   };
-  return {globalState, subscriptions};
+  return {
+    globalState,
+    globalStorageUri: {fsPath: '/profile/globalStorage/fixture'},
+    subscriptions,
+  };
 }
 
 describe('the editor behind the setup', () => {

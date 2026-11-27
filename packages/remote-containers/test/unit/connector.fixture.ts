@@ -41,7 +41,9 @@ import type {
   ContainerRequest,
   ContainerStep,
 } from '../../src/lifecycle/container-lifecycle.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
 import {storeRebuildIntent} from '../../src/open/rebuild-intent.ts';
+import {rebuildHandoffsOn} from './handoff-kinds.fixture.ts';
 import type {
   RelayHostRequest,
   RelayHostStart,
@@ -144,9 +146,12 @@ export interface Scene {
   /** What the version query answers: its status and stderr. */
   version: {status: number; stderr: string};
   prepared: ContainerRequest[];
-  /** What the extension's store holds under the rebuild key, and the error its reading throws, if any. */
-  intentStore: unknown;
+  /** The rebuild intents the extension's storage holds, and the error taking one throws, if any. */
+  files: MemoryFiles;
   intentError: Error | undefined;
+  /** What the global state holds of the paused retries, and the error its reading throws, if any. */
+  retryStore: unknown;
+  retryError: Error | undefined;
   configurationReads: Array<{
     target: CliTarget;
     containerId: string | undefined;
@@ -397,8 +402,10 @@ export function sceneOf(
     inspect: {answer: {status: 'running', startedAt: '2026-10-14T10:00:00Z'}},
     version: {status: 0, stderr: ''},
     prepared: [],
-    intentStore: undefined,
+    files: new MemoryFiles(),
     intentError: undefined,
+    retryStore: undefined,
+    retryError: undefined,
     configurationReads: [],
     serverRequests: [],
     relayRequests: [],
@@ -779,14 +786,26 @@ export function sceneOf(
       };
     },
     intents: {
+      ...rebuildHandoffsOn(scene.files),
+      store: {
+        ...rebuildHandoffsOn(scene.files).store,
+        take: key => {
+          if (scene.intentError !== undefined) {
+            throw scene.intentError;
+          }
+          return rebuildHandoffsOn(scene.files).store.take(key);
+        },
+      },
+    },
+    pausedRetries: {
       get: () => {
-        if (scene.intentError !== undefined) {
-          throw scene.intentError;
+        if (scene.retryError !== undefined) {
+          throw scene.retryError;
         }
-        return scene.intentStore;
+        return scene.retryStore;
       },
       update: (key, value) => {
-        scene.intentStore = value;
+        scene.retryStore = value;
         return Promise.resolve();
       },
     },
@@ -924,18 +943,9 @@ export async function leaveRebuildIntent(
   scene: Scene,
   payload: string,
 ): Promise<void> {
-  await storeRebuildIntent(
-    {
-      get: () => scene.intentStore,
-      update: (key, value) => {
-        scene.intentStore = value;
-        return Promise.resolve();
-      },
-    },
-    payload,
-    {buildNoCache: true},
-    0,
-  );
+  await storeRebuildIntent(rebuildHandoffsOn(scene.files), payload, {
+    buildNoCache: true,
+  });
 }
 
 /**

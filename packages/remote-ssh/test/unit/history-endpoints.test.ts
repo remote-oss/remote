@@ -12,7 +12,8 @@ import {
 import {createRecordingFake} from 'lib-companion/testing/recording-fake';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
-import {legacyOf, MemoryFiles, windowOn} from './history-files.fixture.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
+import {legacyOf, windowOn} from './history-files.fixture.ts';
 import {serveHistoryEndpoints} from '../../src/companion/history-endpoints.ts';
 import {mismatchLine} from '../../src/companion/slice-endpoints.ts';
 

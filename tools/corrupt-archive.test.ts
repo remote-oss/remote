@@ -5,6 +5,7 @@ import {
   brokerUrlOf,
   corruptArchiveLines,
   corruptArchiveName,
+  failingDownload,
   probeArchive,
   probeText,
   secondBuildText,
@@ -61,6 +62,45 @@ describe('the corrupt archive of a Feature download (card #2675)', () => {
         '#14 64.95 (!) Installing maven  via SDKMAN failed after 5 attempts.',
       ]),
       'SDKMAN served a corrupt maven 3.10.1 archive (Stop! The archive was corrupt and has been removed!)',
+    );
+  });
+
+  it('#2675: a build that downloaded the JDK and then maven is named for maven, the download its last verdict follows, and not for the first download of the log', () => {
+    const lines = [
+      '#14 7.51 Downloading: java 27.0.1.1+4-tem',
+      '#14 26.83 Downloading: maven 3.10.2',
+      '#14 27.37 Stop! The archive was corrupt and has been removed! Please try installing again.',
+      '#14 37.40 Downloading: maven 3.10.2',
+      '#14 37.90 Stop! The archive was corrupt and has been removed! Please try installing again.',
+      '#14 38.00 (!) Installing maven  via SDKMAN failed after 5 attempts.',
+    ];
+    deepStrictEqual(
+      [failingDownload(lines), corruptArchiveName(lines)],
+      [
+        'maven 3.10.2',
+        'SDKMAN served a corrupt maven 3.10.2 archive (Stop! The archive was corrupt and has been removed!)',
+      ],
+    );
+  });
+
+  it('#2675: a corrupt archive that SDKMAN recovered from, before the one it gave up on, does not name the first archive', () => {
+    deepStrictEqual(
+      failingDownload([
+        '#14 7.51 Downloading: java 27.0.1.1+4-tem',
+        '#14 8.20 Stop! The archive was corrupt and has been removed! Please try installing again.',
+        '#14 18.30 Downloading: java 27.0.1.1+4-tem',
+        '#14 40.00 Downloading: maven 3.10.2',
+        '#14 40.50 Stop! The archive was corrupt and has been removed! Please try installing again.',
+        '#14 41.00 (!) Installing maven  via SDKMAN failed after 5 attempts.',
+      ]),
+      'maven 3.10.2',
+    );
+  });
+
+  it('#2675: a log with no corrupt archive has no failing download', () => {
+    deepStrictEqual(
+      failingDownload(['#14 64.43 Downloading: maven 3.10.1']),
+      undefined,
     );
   });
 

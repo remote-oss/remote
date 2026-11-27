@@ -47,6 +47,7 @@ import {
   settingsText,
 } from './maintenance.ts';
 import {changedKeys, extensionState} from './global-state.ts';
+import {hintRecords} from './hint-store.ts';
 
 /** The authority of a window on the `harness` alias. */
 const HARNESS_AUTHORITY = 'ssh-remote+harness';
@@ -124,15 +125,13 @@ function emptyConnectedWithin(
   );
 }
 
-/** The key under which the extension's global state keeps the records of the resolves (its session records). */
-const HINT_STORE_KEY = 'remote.ssh.hints';
-
 describe('New Window on Active Host (card coverage-42)', function () {
   this.timeout(600_000);
 
-  /** The settings file and the extension's global state when the first window is connected. */
+  /** The settings file, the extension's global state and the starts of its session records when the first window is connected. */
   let settingsBefore = '';
   let stateBefore: Record<string, unknown> = {};
+  let recordsBefore: string[] = [];
 
   before(closeAllButLocal);
 
@@ -144,6 +143,7 @@ describe('New Window on Active Host (card coverage-42)', function () {
     await new Promise(resolve => setTimeout(resolve, 5000));
     settingsBefore = settingsText();
     stateBefore = await extensionState();
+    recordsBefore = hintRecords().map(each => each.started);
     const before = await logins();
     const mark = recordLines().length;
     const firstBefore = await windowState('a1');
@@ -186,16 +186,11 @@ describe('New Window on Active Host (card coverage-42)', function () {
     );
   });
 
-  it('F-2303 AC-20: the new window changes no setting and stores no global state but its session record', async () => {
+  it('F-2303 AC-20: the new window changes no setting and stores no global state, and its session record is the one added to the hint files', async () => {
     await new Promise(resolve => setTimeout(resolve, 5000));
     const after = await extensionState();
-    function records(state: Record<string, unknown>): string[] {
-      const store = state[HINT_STORE_KEY] as
-        {records?: Array<{started: string}>} | undefined;
-      return (store?.records ?? []).map(each => each.started);
-    }
-    const before = records(stateBefore);
-    const now = records(after);
+    const before = recordsBefore;
+    const now = hintRecords().map(each => each.started);
     deepStrictEqual(
       {
         settings: settingsText() === settingsBefore,
@@ -211,7 +206,7 @@ describe('New Window on Active Host (card coverage-42)', function () {
       {
         settings: true,
         newKeys: [],
-        changed: [HINT_STORE_KEY],
+        changed: [],
         added: [Math.min(2, before.length + 1), true, true],
       },
     );

@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6004",
+  "issue": 15,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Get Started walkthrough",
+  "epic": "E60",
+  "acCount": 29
+ }
+]
