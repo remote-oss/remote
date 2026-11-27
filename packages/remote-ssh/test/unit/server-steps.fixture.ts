@@ -221,6 +221,7 @@ export function leaseOn(channel: RecordingChannel): ConnectionLease {
     storedRecord: undefined,
     startedHelper: true,
     storeSharedRecord: () => Promise.resolve(true),
+    storeSharedCli: () => Promise.resolve({kind: 'stored'}),
     onNotice: () => () => undefined,
     answer: () => Promise.resolve(false),
     refuse: () => Promise.resolve(false),

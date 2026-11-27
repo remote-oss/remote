@@ -324,6 +324,11 @@ describe("the connect's CLI path: what it leaves for later windows", () => {
       [true, [[undefined, 0, 5432, CONTROL_TOKEN, 'stop the CLI 88']]],
     );
   });
+
+  it('ruling-3305-shared-cli-cas: a window that found no program offers its own in place of none', async () => {
+    const {recording} = await connectOverCli();
+    deepStrictEqual(recording.replacing, [null]);
+  });
 });
 
 describe("the connect's CLI path: the fallback before the window resolves", () => {
@@ -640,7 +645,8 @@ describe("the connect's CLI path: after the window resolved", () => {
             kind: 'done',
             value: {
               ...lease,
-              storeSharedRecord: () => Promise.resolve(shared),
+              storeSharedCli: () =>
+                Promise.resolve(shared ? {kind: 'stored'} : {kind: 'declined'}),
               release: () => {
                 order.push('lease');
               },
@@ -975,8 +981,9 @@ describe("the connect's CLI path: a later window takes up the connection's progr
         messages().some(line =>
           line.includes("the CLI the connection shares didn't take its token"),
         ),
+        recording.replacing,
       ],
-      ['connected', true, [5432], true],
+      ['connected', true, [5432], true, ['an old token']],
     );
   });
 
@@ -1038,7 +1045,7 @@ describe("the connect's CLI path: a later window takes up the connection's progr
           kind: 'done',
           value: {
             ...leaseOf(recording),
-            storeSharedRecord: () => Promise.reject(new Error('gone')),
+            storeSharedCli: () => Promise.reject(new Error('gone')),
           },
         }),
     }));
@@ -1086,6 +1093,80 @@ describe("the connect's CLI path: a later window takes up the connection's progr
           line.includes('host-connection-token'),
       ),
       [],
+    );
+  });
+});
+
+/** A connect over the CLI path that found no program, whose offer of its own the connection keeps out for `kept`. */
+async function outrun(kept: typeof SHARED_CLI) {
+  let offers = 0;
+  const overCli = await connectOverCli(undefined, recording => ({
+    openConnection: () =>
+      Promise.resolve({
+        kind: 'done',
+        value: {
+          ...leaseOf(recording),
+          storeSharedCli: () => {
+            offers += 1;
+            return Promise.resolve({kind: 'kept', sharedCli: kept} as const);
+          },
+        },
+      }),
+  }));
+  return {...overCli, offers: () => offers};
+}
+
+/** The stops of CLIs a connect ran. */
+function stopsOf(calls: readonly string[]): string[] {
+  return calls.filter(call => call.startsWith('stopCli'));
+}
+
+describe("the connect's CLI path: two windows' first connects at once (ruling-3305-shared-cli-cas)", () => {
+  it('a window whose offer the connection keeps out takes up the kept program before its first serve and stops its own', async () => {
+    const {result, recording, bridged, messages} = await outrun(SHARED_CLI);
+    deepStrictEqual(
+      [
+        kindOf(result),
+        stopsOf(recording.calls),
+        bridged.serveParams?.connectionToken,
+        messages().includes(
+          'another window shared its CLI first: this window takes that one up',
+        ),
+      ],
+      ['connected', ['stopCli 88'], 'shared-server-token', true],
+    );
+  });
+
+  it('a window that took up the kept program stops nothing at its release: the connection server does when it ends', async () => {
+    const {result, recording} = await outrun(SHARED_CLI);
+    connectedOf(result).release();
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    deepStrictEqual(stopsOf(recording.calls), ['stopCli 88']);
+  });
+
+  it("a kept program the window can't take up leaves the window on its own, which it stops at its release, and it offers no second time", async () => {
+    const {result, recording, bridged, messages, offers} = await outrun({
+      ...SHARED_CLI,
+      controlToken: 'an old token',
+    });
+    const before = stopsOf(recording.calls);
+    connectedOf(result).release();
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    deepStrictEqual(
+      [
+        before,
+        stopsOf(recording.calls),
+        bridged.serveParams?.connectionToken === 'shared-server-token',
+        offers(),
+        messages().some(line =>
+          line.endsWith('(challengeRefused): this window keeps its own'),
+        ),
+      ],
+      [[], ['stopCli 88'], false, 1, true],
     );
   });
 });

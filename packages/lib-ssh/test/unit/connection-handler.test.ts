@@ -1530,7 +1530,7 @@ describe('connection handler (contracts §4 S9)', () => {
       await ended;
     }
 
-    it("keeps the record's program when a window stores a record without one, and takes a new one when stored", async () => {
+    it("keeps the record's program when a window stores a record without one, and takes a new one an earlier window stores, which names nothing it replaces", async () => {
       await connected();
       await send(1, {
         type: 'setSharedRecord',
@@ -1551,6 +1551,78 @@ describe('connection handler (contracts §4 S9)', () => {
         [
           {...RECORD, remotePort: 41002, sharedCli: SHARED_PROGRAM},
           {...RECORD, sharedCli: other},
+        ],
+      );
+    });
+
+    /** The connection's reply to a record naming `program` in place of `replacing`, after one naming `first`. */
+    async function offered(
+      first: typeof SHARED_PROGRAM | undefined,
+      program: typeof SHARED_PROGRAM,
+      replacing: string | null,
+    ): Promise<unknown> {
+      await connected();
+      if (first !== undefined) {
+        await send(1, {
+          type: 'setSharedRecord',
+          record: {...RECORD, sharedCli: first},
+          replacing: null,
+        });
+      }
+      return send(2, {
+        type: 'setSharedRecord',
+        record: {...RECORD, remotePort: 41002, sharedCli: program},
+        replacing,
+      });
+    }
+
+    const OTHER_PROGRAM = {
+      ...SHARED_PROGRAM,
+      port: 31546,
+      controlToken: 'other-token',
+    };
+
+    it('ruling-3305-shared-cli-cas: a program offered in place of none, while the connection shares one, is kept out, and the reply names the one it keeps', async () => {
+      const reply = await offered(SHARED_PROGRAM, OTHER_PROGRAM, null);
+      deepStrictEqual(
+        [reply, await sharedRecord()],
+        [
+          {type: 'sharedCliKept', sharedCli: SHARED_PROGRAM},
+          {...RECORD, sharedCli: SHARED_PROGRAM},
+        ],
+      );
+    });
+
+    it('ruling-3305-shared-cli-cas: a program offered in place of one the connection no longer shares is kept out too', async () => {
+      const reply = await offered(SHARED_PROGRAM, OTHER_PROGRAM, 'old-token');
+      deepStrictEqual(reply, {
+        type: 'sharedCliKept',
+        sharedCli: SHARED_PROGRAM,
+      });
+    });
+
+    it('ruling-3305-shared-cli-cas: a program offered in place of the one the connection shares replaces it', async () => {
+      const reply = await offered(
+        SHARED_PROGRAM,
+        OTHER_PROGRAM,
+        SHARED_PROGRAM.controlToken,
+      );
+      deepStrictEqual(
+        [reply, await sharedRecord()],
+        [
+          {type: 'accepted'},
+          {...RECORD, remotePort: 41002, sharedCli: OTHER_PROGRAM},
+        ],
+      );
+    });
+
+    it('ruling-3305-shared-cli-cas: a program offered in place of one, when the connection shares none, is taken', async () => {
+      const reply = await offered(undefined, OTHER_PROGRAM, 'old-token');
+      deepStrictEqual(
+        [reply, await sharedRecord()],
+        [
+          {type: 'accepted'},
+          {...RECORD, remotePort: 41002, sharedCli: OTHER_PROGRAM},
         ],
       );
     });
