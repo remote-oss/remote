@@ -267,3 +267,9 @@ describe('host channel over the shared ssh session: the lib-host contract', func
     );
   }
 });
+
+describe('host channel over the shared session: a PowerShell host', () => {
+  it(
+    'ends a cancelled PowerShell script’s whole tree, the session surviving (pending #3307)',
+  );
+});
