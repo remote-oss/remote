@@ -7,6 +7,7 @@ import {FakeEndpointPort} from 'lib-helper/testing/fake-endpoint';
 import {
   ConnectionHandler,
   type ConnectionHandlerOptions,
+  SHARED_CLI_STOP_MILLISECONDS,
 } from '../../src/index.ts';
 import {
   type FakeClientProcess,
@@ -1658,6 +1659,46 @@ describe('connection handler (contracts §4 S9)', () => {
       deepStrictEqual(
         logged.filter(line => line.includes('shared CLI')),
         ['the shared CLI was not stopped: channelClosed'],
+      );
+    });
+
+    it('runs nothing at the end once a session check has ended the session, though the record names a program', async () => {
+      await connected();
+      await send(1, {
+        type: 'setSharedRecord',
+        record: {...RECORD, sharedCli: SHARED_PROGRAM},
+      });
+      probeScript.answers = false;
+      const checked = send(1, {type: 'checkSession'});
+      await settled();
+      clock.advance(3000);
+      await checked;
+      await handler.runAction('stopSharedCli');
+      deepStrictEqual(
+        [
+          spawner.started[0]?.inputText().includes("sh -c 'stop it'"),
+          logged.filter(line => line.includes('shared CLI')),
+        ],
+        [false, []],
+      );
+    });
+
+    it('gives the stop its own bound: a stop the session never answers ends as a timeout once that bound has passed', async () => {
+      await connected();
+      await send(1, {
+        type: 'setSharedRecord',
+        record: {...RECORD, sharedCli: SHARED_PROGRAM},
+      });
+      const ended = handler.runAction('stopSharedCli');
+      await settled();
+      clock.advance(SHARED_CLI_STOP_MILLISECONDS - 1);
+      await settled();
+      const early = logged.filter(line => line.includes('shared CLI'));
+      clock.advance(1);
+      await ended;
+      deepStrictEqual(
+        [early, logged.filter(line => line.includes('shared CLI'))],
+        [[], ['the shared CLI was not stopped: timeout']],
       );
     });
 

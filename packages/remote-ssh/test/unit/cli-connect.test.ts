@@ -1,6 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import type {Failed} from 'lib-authority';
-import type {CliScript, Request} from 'lib-server/testing/fake-cli';
+import {
+  type CliScript,
+  fakeCli,
+  type FakeCli,
+  type Request,
+} from 'lib-server/testing/fake-cli';
 import type {CliBridgeLoss} from '../../src/cli/cli-bridge.ts';
 import {TOKEN_NOT_REQUIRED} from '../../src/cli/cli-connect.ts';
 import {
@@ -984,6 +989,25 @@ describe("the connect's CLI path: a later window takes up the connection's progr
         recording.replacing,
       ],
       ['connected', true, [5432], true, ['an old token']],
+    );
+  });
+
+  it('a shared program that refuses its token has its control connection and tunnel closed before the window starts its own', async () => {
+    const programs: FakeCli[] = [];
+    const {recording} = await joining(
+      {...SHARED_CLI, controlToken: 'an old token'},
+      undefined,
+      () => ({
+        connectControl: () => {
+          const program = fakeCli(requiringToken(CONTROL_TOKEN));
+          programs.push(program);
+          return Promise.resolve(program.stream);
+        },
+      }),
+    );
+    deepStrictEqual(
+      [programs.map(program => program.closes()), recording.tunnelCloses],
+      [[1, 0], 1],
     );
   });
 
