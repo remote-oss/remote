@@ -9,6 +9,7 @@ import {
   closeWindow,
   connected,
   connectedWithin,
+  connectionLog,
   inWindow,
   nextEmptyWindow,
   openWindow,
@@ -32,6 +33,10 @@ import {stamped} from './stamped-steps.ts';
 
 /** The stage of the setup's notification that a window that found the server running must not show. */
 const DOWNLOADING = 'Downloading VS Code Server';
+
+/** The line of a window whose offer of its CLI the connection kept out, since another window's came first. */
+const OUTRUN =
+  'another window shared its CLI first: this window takes that one up';
 
 /** The stages window `name` showed of the setup's notification, in order, each once. */
 function stagesOf(name: string): string[] {
@@ -107,6 +112,47 @@ describe('the exec-server mode across windows and modes (card #3028, F-2103)', f
           if (window !== '') {
             await closeWindow(window).catch(() => undefined);
           }
+        }
+      }
+    });
+  });
+
+  it('F-2103 AC-10 (c3305-concurrent-first): two windows that open on a fresh host at once share one connection, and the one whose CLI the connection kept out takes up the other: the host runs one CLI and one server', async () => {
+    await keepingSettings(async () => {
+      const rowName = 'c3305-concurrent-first';
+      const windows = ['c3305-cf-one', 'c3305-cf-two'];
+      await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
+      await userSettings({...PLATFORMS});
+      const logged = connectionLog().length;
+      try {
+        await stamped(rowName, 'both windows open at once', 60_000, () =>
+          Promise.all(windows.map(name => openWindow('harness', name))),
+        );
+        await stamped(rowName, 'both connect', 130_000, () =>
+          Promise.all(windows.map(name => connectedWithin(name, 120_000))),
+        );
+        await stamped(rowName, "the outrun CLI's stop", 20_000, () =>
+          waitFor(
+            'one CLI on the host',
+            async () => (await cliProcessLines()).length <= 1,
+            15_000,
+          ),
+        );
+        await sameOrTell(
+          {
+            outrun: connectionLog()
+              .slice(logged)
+              .filter(line => line.includes(OUTRUN)).length,
+            servers: (await execServerPids()).length,
+            cliProcesses: (await execFacts()).cliProcesses,
+          },
+          {outrun: 1, servers: 1, cliProcesses: 1},
+          async () =>
+            `the CLI processes (pid, parent, command): ${JSON.stringify(await cliProcessLines())}`,
+        );
+      } finally {
+        for (const name of windows) {
+          await closeWindow(name).catch(() => undefined);
         }
       }
     });
