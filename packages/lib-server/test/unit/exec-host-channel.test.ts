@@ -550,6 +550,27 @@ describe('host channel over an exec server', () => {
     );
   });
 
+  /** The outcome of a cancelled run. */
+  const CANCELLED = {
+    kind: 'failed',
+    failure: {kind: 'cancelled', detail: 'the run was cancelled'},
+  };
+
+  /** Runs `script` on `server` under `cancellation`, and gives its outcome and whether `marker` was then written. */
+  async function cancelledAndUnwritten(
+    server: ChannelServer,
+    script: string,
+    cancellation: AbortSignal,
+    marker: string,
+  ): Promise<[unknown, string]> {
+    const outcome = await runWith(
+      server,
+      {script, cancellation},
+      () => undefined,
+    );
+    return [outcome, await markerAfterCancel(marker)];
+  }
+
   /** Whether `marker` was written by the time a cancelled script's next command would have run. */
   async function markerAfterCancel(marker: string): Promise<string> {
     await new Promise(resolve => setTimeout(resolve, 900));
@@ -573,20 +594,14 @@ describe('host channel over an exec server', () => {
     setTimeout(() => {
       controller.abort();
     }, 40);
-    const outcome = await runWith(
-      slow,
-      {script: `sleep 0.3; touch '${marker}'`, cancellation: controller.signal},
-      () => undefined,
-    );
     deepStrictEqual(
-      [outcome, await markerAfterCancel(marker)],
-      [
-        {
-          kind: 'failed',
-          failure: {kind: 'cancelled', detail: 'the run was cancelled'},
-        },
-        'absent',
-      ],
+      await cancelledAndUnwritten(
+        slow,
+        `sleep 0.3; touch '${marker}'`,
+        controller.signal,
+        marker,
+      ),
+      [CANCELLED, 'absent'],
     );
   });
 
@@ -636,20 +651,14 @@ describe('host channel over an exec server', () => {
         return command;
       },
     };
-    const outcome = await runWith(
-      cancelling,
-      {script: `touch '${marker}'`, cancellation: controller.signal},
-      () => undefined,
-    );
     deepStrictEqual(
-      [outcome, await markerAfterCancel(marker)],
-      [
-        {
-          kind: 'failed',
-          failure: {kind: 'cancelled', detail: 'the run was cancelled'},
-        },
-        'absent',
-      ],
+      await cancelledAndUnwritten(
+        cancelling,
+        `touch '${marker}'`,
+        controller.signal,
+        marker,
+      ),
+      [CANCELLED, 'absent'],
     );
   });
 
