@@ -65,6 +65,19 @@ export function killLoginsOf(
   );
 }
 
+/**
+ * The logins still up that were accepted from a second before the host pick: the killed window's reconnect, which stays
+ * up, and anything else that logged in and stayed. A row ties each of them to an ssh client the editor started.
+ */
+export function stillUpOf(
+  logins: readonly HostLogin[],
+  pick: number,
+): HostLogin[] {
+  return logins.filter(
+    login => login.accepted >= pick - 1000 && login.ended === undefined,
+  );
+}
+
 /** The logins as a red says them: each one's acceptance and end, in milliseconds from the host pick. */
 export function loginsText(logins: readonly HostLogin[], pick: number): string {
   return logins.length === 0

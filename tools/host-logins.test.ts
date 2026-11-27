@@ -3,6 +3,7 @@ import {
   hostLoginsOf,
   killLoginsOf,
   loginsText,
+  stillUpOf,
 } from '../tests/acceptance/windows/host-logins.ts';
 
 /** A `docker logs --timestamps` line of the host's sshd at `ms` milliseconds after a fixed second. */
@@ -105,6 +106,21 @@ describe('the key logins of the host’s sshd and the kill’s own (card #3275, 
         'a:1 accepted 70 ms, ended 300 ms; a:2 accepted 420 ms, still up',
         'no login',
       ],
+    );
+  });
+
+  it('#3275: the logins still up are those accepted from a second before the pick that have not ended, the kill’s own ended one and one from before that second not among them', () => {
+    const pick = BASE + 5000;
+    const logins = hostLoginsOf([
+      line(1000, accepted(1)),
+      line(4100, accepted(2)),
+      line(4200, ended(2)),
+      line(4500, accepted(3)),
+      line(6000, accepted(4)),
+    ]);
+    deepStrictEqual(
+      stillUpOf(logins, pick).map(login => login.peer),
+      ['172.17.0.1:3', '172.17.0.1:4'],
     );
   });
 });

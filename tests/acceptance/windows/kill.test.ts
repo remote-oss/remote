@@ -9,6 +9,7 @@ import {
   connectedWithin,
   hostAliases,
   hostAnswer,
+  hostConnections,
   hostLoginLines,
   inWindow,
   newKeyPair,
@@ -48,7 +49,12 @@ import {
   settingsText,
   typeHost,
 } from './maintenance.ts';
-import {hostLoginsOf, killLoginsOf, loginsText} from './host-logins.ts';
+import {
+  hostLoginsOf,
+  killLoginsOf,
+  loginsText,
+  stillUpOf,
+} from './host-logins.ts';
 
 /** The extension's log channel. */
 const LOG_CHANNEL = 'Remote - SSH';
@@ -727,22 +733,52 @@ describe('Kill VS Code Server (card coverage-39)', function () {
         .split('\n')
         .filter(line => line !== '').length;
     }
+    /** The process ids of the ssh clients that hold a connection to the host. */
+    async function clients(): Promise<number[]> {
+      return (await hostConnections())
+        .filter(connection => connection.program === 'ssh')
+        .map(connection => connection.processId);
+    }
     /**
-     * The logins the kill took of its own, from the host pick to its notice, as a count and as the text of every login in
-     * that span: the kill's login is ended right after, and a login still up is the window that was killed
+     * The logins the kill took of its own, from the host pick to its notice, as a count, and the text of every login
+     * since the pick: the kill's login is ended right after, and a login that stays up is the window that was killed
      * reconnecting by itself, which may be accepted before the notice is recorded (card #3275). Read once the kill's
-     * session has ended.
+     * session has ended. Each login that stays up must be an ssh client the editor started since `before`, the
+     * clients before the kill, so that a login of nothing the editor started does not pass for the reconnect: sshd's
+     * lines name the client by a port the container's network rewrites, so the clients are matched by their number.
      */
     async function loginsOfKill(
       since: string,
       mark: number,
       window: string,
+      before: readonly number[],
     ): Promise<{count: number; said: string}> {
       const lines = linesSince(mark, window);
       const pick = lines.find(line => line.surface === 'hostPick')?.time ?? 0;
       const notice =
         lines.find(line => line.surface === 'notice')?.time ?? Infinity;
       const logins = hostLoginsOf(await hostLoginLines(since));
+      let unmatched = '';
+      await waitFor(
+        'every login that stays up after the kill to be an ssh client the editor started',
+        async () => {
+          const remaining = stillUpOf(
+            hostLoginsOf(await hostLoginLines(since)),
+            pick,
+          ).length;
+          const started = (await clients()).filter(
+            processId => !before.includes(processId),
+          ).length;
+          unmatched = `${String(remaining)} logins stay up, ${String(started)} ssh clients are new`;
+          return remaining === started;
+        },
+        10_000,
+      ).catch((caught: unknown) => {
+        throw new Error(
+          `${caught instanceof Error ? caught.message : String(caught)}: ${unmatched}; the logins since the pick: ${loginsText(logins, pick)}`,
+          {cause: caught},
+        );
+      });
       return {
         count: killLoginsOf(logins, pick, notice).length,
         said: `the logins since the pick, the kill's notice at ${String(notice - pick)} ms: ${loginsText(logins, pick)}`,
@@ -750,26 +786,38 @@ describe('Kill VS Code Server (card coverage-39)', function () {
     }
     const baseline = await sessions();
     const sinceLocal = new Date().toISOString();
+    const clientsBeforeLocal = await clients();
     const localMark = await killWith('local', [pickHost('harness')]);
     await waitFor(
       'the kill’s session to end',
       async () => (await sessions()) <= baseline,
       5000,
     );
-    const fromLocal = await loginsOfKill(sinceLocal, localMark, 'local');
+    const fromLocal = await loginsOfKill(
+      sinceLocal,
+      localMark,
+      'local',
+      clientsBeforeLocal,
+    );
     await closeAllButLocal();
     await perWindowMode(true);
     try {
       await openConnected('x2', INSTALL_MILLISECONDS);
       const withWindow = await sessions();
       const sinceWindow = new Date().toISOString();
+      const clientsBeforeWindow = await clients();
       const windowMark = await killWith('x2', [pickHost('harness')]);
       await waitFor(
         'the kill’s session to end',
         async () => (await sessions()) <= withWindow,
         10_000,
       );
-      const fromWindow = await loginsOfKill(sinceWindow, windowMark, 'x2');
+      const fromWindow = await loginsOfKill(
+        sinceWindow,
+        windowMark,
+        'x2',
+        clientsBeforeWindow,
+      );
       deepStrictEqual(
         [fromLocal.count, fromWindow.count],
         [1, 1],
