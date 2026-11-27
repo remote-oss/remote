@@ -32,7 +32,7 @@ describe('wslProcessOf', () => {
   });
 
   it('#3282: kill ends the process, and its status is none', async () => {
-    const child = spawn('sh', ['-c', 'sleep 30']);
+    const child = spawn('sh', ['-c', 'exec sleep 30']);
     const live = wslProcessOf(child);
     const exited = new Promise<number | undefined>(resolve => {
       live.onExit(resolve);
