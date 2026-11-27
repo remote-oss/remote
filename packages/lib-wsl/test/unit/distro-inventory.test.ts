@@ -277,7 +277,7 @@ describe('D2: the cancellation of the callers that share a list read', () => {
     );
   });
 
-  it('F-6102 (D2): when every caller of a read has aborted the process is cancelled, and a later call starts a new one', async () => {
+  it('F-6102 (D2): when every caller of a read has aborted before it started no process runs, and a later call starts one', async () => {
     const {inventory, fake} = inventoryOver({
       list: {kind: 'printsUntilKilled', lines: []},
     });
@@ -300,7 +300,7 @@ describe('D2: the cancellation of the callers that share a list read', () => {
         (await later).kind,
         fake.started.length,
       ],
-      [['cancelled', 'cancelled'], 1, 'failed', 1],
+      [['cancelled', 'cancelled'], 0, 'failed', 0],
     );
   });
 
@@ -326,7 +326,7 @@ describe('D2: the cancellation of the callers that share a list read', () => {
     leaving.abort();
     await cancelled;
     const again = await inventory.distros(options, NEVER);
-    deepStrictEqual([again.kind, fake.started.length], ['rows', 2]);
+    deepStrictEqual([again.kind, fake.started.length], ['rows', 1]);
   });
 });
 
