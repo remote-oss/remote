@@ -77,13 +77,9 @@ async function hasWmState(windowId: string): Promise<boolean> {
       env: displayEnv(),
     });
     return true;
-  } catch (caught) {
-    // xprop exits 123 when the property is absent, and a missing tool is no answer either.
-    const code = (caught as {code?: unknown}).code;
-    if (code === 123 || code === 'ENOENT') {
-      return false;
-    }
-    throw caught;
+  } catch {
+    // A window gone by the read (a BadWindow), a property that is absent, and a missing tool all say no: the close must not red the launch for a window that already closed, as the sync reader says.
+    return false;
   }
 }
 
@@ -434,13 +430,9 @@ export function mayCloseOnDisplay(windowId: string): Promise<boolean> {
     env: displayEnv(),
   })
     .then(({stdout}) => stdout.includes('WM_DELETE_WINDOW'))
-    .catch((caught: unknown) => {
-      // `xprop` exits 123 when the property is absent, and a missing tool or a window that is gone is no answer either.
-      const code = (caught as {code?: unknown}).code;
-      if (code === 123 || code === 'ENOENT') {
-        return false;
-      }
-      throw caught;
+    .catch(() => {
+      // A window gone by the read (a BadWindow), a property that is absent, and a missing tool all say no: the close must not red the launch for a window that already closed, as the sync reader says.
+      return false;
     });
 }
 
