@@ -1,5 +1,5 @@
 import {deepStrictEqual} from 'node:assert';
-import {execFile, spawn} from 'node:child_process';
+import {type ChildProcess, execFile, spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {
   BoundedLines,
@@ -18,6 +18,30 @@ function linesOf(...pieces: string[]): string[] {
   }
   lines.flush();
   return told;
+}
+
+/** Whether the child `child` of this process has ended, waiting for its exit for up to 2 s. */
+function endedWithin(child: ChildProcess): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve(true);
+  }
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      resolve(false);
+    }, 2000);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+/** Whether the process `processId`, not a child of this one, has gone, polling for up to 2 s. */
+async function goneWithin(processId: number): Promise<boolean> {
+  for (let tries = 0; tries < 40 && alive(processId); tries += 1) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  return !alive(processId);
 }
 
 /** Whether the process `processId` is running. */
@@ -109,11 +133,15 @@ describe('the tree-kill script', function () {
       )
       .map(entry => Number(entry[0]));
     await treeKill(shellId);
-    const outcome = [alive(shellId), alive(childId), detached.some(alive)];
+    const outcome = [
+      await endedWithin(shell),
+      await goneWithin(childId),
+      detached.some(alive),
+    ];
     for (const processId of detached) {
       process.kill(processId);
     }
-    deepStrictEqual(outcome, [false, false, true]);
+    deepStrictEqual(outcome, [true, true, true]);
   });
 
   it('ends a grandchild of the process, not only its children', async () => {
@@ -128,8 +156,8 @@ describe('the tree-kill script', function () {
     });
     await treeKill(shell.pid ?? 0);
     deepStrictEqual(
-      [alive(shell.pid ?? 0), alive(grandchildId)],
-      [false, false],
+      [await endedWithin(shell), await goneWithin(grandchildId)],
+      [true, true],
     );
   });
 
@@ -144,8 +172,8 @@ describe('the tree-kill script', function () {
     const started = Date.now();
     await treeKill(stubborn.pid ?? 0);
     deepStrictEqual(
-      [alive(stubborn.pid ?? 0), Date.now() - started >= 4500],
-      [false, true],
+      [await endedWithin(stubborn), Date.now() - started >= 4500],
+      [true, true],
     );
   });
 
@@ -154,6 +182,6 @@ describe('the tree-kill script', function () {
     const loneId = lone.pid ?? 0;
     await treeKill(loneId);
     await treeKill(loneId);
-    deepStrictEqual(alive(loneId), false);
+    deepStrictEqual(await endedWithin(lone), true);
   });
 });

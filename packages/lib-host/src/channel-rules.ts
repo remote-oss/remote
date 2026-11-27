@@ -12,7 +12,7 @@ export const LONGEST_PENDING_LINE = 64 * 1024;
 
 /**
  * A POSIX shell script that ends the process tree of the process `$1`: its descendants leaves first, then itself, TERM
- * first and KILL after 5 s. It reads the tree from `ps -A -o pid= -o ppid=`, which procps, busybox and macOS share, so
+ * first and KILL after 5 s, and it ends once they have gone, or 1 s after the KILL. It reads the tree from `ps -A -o pid= -o ppid=`, which procps, busybox and macOS share, so
  * it needs no job control. A process that left the tree by being re-parented is not in it, and is untouched.
  */
 export const TREE_KILL_SCRIPT = [
@@ -37,6 +37,16 @@ export const TREE_KILL_SCRIPT = [
   '  waited=$((waited + 1))',
   'done',
   'kill -s KILL $members 2>/dev/null',
+  'waited=0',
+  'while [ "$waited" -lt 10 ]; do',
+  '  alive=',
+  '  for member in $members; do',
+  '    kill -0 "$member" 2>/dev/null && alive=yes',
+  '  done',
+  '  [ -z "$alive" ] && exit 0',
+  '  sleep 0.1',
+  '  waited=$((waited + 1))',
+  'done',
   'exit 0',
 ].join('\n');
 
