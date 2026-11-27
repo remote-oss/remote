@@ -5,7 +5,7 @@
  * the process id that a stop kills.
  */
 
-import {type ExecServer, REPORTING_SCRIPT, spawnOnHost} from 'lib-server';
+import {type ExecServer, spawnOnHost} from 'lib-server';
 import type {EngineHost, EngineOptions, EngineSpawn} from './engine-host.ts';
 import {spawnedEngineHost} from './engine-runs.ts';
 
@@ -22,7 +22,6 @@ export function execServerEngineHost(
     options: EngineOptions,
   ): Promise<EngineSpawn> {
     return spawnOnHost(server, {
-      script: REPORTING_SCRIPT,
       command: [dockerPath, ...argv],
       environment: options.environment,
       cancellation: options.cancellation,

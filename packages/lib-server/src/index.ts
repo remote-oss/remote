@@ -207,14 +207,12 @@ export {
   type WatchedExecServer,
   watchedExecServer,
 } from './cli-control/exec-server.ts';
-export {execServerChannel} from './cli-control/exec-host-channel.ts';
+export {endTree, execServerChannel} from './cli-control/exec-host-channel.ts';
 export {
-  GROUP_SCRIPT,
   type HostProcess,
   type HostSpawn,
   type HostSpawnRequest,
   REPORTING_SCRIPT,
-  signalGroupOnHost,
   spawnOnHost,
 } from './cli-control/host-process.ts';
 export {

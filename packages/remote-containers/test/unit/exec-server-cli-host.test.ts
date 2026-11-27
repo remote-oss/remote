@@ -4,7 +4,8 @@ import {spawnSync} from 'node:child_process';
 import {chmodSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {GROUP_SCRIPT, type ExecServer} from 'lib-server';
+import {TREE_KILL_SCRIPT} from 'lib-host';
+import {REPORTING_SCRIPT, type ExecServer} from 'lib-server';
 import {hostStream, sceneOf, settled} from 'lib-server/testing/fake-exec-host';
 import {localExecServer} from 'lib-server/testing/local-exec-server';
 import type {CliLine} from '../../src/cli/cli-host.ts';
@@ -56,7 +57,7 @@ function serverOf(
 }
 
 describe('the dev container CLI on the SSH host (card #3244)', () => {
-  it('F-1302 AC-2, AC-20: the CLI runs on the host’s own node under the group script, with the host’s environment and the run’s variables, none of them in an argument', async () => {
+  it('F-1302 AC-2, AC-20: the CLI runs on the host’s own node under the reporting script, with the host’s environment and the run’s variables, none of them in an argument', async () => {
     const scene = sceneOf({
       firstLines: ['4242\n', '{"outcome":"success"}\n', 'a log line\n'],
       closesAtOnce: true,
@@ -82,7 +83,7 @@ describe('the dev container CLI on the SSH host (card #3244)', () => {
             command: 'sh',
             argv: [
               '-c',
-              GROUP_SCRIPT,
+              REPORTING_SCRIPT,
               'sh',
               PLACED.node,
               '--require',
@@ -150,7 +151,7 @@ describe('the dev container CLI on the SSH host (card #3244)', () => {
     );
   });
 
-  /** A host whose CLI runs until `finish` is called, and that is asked for each signal to its group. */
+  /** A host whose CLI runs until `finish` is called, and that is asked each time to end the CLI's tree. */
   function hostWithSignals(refuseSignals: boolean): {
     server: Pick<ExecServer, 'spawn' | 'env'>;
     signals: string[][];
@@ -166,7 +167,7 @@ describe('the dev container CLI on the SSH host (card #3244)', () => {
     const ended = Promise.resolve({status: 0});
     const server = serverOf({
       spawn: (command, argumentList) => {
-        if (argumentList[1]?.startsWith('kill ') === true) {
+        if (argumentList[1] === TREE_KILL_SCRIPT) {
           signals.push(argumentList.slice(-2));
           return refuseSignals
             ? Promise.reject(new Error('the connection closed'))
@@ -199,7 +200,7 @@ describe('the dev container CLI on the SSH host (card #3244)', () => {
     };
   }
 
-  it('an abort asks the host to end the CLI’s group, and kills it after 5 s if it has not ended, and a host that cannot be asked is let go', async () => {
+  it('an abort asks the host once to end the CLI’s whole tree, which the script itself kills after 5 s, so that the editor’s own KILL then asks nothing, and a host that cannot be asked is let go', async () => {
     mock.timers.enable({apis: ['setTimeout']});
     try {
       const outcomes = [];
@@ -223,19 +224,13 @@ describe('the dev container CLI on the SSH host (card #3244)', () => {
       }
       deepStrictEqual(outcomes, [
         [
-          [['TERM', '4242']],
-          [
-            ['TERM', '4242'],
-            ['KILL', '4242'],
-          ],
+          [['tree-kill', '4242']],
+          [['tree-kill', '4242']],
           {kind: 'ran', result: undefined, status: null},
         ],
         [
-          [['TERM', '4242']],
-          [
-            ['TERM', '4242'],
-            ['KILL', '4242'],
-          ],
+          [['tree-kill', '4242']],
+          [['tree-kill', '4242']],
           {kind: 'ran', result: undefined, status: null},
         ],
       ]);

@@ -1,16 +1,12 @@
 /**
  * @fileoverview The CLI host of a dev container opened from a Remote - SSH window: the dev container CLI runs on the
  * SSH host, on the `node` of the editor's server there, started through the host's exec server. The run's environment
- * is the host's own, so that what the configuration reads of it (`${localEnv}`) is the host's. The CLI is the leader of
- * a process group of its own there, which an abort signals so that its `docker` children end with it.
+ * is the host's own, so that what the configuration reads of it (`${localEnv}`) is the host's. An abort ends the CLI's whole
+ * process tree there through lib-host's tree-kill script, which ends the tree with TERM and then, after 5 s, KILL, so that
+ * the `docker` children it started end with it; the editor's own KILL after those 5 s has nothing left to do.
  */
 
-import {
-  type ExecServer,
-  GROUP_SCRIPT,
-  signalGroupOnHost,
-  spawnOnHost,
-} from 'lib-server';
+import {endTree, type ExecServer, spawnOnHost} from 'lib-server';
 import type {CliHost} from './cli-host.ts';
 import {nodeCliHost} from './node-cli-host.ts';
 import type {NodeCliPorts} from './node-cli-ports.ts';
@@ -21,18 +17,13 @@ export function execServerCliHost(
   server: Pick<ExecServer, 'spawn' | 'env'>,
   placed: PlacedCli,
 ): CliHost {
-  /** Asks the group to end, as `kill` does; a group that is gone, or a host that can't be asked, is not an error. */
-  function endGroup(groupId: number): Promise<void> {
-    return signalGroupOnHost(server, groupId, 'TERM');
-  }
   const ports: NodeCliPorts = {
     spawn: async (program, programArguments, options) => {
       const spawned = await spawnOnHost(server, {
-        script: GROUP_SCRIPT,
         command: [program, ...programArguments],
         environment: options.env,
         cancellation: new AbortController().signal,
-        endById: endGroup,
+        endById: processId => endTree(server, processId),
       });
       if (spawned.kind === 'failed') {
         return {kind: 'failed', message: spawned.detail};
@@ -61,12 +52,10 @@ export function execServerCliHost(
         },
       };
     },
-    killGroup: (groupId, signal) => {
-      void (
-        signal === 'SIGTERM'
-          ? endGroup(groupId)
-          : signalGroupOnHost(server, groupId, 'KILL')
-      ).catch(() => undefined);
+    killGroup: (processId, signal) => {
+      if (signal === 'SIGTERM') {
+        void endTree(server, processId);
+      }
     },
   };
   return {

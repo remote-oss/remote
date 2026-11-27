@@ -2,12 +2,7 @@ import {deepStrictEqual} from 'node:assert';
 import {spawn} from 'node:child_process';
 import type {Readable} from 'node:stream';
 import type {ExecServer, ExecSpawnedCommand} from '../../src/index.ts';
-import {
-  GROUP_SCRIPT,
-  REPORTING_SCRIPT,
-  signalGroupOnHost,
-  spawnOnHost,
-} from '../../src/index.ts';
+import {endTree, REPORTING_SCRIPT, spawnOnHost} from '../../src/index.ts';
 import {localExecServer} from '../../src/testing/local-exec-server.ts';
 import {
   hostStream,
@@ -36,7 +31,6 @@ async function textOf(stream: Readable): Promise<string> {
 /** The request of a command under the reporting script, with `cancellation`. */
 function requestOf(cancellation: AbortSignal = NEVER) {
   return {
-    script: REPORTING_SCRIPT,
     command: ['docker', 'version'],
     environment: {DOCKER_HOST: 'tcp://host:2375', UNSET: undefined},
     cancellation,
@@ -284,34 +278,25 @@ describe('a process on the exec server’s host', () => {
 });
 
 describe('a process on a host with a POSIX shell, run for real', () => {
-  it('each script starts the command with its input, reports an id, and passes the command’s status back, the group script as the leader of a group of its own', async () => {
-    const outcomes = [];
-    for (const script of [REPORTING_SCRIPT, GROUP_SCRIPT]) {
-      const spawned = await spawnOnHost(localExecServer(HOST_BASE), {
-        ...requestOf(),
-        script,
-        command: ['sh', '-c', 'cat; exit 7'],
-      });
-      if (spawned.kind !== 'spawned') {
-        throw new Error('the spawn failed');
-      }
-      spawned.process.stdin.end('hello');
-      outcomes.push([
-        await textOf(spawned.process.stdout),
-        await spawned.process.exited,
-      ]);
+  it('the reporting script starts the command with its input, reports the id the command then has, and passes its status back', async () => {
+    const spawned = await spawnOnHost(localExecServer(HOST_BASE), {
+      ...requestOf(),
+      command: ['sh', '-c', 'cat; exit 7'],
+    });
+    if (spawned.kind !== 'spawned') {
+      throw new Error('the spawn failed');
     }
-    deepStrictEqual(outcomes, [
+    spawned.process.stdin.end('hello');
+    deepStrictEqual(
+      [await textOf(spawned.process.stdout), await spawned.process.exited],
       ['hello', 7],
-      ['hello', 7],
-    ]);
+    );
   });
 
-  it('a signal to the group ends the command and the children it started with no word from the shell about it, and a group already gone is no failure', async () => {
+  it('ending the tree ends the command and the children it started, with no word from the shell about it, and a tree already gone is no failure', async () => {
     const server = localExecServer(HOST_BASE);
     const spawned = await spawnOnHost(server, {
       ...requestOf(),
-      script: GROUP_SCRIPT,
       command: ['sh', '-c', 'sleep 61 & sleep 62 & wait'],
     });
     if (spawned.kind !== 'spawned') {
@@ -320,26 +305,28 @@ describe('a process on a host with a POSIX shell, run for real', () => {
     const {processId} = spawned.process;
     async function membersOf(): Promise<string[]> {
       const table = await textOf(
-        spawn('ps', ['-eo', 'pgid=,args='], {
+        spawn('ps', ['-A', '-o', 'pid=,ppid=,stat='], {
           stdio: ['ignore', 'pipe', 'ignore'],
         }).stdout,
       );
       return table
         .split('\n')
+        .map(line => line.trim().split(/\s+/u))
         .filter(
-          line =>
-            line.trim().startsWith(`${String(processId)} `) &&
-            !line.includes('<defunct>'),
-        );
+          ([member, parent, state]) =>
+            (member === String(processId) || parent === String(processId)) &&
+            !(state ?? '').startsWith('Z'),
+        )
+        .map(([member]) => member ?? '');
     }
     const before = (await membersOf()).length;
-    await signalGroupOnHost(server, processId, 'TERM');
+    await endTree(server, processId);
     const status = await spawned.process.exited;
     const after = await membersOf();
-    await signalGroupOnHost(server, processId, 'KILL');
+    await endTree(server, processId);
     deepStrictEqual(
       [before, status, after, await textOf(spawned.process.stderr)],
-      [3, 143, [], ''],
+      [3, 1, [], ''],
     );
   });
 });

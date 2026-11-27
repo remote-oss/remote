@@ -19,17 +19,9 @@ const NO_PROCESS_ID = 'the command on the host did not report its process id';
 /** The script that prints its shell's process id on a line of its own, then becomes the command its arguments name. */
 export const REPORTING_SCRIPT = 'printf "%s\\n" "$$"; exec "$@"';
 
-/**
- * The script that starts the command as a job of its own process group, prints the group's id (the job's) on a line of
- * its own and ends with the job's status: job control keeps the job's standard input and makes it the leader of its
- * group.
- */
-export const GROUP_SCRIPT =
-  'set -m; "$@" & printf "%s\\n" "$!"; wait "$!" 2>/dev/null';
-
 /** A process on the host, with its streams and its end. */
 export interface HostProcess {
-  /** The id the host reported: the process's, or its group's for a command started by `GROUP_SCRIPT`. */
+  /** The id the host reported: the process's own, which is the command's once the shell has become it. */
   processId: number;
   stdin: Writable;
   stdout: PassThrough;
@@ -46,8 +38,6 @@ export type HostSpawn =
 
 /** What to start on the host. */
 export interface HostSpawnRequest {
-  /** The shell script that reports the id and starts the command. */
-  script: string;
   /** The program and its arguments, which the script runs as `"$@"`. */
   command: readonly string[];
   /** Variables added to the host's own for this process; one with no value is left out. */
@@ -121,7 +111,7 @@ export async function spawnOnHost(
   try {
     command = await server.spawn(
       'sh',
-      ['-c', request.script, 'sh', ...request.command],
+      ['-c', REPORTING_SCRIPT, 'sh', ...request.command],
       {env: definedValues(request.environment)},
     );
   } catch (caught) {
@@ -187,18 +177,4 @@ export async function spawnOnHost(
       kill,
     },
   };
-}
-
-/** Signals the group `groupId` on the host, which a command started by `GROUP_SCRIPT` leads. */
-export async function signalGroupOnHost(
-  server: Pick<ExecServer, 'spawn'>,
-  groupId: number,
-  signal: 'TERM' | 'KILL',
-): Promise<void> {
-  const command = await server.spawn(
-    'sh',
-    ['-c', 'kill -s "$0" -- "-$1"', signal, String(groupId)],
-    {},
-  );
-  await command.onExit;
 }
