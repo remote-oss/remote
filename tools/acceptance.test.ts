@@ -1686,6 +1686,7 @@ describe('acceptance', () => {
           containersOnly('ssh-containers'),
           ...['wsl-linux', 'wsl-linux-web', 'wsl'].map(wslOnly),
           containersOnly('containers-wsl'),
+          containersOnly('containers-desktop'),
           wslOnly('wsl-linux-standdown'),
           ...[
             'explorer',
