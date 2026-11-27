@@ -57,6 +57,21 @@ async function ranWith(
   return {lines, outcome};
 }
 
+/** Runs the request and cancels it at the first line it prints. */
+function withLine(
+  channel: HostChannel,
+  request: ScriptRequest,
+  controller: AbortController,
+): Promise<{lines: string[]; outcome: ScriptOutcome}> {
+  const lines: string[] = [];
+  return channel
+    .runScript(request, line => {
+      lines.push(line);
+      controller.abort();
+    })
+    .then(outcome => ({lines, outcome}));
+}
+
 describe('the channel of the local machine (card #3158)', () => {
   it('runs a PowerShell script as a failure to spawn that says this host runs POSIX scripts only', async () => {
     deepStrictEqual(
@@ -205,7 +220,7 @@ describe('the channel of the local machine (card #3158)', () => {
     const running = ranWith(
       localChannel({
         ...LINUX,
-        endGroup: () => {
+        signalGroup: () => {
           throw new Error('no such process');
         },
       }),
@@ -232,6 +247,156 @@ describe('the channel of the local machine (card #3158)', () => {
     deepStrictEqual(
       outcome.kind === 'failed' && outcome.failure.kind,
       'spawnFailed',
+    );
+  });
+
+  it('signals the group with TERM and, when the shell ignores it, with KILL after the grace period, and reports the cancel after the shell has ended', async () => {
+    const signals: string[] = [];
+    const controller = new AbortController();
+    const started = Date.now();
+    const {outcome} = await withLine(
+      localChannel({
+        ...LINUX,
+        graceMilliseconds: 300,
+        signalGroup: (leader, signal) => {
+          signals.push(signal);
+          process.kill(-leader, signal);
+        },
+      }),
+      requestOf("trap '' TERM; echo ready; while :; do sleep 1; done", {
+        cancellation: controller.signal,
+      }),
+      controller,
+    );
+    deepStrictEqual(
+      [
+        outcome.kind === 'failed' && outcome.failure.kind,
+        signals.slice(0, 2),
+        Date.now() - started >= 280,
+      ],
+      ['cancelled', ['SIGTERM', 'SIGKILL'], true],
+    );
+  });
+
+  it('does not wait out the grace period for a shell that ends on TERM', async () => {
+    const signals: string[] = [];
+    const controller = new AbortController();
+    const started = Date.now();
+    await withLine(
+      localChannel({
+        ...LINUX,
+        signalGroup: (leader, signal) => {
+          signals.push(signal);
+          process.kill(-leader, signal);
+        },
+      }),
+      requestOf('echo ready; sleep 30', {cancellation: controller.signal}),
+      controller,
+    );
+    deepStrictEqual(
+      [signals[0], Date.now() - started < 2000],
+      ['SIGTERM', true],
+    );
+  });
+
+  it('ends a background child that ignores TERM once the shell has ended, and leaves a process the script detached into a session of its own', async function () {
+    if (spawnSync('sh', ['-c', 'command -v setsid']).status !== 0) {
+      this.skip();
+    }
+    const stubborn = path.join(folder, 'stubborn.pid');
+    const daemon = path.join(folder, 'daemon.pid');
+    const controller = new AbortController();
+    await withLine(
+      localChannel(LINUX),
+      requestOf(
+        `(trap '' TERM; sleep 30) & echo $! > '${stubborn}'; setsid sleep 30 & echo $! > '${daemon}'; sleep 0.3; echo ready; wait`,
+        {cancellation: controller.signal},
+      ),
+      controller,
+    );
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const states = [stubborn, daemon].map(file => {
+      const processId = readFileSync(file, 'utf8').trim();
+      const state = spawnSync('ps', ['-o', 'stat=', '-p', processId], {
+        encoding: 'utf8',
+      }).stdout.trim();
+      if (state !== '' && !state.startsWith('Z') && file === daemon) {
+        process.kill(Number(processId), 'SIGKILL');
+      }
+      return state !== '' && !state.startsWith('Z');
+    });
+    deepStrictEqual(states, [false, true]);
+  });
+
+  it('hands on a line that has not ended by 64 KiB, in pieces, and drops none of it', async () => {
+    const {lines} = await ranWith(
+      localChannel(LINUX),
+      requestOf("head -c 1048576 /dev/zero | tr '\\0' a"),
+    );
+    deepStrictEqual(
+      [
+        lines.length,
+        lines.every(line => line.length === 65536),
+        lines.join('').length,
+      ],
+      [16, true, 1048576],
+    );
+  });
+
+  it('keeps a line of exactly 64 KiB whole, and splits one byte more', async () => {
+    const {lines} = await ranWith(
+      localChannel(LINUX),
+      requestOf(
+        "head -c 65536 /dev/zero | tr '\\0' a; echo; head -c 65537 /dev/zero | tr '\\0' b; echo",
+      ),
+    );
+    deepStrictEqual(
+      lines.map(line => [line[0], line.length]),
+      [
+        ['a', 65536],
+        ['b', 65536],
+        ['b', 1],
+      ],
+    );
+  });
+
+  it('splits a line of multi-byte characters between characters, so each piece is at most 64 KiB and none is broken', async () => {
+    const seen = [];
+    for (const [character, count] of [
+      ['é', 40000],
+      ['€', 30000],
+      ['😀', 20000],
+    ] as const) {
+      const {lines} = await ranWith(
+        localChannel(LINUX),
+        requestOf(
+          `head -c ${String(count)} /dev/zero | sed 's/./${character}/g'`,
+        ),
+      );
+      seen.push([
+        lines.every(line => Buffer.byteLength(line) <= 65536),
+        lines.join('') === character.repeat(count),
+        lines.length,
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [true, true, 2],
+      [true, true, 2],
+      [true, true, 2],
+    ]);
+  });
+
+  it('writes an input larger than the pipe takes, chunk by chunk, and the script reads all of it', async () => {
+    deepStrictEqual(
+      (
+        await ranWith(
+          localChannel(LINUX),
+          requestOf('wc -c', {
+            input: {kind: 'text', text: 'x'.repeat(8 * 1024 * 1024)},
+          }),
+        )
+      ).lines.map(line => line.trim()),
+      ['8388608'],
     );
   });
 

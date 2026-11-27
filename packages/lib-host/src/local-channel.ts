@@ -1,14 +1,18 @@
 /**
  * @fileoverview The host channel of the machine it runs on: a script runs under the local `sh`, and a file is copied
  * with the local file system. A script's standard error is joined to its standard output inside the shell, so the lines
- * arrive in the order they were written. The channel logs nothing, so it has no secret to mask: the values of
- * `secretVariables` reach the script's environment and nowhere else.
+ * arrive in the order they were written. The script runs in a process group of its own: a cancel signals the group with
+ * TERM, and with KILL when the shell outlives the grace period, and once the shell has ended with KILL for what is
+ * left of the group, so a process the script detached into a session of its own is not touched. A line is handed on
+ * at 64 KiB when it has not ended by then, and the input waits for the shell to take each chunk. The channel logs
+ * nothing, so it has no secret to mask: the values of `secretVariables` reach the script's environment and nowhere else.
  */
 
 import {spawn} from 'node:child_process';
 import {createReadStream, createWriteStream} from 'node:fs';
 import {access, constants as fileConstants, stat} from 'node:fs/promises';
 import {constants as osConstants} from 'node:os';
+import {Readable, type Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {
   type CopyOutcome,
@@ -16,6 +20,7 @@ import {
   failFrom,
   type HostChannel,
   type PlatformHint,
+  type ScriptInput,
   type ScriptOutcome,
   type ScriptRequest,
 } from './host-channel.ts';
@@ -28,8 +33,10 @@ export interface LocalChannelOptions {
   platform: NodeJS.Platform;
   /** The POSIX shell that runs the scripts; `/bin/sh` when absent. */
   shell?: string;
-  /** Ends the process group `leader` with SIGKILL; throws when the group is gone. The signal to the group when absent. */
-  endGroup?: (leader: number) => void;
+  /** Signals the process group `leader`; throws when the group is gone. The signal to the group when absent. */
+  signalGroup?: (leader: number, signal: 'SIGTERM' | 'SIGKILL') => void;
+  /** How long a cancelled shell may take to end on TERM before it is killed, in milliseconds; five seconds when absent. */
+  graceMilliseconds?: number;
 }
 
 /** The text a PowerShell script is refused with: this machine's agent runs POSIX scripts only. */
@@ -54,7 +61,31 @@ function statusOf(code: number | null, signal: NodeJS.Signals | null): number {
   return signal === null ? Number(code) : 128 + osConstants.signals[signal];
 }
 
-/** Delivers the lines of an output stream, in chunks that may split a line anywhere, to `onLine`. */
+/** The most a line holds when it is handed on without having ended, in bytes. */
+const LINE_LIMIT = 64 * 1024;
+
+/** The size of each chunk of a text the script reads, in characters. */
+const INPUT_CHUNK = 64 * 1024;
+
+/** How many UTF-16 units of `text` make the longest prefix of whole characters whose UTF-8 form is at most `LINE_LIMIT` bytes. */
+function prefixWithin(text: string): number {
+  let bytes = 0;
+  let length = 0;
+  for (const character of text) {
+    const size = Buffer.byteLength(character);
+    if (bytes + size > LINE_LIMIT) {
+      break;
+    }
+    bytes += size;
+    length += character.length;
+  }
+  return length;
+}
+
+/**
+ * Delivers the lines of an output stream, in chunks that may split a line anywhere, to `onLine`. A line that has
+ * not ended by 64 KiB is delivered as it is, and the rest of it as the next.
+ */
 function lineReader(onLine: (line: string) => void): {
   write(chunk: string): void;
   end(): void;
@@ -62,12 +93,22 @@ function lineReader(onLine: (line: string) => void): {
   let pending = '';
   return {
     write(chunk) {
-      const text = pending + chunk;
-      const end = text.lastIndexOf('\n') + 1;
-      pending = text.slice(end);
-      for (const line of text.slice(0, end).split('\n').slice(0, -1)) {
-        onLine(line.endsWith('\r') ? line.slice(0, -1) : line);
+      let text = pending + chunk;
+      for (;;) {
+        const newline = text.indexOf('\n');
+        const candidate = newline < 0 ? text : text.slice(0, newline);
+        if (Buffer.byteLength(candidate) > LINE_LIMIT) {
+          const length = prefixWithin(candidate);
+          onLine(candidate.slice(0, length));
+          text = text.slice(length);
+        } else if (newline < 0) {
+          break;
+        } else {
+          onLine(candidate.endsWith('\r') ? candidate.slice(0, -1) : candidate);
+          text = text.slice(newline + 1);
+        }
       }
+      pending = text;
     },
     end() {
       if (pending !== '') {
@@ -77,11 +118,33 @@ function lineReader(onLine: (line: string) => void): {
   };
 }
 
+/** The chunks of `text` that the script's input is written in. */
+function chunksOf(text: string): string[] {
+  return Array.from(
+    {length: Math.ceil(text.length / INPUT_CHUNK)},
+    (skipped, index) =>
+      text.slice(index * INPUT_CHUNK, (index + 1) * INPUT_CHUNK),
+  );
+}
+
+/** Writes `input` to `stdin` one chunk at a time, each waiting for the shell to take the one before; a shell that stops reading is no failure. */
+function feed(stdin: Writable, input: ScriptInput): void {
+  const source =
+    input.kind === 'file'
+      ? createReadStream(input.localFile)
+      : Readable.from(chunksOf(input.text));
+  pipeline(source, stdin).catch(() => undefined);
+}
+
 /** The channel of this machine. */
 export function localChannel(options: LocalChannelOptions): HostChannel {
   const shell = options.shell ?? '/bin/sh';
-  const endGroup =
-    options.endGroup ?? ((leader: number) => process.kill(-leader, 'SIGKILL'));
+  const signalGroup =
+    options.signalGroup ??
+    ((leader: number, signal: 'SIGTERM' | 'SIGKILL') => {
+      process.kill(-leader, signal);
+    });
+  const grace = options.graceMilliseconds ?? 5000;
   return {
     runScript: async (request, onLine): Promise<ScriptOutcome> => {
       if (request.interpreter !== 'posixShell') {
@@ -97,7 +160,7 @@ export function localChannel(options: LocalChannelOptions): HostChannel {
           return failFrom('spawnFailed', caught);
         }
       }
-      return runShell(shell, endGroup, request, onLine);
+      return runShell({shell, signalGroup, grace}, request, onLine);
     },
     copyToHost: async (request: CopyRequest): Promise<CopyOutcome> => {
       if (request.cancellation.aborted) {
@@ -129,10 +192,16 @@ export function localChannel(options: LocalChannelOptions): HostChannel {
   };
 }
 
-/** Runs the script of `request` under `shell`, and gives how it ended. */
+/** What a run of a script is done with. */
+interface Shell {
+  shell: string;
+  signalGroup: (leader: number, signal: 'SIGTERM' | 'SIGKILL') => void;
+  grace: number;
+}
+
+/** Runs the script of `request` under the shell, and gives how it ended. */
 function runShell(
-  shell: string,
-  endGroup: (leader: number) => void,
+  {shell, signalGroup, grace}: Shell,
   request: ScriptRequest,
   onLine: (line: string) => void,
 ): Promise<ScriptOutcome> {
@@ -147,20 +216,27 @@ function runShell(
       },
     );
     let cancelled = false;
+    let killTimer: NodeJS.Timeout | undefined;
     const reader = lineReader(line => {
       if (!cancelled) {
         onLine(line);
       }
     });
-    function cancel(): void {
-      cancelled = true;
+    function signal(name: 'SIGTERM' | 'SIGKILL'): void {
       if (child.pid !== undefined) {
         try {
-          endGroup(child.pid);
+          signalGroup(child.pid, name);
         } catch {
-          // The group has ended already, and its close settles the run.
+          // The group has ended already.
         }
       }
+    }
+    function cancel(): void {
+      cancelled = true;
+      signal('SIGTERM');
+      killTimer = setTimeout(() => {
+        signal('SIGKILL');
+      }, grace);
     }
     child.once('error', error => {
       settle(failFrom('spawnFailed', error));
@@ -169,20 +245,22 @@ function runShell(
     child.stdout.on('data', (chunk: string) => {
       reader.write(chunk);
     });
-    child.stdin.on('error', () => undefined);
-    if (request.input.kind === 'text') {
-      child.stdin.end(request.input.text);
-    } else {
-      createReadStream(request.input.localFile).pipe(child.stdin);
-    }
+    feed(child.stdin, request.input);
     request.cancellation.addEventListener('abort', cancel, {once: true});
-    child.once('close', (code, signal) => {
+    child.once('exit', () => {
+      if (cancelled) {
+        clearTimeout(killTimer);
+        signal('SIGKILL');
+        settle(failFrom('cancelled', 'the script was cancelled'));
+      }
+    });
+    child.once('close', (code, exitSignal) => {
       request.cancellation.removeEventListener('abort', cancel);
       reader.end();
       settle(
         cancelled
           ? failFrom('cancelled', 'the script was cancelled')
-          : {kind: 'exited', status: statusOf(code, signal)},
+          : {kind: 'exited', status: statusOf(code, exitSignal)},
       );
     });
   });
