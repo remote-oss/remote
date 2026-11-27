@@ -5,6 +5,7 @@ import {LONGEST_PENDING_LINE} from '../../src/channel-rules.ts';
 import {
   channelContractCases,
   LONG_LINE_LENGTH,
+  ruleScriptOf,
   type BoundedCopy,
   type ChannelHarness,
   type HostProcesses,
@@ -314,5 +315,21 @@ describe('host channel contract cases', () => {
       contractCase.name.startsWith('ends a script cancelled'),
     );
     await rejects(cancelledBefore?.check() ?? Promise.resolve());
+  });
+});
+
+describe('ruleScriptOf (card #3312)', () => {
+  it('gives a script for each scenario a real shell plays out, and none for the others', () => {
+    const scripts = [
+      {kind: 'backgroundsThenWaits'},
+      {kind: 'detachesThenWaits'},
+      {kind: 'printsBothStreams'},
+      {kind: 'printsLongLine'},
+      {kind: 'copiesLarge'},
+    ].map(scenario => ruleScriptOf(scenario as ContractScenario));
+    deepStrictEqual(
+      scripts.map(script => script?.slice(0, 5)),
+      ['sleep', '(slee', 'print', 'head ', undefined],
+    );
   });
 });

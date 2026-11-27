@@ -1429,7 +1429,7 @@ export function launchesOf(root: string): Launch[] {
       ...RENDERER_LAUNCH,
       label: 'wsl',
       suite: 'wsl',
-      files: ['distros.test.ts'],
+      files: ['channel-contract.test.ts', 'distros.test.ts'],
       withExtensions: ['remote-oss.remote-wsl'],
       namedOnly: true,
       wslDistros: true,

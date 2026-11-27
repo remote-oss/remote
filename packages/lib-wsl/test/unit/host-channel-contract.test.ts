@@ -5,8 +5,8 @@ import path from 'node:path';
 import type {ChannelFailureKind} from 'lib-host';
 import {
   channelContractCases,
+  ruleScriptOf,
   LARGE_COPY_LENGTH,
-  LONG_LINE_LENGTH,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
@@ -129,20 +129,9 @@ function isRunning(processId: number): boolean {
   }
 }
 
-/** The script of a real-shell scenario. */
+/** The script of a scenario: a real-shell scenario's own, else a placeholder the fake does not run. */
 function scriptOf(scenario: ContractScenario): string {
-  switch (scenario.kind) {
-    case 'backgroundsThenWaits':
-      return `sleep 40 & printf '%s\\n' "$!"; wait`;
-    case 'detachesThenWaits':
-      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
-    case 'printsBothStreams':
-      return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
-    case 'printsLongLine':
-      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
-    default:
-      return 'scenario';
-  }
+  return ruleScriptOf(scenario) ?? 'scenario';
 }
 
 /** The largest write any real-shell process of the current staging was handed. */

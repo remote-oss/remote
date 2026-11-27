@@ -19,6 +19,9 @@
       "path": "../../../packages/lib-helper"
     },
     {
+      "path": "../../../packages/lib-host"
+    },
+    {
       "path": "../../../packages/lib-log"
     },
     {
@@ -29,6 +32,12 @@
     },
     {
       "path": "../../../packages/lib-ssh"
+    },
+    {
+      "path": "../../../packages/lib-wsl"
+    },
+    {
+      "path": "../../../packages/remote-wsl"
     },
     {
       "path": "../../../packages/lib-forwarding/tsconfig.test.json"

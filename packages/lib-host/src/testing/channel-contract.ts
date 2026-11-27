@@ -405,8 +405,24 @@ async function cancelledAtProcessId(
   return {processId: Number(lines[0]), outcome};
 }
 
+/** The POSIX shell script that plays `scenario` out on a real shell, for the scenarios of the rules that run one. */
+export function ruleScriptOf(scenario: ContractScenario): string | undefined {
+  switch (scenario.kind) {
+    case 'backgroundsThenWaits':
+      return `sleep 40 & printf '%s\\n' "$!"; wait`;
+    case 'detachesThenWaits':
+      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+    case 'printsBothStreams':
+      return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
+    case 'printsLongLine':
+      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
+    default:
+      return undefined;
+  }
+}
+
 /** The cases of `ruling-3269-channel-contract`'s rules: the cancel, the error stream and the bounds. */
-function ruleCases(harness: ChannelHarness): ContractCase[] {
+export function ruleCases(harness: ChannelHarness): ContractCase[] {
   /** The host's processes the harness sees, which these cases need. */
   function processesOf(): HostProcesses {
     if (harness.processes === undefined) {
