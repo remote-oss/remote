@@ -39,7 +39,7 @@ APT_PAUSES=(15 180)
 APT_STARTED=0
 APT_CALLS=0
 APT_ENDED=0
-# The options that point every apt call at the sources `isolated_sources` gathers, with lists and caches of their own.
+# The options that point every apt call at the sources `isolated_sources` gathers.
 APT_SOURCE_OPTIONS=()
 
 # Runs one call as root, apt-get or dpkg, its output kept in a log of its own, $LOGS/apt-<n>.log (pipefail gives the
@@ -126,7 +126,8 @@ names_ubuntu_archive() {
 }
 
 # Gathers the apt sources the install reads into a folder of their own, $LOGS/start-display-apt, and points every apt
-# call at it, with lists and caches of its own, so the image's own lists stay as they are:
+# call at it. apt keeps its own lists folder, where a mirror list's state lives too; its update then keeps the lists of
+# these sources alone, and no later step of a job that starts the display runs apt. The folder holds:
 # - only the runner's Ubuntu archive sources, so that a repository the display needs nothing from can't fail the update
 #   (the image's packages.microsoft.com answered 403 in release train 110's gate 45901344169);
 # - an image's Ubuntu mirror list counts as an Ubuntu source: read as none, the standard sources were written beside it,
@@ -138,7 +139,7 @@ isolated_sources() {
   local release codename archive folder=$LOGS/start-display-apt file found=0
   release=$(cat "$OS_RELEASE" 2>/dev/null || true)
   [ -n "$(printf '%s\n' "$release" | sed -n 's/^ID=ubuntu$/yes/p')" ] || return 0
-  mkdir -p "$folder/sources.list.d" "$folder/lists/partial"
+  mkdir -p "$folder/sources.list.d"
   rm -f "$folder"/sources.list.d/*
   : >"$folder/sources.list"
   for file in "$APT_SOURCES/sources.list" "$APT_SOURCES"/sources.list.d/*.list "$APT_SOURCES"/sources.list.d/*.sources; do
@@ -167,9 +168,6 @@ isolated_sources() {
   APT_SOURCE_OPTIONS=(
     -o "Dir::Etc::sourcelist=$folder/sources.list"
     -o "Dir::Etc::sourceparts=$folder/sources.list.d"
-    -o "Dir::State::Lists=$folder/lists"
-    -o "Dir::Cache::pkgcache=$folder/pkgcache.bin"
-    -o "Dir::Cache::srcpkgcache=$folder/srcpkgcache.bin"
   )
 }
 

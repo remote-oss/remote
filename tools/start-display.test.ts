@@ -163,9 +163,6 @@ function ownOptions(machine: Machine): string {
   return [
     `-o Dir::Etc::sourcelist=${folder}/sources.list`,
     `-o Dir::Etc::sourceparts=${folder}/sources.list.d`,
-    `-o Dir::State::Lists=${folder}/lists`,
-    `-o Dir::Cache::pkgcache=${folder}/pkgcache.bin`,
-    `-o Dir::Cache::srcpkgcache=${folder}/srcpkgcache.bin`,
   ].join(' ');
 }
 
