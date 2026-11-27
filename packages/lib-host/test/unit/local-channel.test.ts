@@ -1,0 +1,501 @@
+import {deepStrictEqual} from 'node:assert';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {
+  localChannel,
+  type HostChannel,
+  type ScriptOutcome,
+  type ScriptRequest,
+} from '../../src/index.ts';
+
+const LINUX = {identity: 'this-machine', platform: 'linux'} as const;
+
+/** The folder of a row, removed by the suite. */
+let folder = '';
+
+beforeEach(() => {
+  folder = mkdtempSync(path.join(tmpdir(), 'lib-host-local-unit-'));
+});
+
+afterEach(() => {
+  rmSync(folder, {recursive: true, force: true});
+});
+
+/** A request to run `script`, with the changes `changes` makes to it. */
+function requestOf(
+  script: string,
+  changes: Partial<ScriptRequest> = {},
+): ScriptRequest {
+  return {
+    script,
+    interpreter: 'posixShell',
+    environment: {},
+    input: {kind: 'text', text: ''},
+    cancellation: new AbortController().signal,
+    ...changes,
+  };
+}
+
+/** The lines `script` printed and how it ended. */
+async function ranWith(
+  channel: HostChannel,
+  request: ScriptRequest,
+): Promise<{lines: string[]; outcome: ScriptOutcome}> {
+  const lines: string[] = [];
+  const outcome = await channel.runScript(request, line => {
+    lines.push(line);
+  });
+  return {lines, outcome};
+}
+
+/** Runs the request and cancels it at the first line it prints. */
+function withLine(
+  channel: HostChannel,
+  request: ScriptRequest,
+  controller: AbortController,
+): Promise<{lines: string[]; outcome: ScriptOutcome}> {
+  const lines: string[] = [];
+  return channel
+    .runScript(request, line => {
+      lines.push(line);
+      controller.abort();
+    })
+    .then(outcome => ({lines, outcome}));
+}
+
+describe('the channel of the local machine (card #3158)', () => {
+  it('runs a PowerShell script as a failure to spawn that says this host runs POSIX scripts only', async () => {
+    deepStrictEqual(
+      (
+        await ranWith(
+          localChannel(LINUX),
+          requestOf('Write-Output 1', {interpreter: 'powershell'}),
+        )
+      ).outcome,
+      {
+        kind: 'failed',
+        failure: {
+          kind: 'spawnFailed',
+          detail: 'this host runs POSIX scripts only',
+        },
+      },
+    );
+  });
+
+  it('names the identity it was given, and the platform hint of linux, macOS and any other system', () => {
+    deepStrictEqual(
+      [
+        localChannel(LINUX).identity(),
+        ...(['linux', 'darwin', 'win32', 'freebsd'] as const).map(platform =>
+          localChannel({identity: 'x', platform}).platformHint(),
+        ),
+      ],
+      ['this-machine', 'linux', 'macOS', 'unknown', 'unknown'],
+    );
+  });
+
+  it('gives the lines of the standard output and of the standard error in the order they were written, a last line with no line break, and no carriage return', async () => {
+    const script = [
+      "printf 'one\\n'",
+      "printf 'two\\n' >&2",
+      "printf 'three\\r\\n'",
+      "printf 'four' >&2",
+    ].join('\n');
+    deepStrictEqual(await ranWith(localChannel(LINUX), requestOf(script)), {
+      lines: ['one', 'two', 'three', 'four'],
+      outcome: {kind: 'exited', status: 0},
+    });
+  });
+
+  it('adds the request’s environment to this process’s own, and the request’s value wins', async () => {
+    deepStrictEqual(
+      (
+        await ranWith(
+          localChannel(LINUX),
+          requestOf('printf "%s %s\\n" "$ROW_ONLY" "$HOME"', {
+            environment: {ROW_ONLY: 'set', HOME: '/row/home'},
+          }),
+        )
+      ).lines,
+      ['set /row/home'],
+    );
+  });
+
+  it('gives the script this process’s own environment too', async () => {
+    process.env.LIB_HOST_LOCAL_ROW = 'inherited';
+    try {
+      deepStrictEqual(
+        (
+          await ranWith(
+            localChannel(LINUX),
+            requestOf('printf "%s\\n" "$LIB_HOST_LOCAL_ROW"'),
+          )
+        ).lines,
+        ['inherited'],
+      );
+    } finally {
+      delete process.env.LIB_HOST_LOCAL_ROW;
+    }
+  });
+
+  it('gives a script that ends on a signal the status of 128 plus its number', async () => {
+    deepStrictEqual(
+      (await ranWith(localChannel(LINUX), requestOf('kill -TERM $$'))).outcome,
+      {kind: 'exited', status: 143},
+    );
+  });
+
+  it('gives a shell that cannot start as a failure to spawn, with the system’s message', async () => {
+    const {outcome} = await ranWith(
+      localChannel({...LINUX, shell: path.join(folder, 'no-such-shell')}),
+      requestOf('exit 0'),
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' && [
+        outcome.failure.kind,
+        outcome.failure.detail.includes('ENOENT'),
+      ],
+      ['spawnFailed', true],
+    );
+  });
+
+  it('goes on when the script ends before it has read all its input', async () => {
+    deepStrictEqual(
+      await ranWith(
+        localChannel(LINUX),
+        requestOf('exit 0', {
+          input: {kind: 'text', text: 'x'.repeat(8 * 1024 * 1024)},
+        }),
+      ),
+      {lines: [], outcome: {kind: 'exited', status: 0}},
+    );
+  });
+
+  it('kills the whole process group of a cancelled script, so its children do not outlive it', async () => {
+    const pidFile = path.join(folder, 'child.pid');
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel(LINUX),
+      requestOf(`sleep 30 & echo $! > '${pidFile}'; echo started; wait`, {
+        cancellation: controller.signal,
+      }),
+    );
+    await new Promise<void>(resolve => {
+      const poll = setInterval(() => {
+        if (
+          existsSync(pidFile) &&
+          readFileSync(pidFile, 'utf8').trim() !== ''
+        ) {
+          clearInterval(poll);
+          resolve();
+        }
+      }, 10);
+    });
+    controller.abort();
+    const {outcome} = await running;
+    const child = readFileSync(pidFile, 'utf8').trim();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const state = spawnSync('ps', ['-o', 'stat=', '-p', child], {
+      encoding: 'utf8',
+    }).stdout.trim();
+    // A process that has ended and waits to be reaped counts as gone.
+    const alive = state !== '' && !state.startsWith('Z');
+    deepStrictEqual(
+      [outcome.kind === 'failed' && outcome.failure.kind, alive],
+      ['cancelled', false],
+    );
+  });
+
+  it('settles a cancelled script as cancelled when its group is gone already', async () => {
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel({
+        ...LINUX,
+        signalGroup: () => {
+          throw new Error('no such process');
+        },
+      }),
+      requestOf('sleep 1', {cancellation: controller.signal}),
+    );
+    setTimeout(() => {
+      controller.abort();
+    }, 50);
+    const {outcome} = await running;
+    deepStrictEqual(
+      outcome.kind === 'failed' && outcome.failure.kind,
+      'cancelled',
+    );
+  });
+
+  it('fails a script cancelled in the moment its shell could not start as a failure to spawn', async () => {
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel({...LINUX, shell: path.join(folder, 'no-such-shell')}),
+      requestOf('exit 0', {cancellation: controller.signal}),
+    );
+    controller.abort();
+    const {outcome} = await running;
+    deepStrictEqual(
+      outcome.kind === 'failed' && outcome.failure.kind,
+      'spawnFailed',
+    );
+  });
+
+  it('signals the group with TERM and, when the shell ignores it, with KILL after the grace period, and reports the cancel after the shell has ended', async () => {
+    const signals: string[] = [];
+    const controller = new AbortController();
+    const started = Date.now();
+    const {outcome} = await withLine(
+      localChannel({
+        ...LINUX,
+        graceMilliseconds: 300,
+        signalGroup: (leader, signal) => {
+          signals.push(signal);
+          process.kill(-leader, signal);
+        },
+      }),
+      requestOf("trap '' TERM; echo ready; while :; do sleep 1; done", {
+        cancellation: controller.signal,
+      }),
+      controller,
+    );
+    deepStrictEqual(
+      [
+        outcome.kind === 'failed' && outcome.failure.kind,
+        signals.slice(0, 2),
+        Date.now() - started >= 280,
+      ],
+      ['cancelled', ['SIGTERM', 'SIGKILL'], true],
+    );
+  });
+
+  it('does not wait out the grace period for a shell that ends on TERM', async () => {
+    const signals: string[] = [];
+    const controller = new AbortController();
+    const started = Date.now();
+    await withLine(
+      localChannel({
+        ...LINUX,
+        signalGroup: (leader, signal) => {
+          signals.push(signal);
+          process.kill(-leader, signal);
+        },
+      }),
+      requestOf('echo ready; sleep 30', {cancellation: controller.signal}),
+      controller,
+    );
+    deepStrictEqual(
+      [signals[0], Date.now() - started < 2000],
+      ['SIGTERM', true],
+    );
+  });
+
+  it('ends a background child that ignores TERM once the shell has ended, and leaves a process the script detached into a session of its own', async function () {
+    if (spawnSync('sh', ['-c', 'command -v setsid']).status !== 0) {
+      this.skip();
+    }
+    const stubborn = path.join(folder, 'stubborn.pid');
+    const daemon = path.join(folder, 'daemon.pid');
+    const controller = new AbortController();
+    await withLine(
+      localChannel(LINUX),
+      requestOf(
+        `(trap '' TERM; sleep 30) & echo $! > '${stubborn}'; setsid sleep 30 & echo $! > '${daemon}'; sleep 0.3; echo ready; wait`,
+        {cancellation: controller.signal},
+      ),
+      controller,
+    );
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const states = [stubborn, daemon].map(file => {
+      const processId = readFileSync(file, 'utf8').trim();
+      const state = spawnSync('ps', ['-o', 'stat=', '-p', processId], {
+        encoding: 'utf8',
+      }).stdout.trim();
+      if (state !== '' && !state.startsWith('Z') && file === daemon) {
+        process.kill(Number(processId), 'SIGKILL');
+      }
+      return state !== '' && !state.startsWith('Z');
+    });
+    deepStrictEqual(states, [false, true]);
+  });
+
+  it('keeps a line of exactly 64 Ki characters whole, and splits one character more', async () => {
+    const {lines} = await ranWith(
+      localChannel(LINUX),
+      requestOf(
+        "head -c 65536 /dev/zero | tr '\\0' a; echo; head -c 65537 /dev/zero | tr '\\0' b; echo",
+      ),
+    );
+    deepStrictEqual(
+      lines.map(line => [line[0], line.length]),
+      [
+        ['a', 65536],
+        ['b', 65536],
+        ['b', 1],
+      ],
+    );
+  });
+
+  it('hands on a long line of multi-byte characters in parts of at most 64 Ki characters, and loses none', async () => {
+    const seen = [];
+    for (const [character, count] of [
+      ['é', 100000],
+      ['€', 100000],
+      ['😀', 50000],
+    ] as const) {
+      const {lines} = await ranWith(
+        localChannel(LINUX),
+        requestOf(
+          `head -c ${String(count)} /dev/zero | sed 's/./${character}/g'`,
+        ),
+      );
+      seen.push([
+        lines.every(line => line.length <= 65536),
+        lines.join('') === character.repeat(count),
+      ]);
+    }
+    deepStrictEqual(seen, [
+      [true, true],
+      [true, true],
+      [true, true],
+    ]);
+  });
+
+  it('writes an input larger than the pipe takes, chunk by chunk, and the script reads all of it', async () => {
+    deepStrictEqual(
+      (
+        await ranWith(
+          localChannel(LINUX),
+          requestOf('wc -c', {
+            input: {kind: 'text', text: 'x'.repeat(8 * 1024 * 1024)},
+          }),
+        )
+      ).lines.map(line => line.trim()),
+      ['8388608'],
+    );
+  });
+
+  it('does not run a script cancelled while its input file is being looked at', async () => {
+    const marker = path.join(folder, 'ran.marker');
+    const input = path.join(folder, 'input.txt');
+    writeFileSync(input, 'input');
+    const controller = new AbortController();
+    const running = ranWith(
+      localChannel(LINUX),
+      requestOf(`touch '${marker}'`, {
+        input: {kind: 'file', localFile: input},
+        cancellation: controller.signal,
+      }),
+    );
+    controller.abort();
+    const {outcome} = await running;
+    await new Promise(resolve => setTimeout(resolve, 200));
+    deepStrictEqual(
+      [outcome.kind === 'failed' && outcome.failure.kind, existsSync(marker)],
+      ['cancelled', false],
+    );
+  });
+
+  it('sends no signal to the group after the shell has ended and the group has been swept, though the grace period passes', async () => {
+    const signals: string[] = [];
+    const controller = new AbortController();
+    await withLine(
+      localChannel({
+        ...LINUX,
+        graceMilliseconds: 150,
+        signalGroup: (leader, signal) => {
+          signals.push(signal);
+          process.kill(-leader, signal);
+        },
+      }),
+      requestOf('echo ready; sleep 30', {cancellation: controller.signal}),
+      controller,
+    );
+    await new Promise(resolve => setTimeout(resolve, 400));
+    deepStrictEqual(signals, ['SIGTERM', 'SIGKILL']);
+  });
+
+  it('tells no line a cancelled script writes after the cancel, though its shell is still on its way out', async () => {
+    const controller = new AbortController();
+    const {lines} = await withLine(
+      localChannel(LINUX),
+      requestOf(
+        "trap 'echo late; exit 0' TERM; echo ready; while :; do sleep 0.1; done",
+        {cancellation: controller.signal},
+      ),
+      controller,
+    );
+    deepStrictEqual(lines, ['ready']);
+  });
+
+  it('answers no host path for a file the user cannot read, as for one that is not there', async function () {
+    if (process.getuid?.() === 0) {
+      this.skip();
+    }
+    const unreadable = path.join(folder, 'unreadable.bin');
+    writeFileSync(unreadable, 'secret');
+    chmodSync(unreadable, 0o000);
+    deepStrictEqual(
+      await localChannel(LINUX).clientPathOnHost?.(unreadable),
+      undefined,
+    );
+  });
+
+  it('copies nothing from a file that is not there, and says why', async () => {
+    const outcome = await localChannel(LINUX).copyToHost({
+      localFile: path.join(folder, 'missing.tar.gz'),
+      remotePath: path.join(folder, 'copy.tar.gz'),
+      cancellation: new AbortController().signal,
+    });
+    deepStrictEqual(
+      outcome.kind === 'failed' && [
+        outcome.failure.kind,
+        outcome.failure.detail.includes('ENOENT'),
+      ],
+      ['copyFailed', true],
+    );
+  });
+
+  it('ends a copy cancelled while it runs as cancelled', async () => {
+    const controller = new AbortController();
+    const copying = localChannel(LINUX).copyToHost({
+      localFile: '/dev/zero',
+      remotePath: path.join(folder, 'copy'),
+      cancellation: controller.signal,
+    });
+    setTimeout(() => {
+      controller.abort();
+    }, 20);
+    const outcome = await copying;
+    deepStrictEqual(
+      outcome.kind === 'failed' && outcome.failure.kind,
+      'cancelled',
+    );
+  });
+
+  it('copies the bytes of the file to the path', async () => {
+    const source = path.join(folder, 'source.bin');
+    writeFileSync(source, Uint8Array.from([0, 1, 2, 255]));
+    mkdirSync(path.join(folder, 'in'));
+    const target = path.join(folder, 'in', 'copy.bin');
+    const outcome = await localChannel(LINUX).copyToHost({
+      localFile: source,
+      remotePath: target,
+      cancellation: new AbortController().signal,
+    });
+    deepStrictEqual(
+      [outcome, [...readFileSync(target)]],
+      [{kind: 'copied'}, [0, 1, 2, 255]],
+    );
+  });
+});
