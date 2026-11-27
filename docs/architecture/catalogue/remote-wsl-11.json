@@ -1,0 +1,102 @@
+[
+ {
+  "id": "F-7901",
+  "issue": 11,
+  "repo": "remote-wsl",
+  "kind": "decision",
+  "label": "spec:reviewed",
+  "title": "Decision: extension identity and reference identifiers",
+  "epic": "E79",
+  "acCount": 0,
+  "surfaces": {
+   "commands": [
+    "23 remote-wsl.* ids (verbatim, category WSL)"
+   ],
+   "settings": [
+    "remote.WSL.fileWatcher.polling",
+    "remote.WSL.fileWatcher.pollingInterval",
+    "remote.WSL.debug",
+    "remote.WSL.useShellEnvironment",
+    "remote.WSL.downloadInBackground",
+    "remote.WSL.experimental.scriptLessStartup",
+    "remote.WSL1.connectionMethod",
+    "remote.WSL2.connectionMethod"
+   ],
+   "views": [
+    "targetsWsl"
+   ],
+   "menus": [
+    "remote_10_wsl_0_local",
+    "remote_10_wsl_1_open"
+   ],
+   "contextKeys": [
+    "wslFeatureInstalled",
+    "wsl.openInNewWindow",
+    "wsl.noWSLPath",
+    "wsl.noWSLDistrosInstalled"
+   ],
+   "authorities": [
+    "wsl"
+   ],
+   "other": [
+    "keybinding Shift+Alt+R reveal in explorer",
+    "walkthrough wslWalkthrough",
+    "resource label formatter suffix WSL",
+    "publisher remote-oss, id remote-oss.remote-wsl",
+    "display name WSL",
+    "MIT licence"
+   ]
+  },
+  "external": {
+   "stableApi": [],
+   "proposedApi": [],
+   "processes": [],
+   "network": [
+    "Open VSX namespace remote-oss"
+   ],
+   "remoteFiles": [],
+   "localFiles": [
+    "settings.json",
+    "keybindings.json",
+    "recent folders list"
+   ]
+  },
+  "cites": [
+   "remote-wsl#F-6001",
+   "remote-wsl#F-6002",
+   "remote-wsl#F-6003",
+   "remote-wsl#F-6004",
+   "remote-wsl#F-6005",
+   "remote-wsl#F-6102",
+   "remote-wsl#F-6201",
+   "remote-wsl#F-6202",
+   "remote-wsl#F-6203",
+   "remote-wsl#F-6204",
+   "remote-wsl#F-6205",
+   "remote-wsl#F-6206",
+   "remote-wsl#F-6207",
+   "remote-wsl#F-6301",
+   "remote-wsl#F-6303",
+   "remote-wsl#F-6304",
+   "remote-wsl#F-6501",
+   "remote-wsl#F-6502",
+   "remote-wsl#F-6503",
+   "remote-wsl#F-6601",
+   "remote-containers#F-1401",
+   "remote-containers#F-1405",
+   "remote-containers#F-1406"
+  ],
+  "coreUi": false,
+  "candidateComponent": "wsl.identity-manifest",
+  "candidateLibrary": "lib-identifiers",
+  "area": "B",
+  "reuse": [],
+  "errorPaths": 0,
+  "notes": "Accepted: keep reference identifiers verbatim under own publisher and id (D-14, D-10, D-41). Display name WSL kept. No telemetry. Invented identifiers table currently empty; Q1 of F-6401 may add one. Side-by-side with reference unsupported.",
+  "questions": [
+   "Will F-6401 Q1 add an [adaptation] distro-side code entry to this decision's invented-identifier table?",
+   "Which derived names (global storage, log folder, URI handler host) follow remote-oss.remote-wsl, and where are they recorded?",
+   "The issue says no open questions but affects F-6401 whose launcher lookup depends on identity; is that consistent?"
+  ]
+ }
+]

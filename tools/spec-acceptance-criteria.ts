@@ -308,6 +308,47 @@ export const SSH_EDIT_RELEASE_ONE_SCOPE: CoverageScope = {
   repository: 'remote-ssh-edit',
 };
 
+/** The features of Remote - WSL release 1, plus the one decision with criteria; the stub features and the other decisions have none yet. */
+export const WSL_RELEASE_ONE_FEATURES: readonly string[] = [
+  'F-6001',
+  'F-6002',
+  'F-6003',
+  'F-6004',
+  'F-6005',
+  'F-6101',
+  'F-6102',
+  'F-6103',
+  'F-6201',
+  'F-6202',
+  'F-6203',
+  'F-6204',
+  'F-6205',
+  'F-6206',
+  'F-6207',
+  'F-6208',
+  'F-6301',
+  'F-6302',
+  'F-6303',
+  'F-6304',
+  'F-6401',
+  'F-6402',
+  'F-6501',
+  'F-6502',
+  'F-6503',
+  'F-6601',
+  'F-6602',
+  'F-6701',
+  'F-7902',
+];
+
+/** The coverage file of Remote - WSL release 1. */
+export const WSL_RELEASE_ONE_SCOPE: CoverageScope = {
+  name: 'wsl-r1',
+  file: path.join(CATALOGUE_FOLDER, 'coverage-wsl-r1.tsv'),
+  features: WSL_RELEASE_ONE_FEATURES,
+  repository: 'remote-wsl',
+};
+
 /** Every coverage file the check reads. */
 export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   SLICE_ONE_SCOPE,
@@ -317,6 +358,7 @@ export const COVERAGE_SCOPES: readonly CoverageScope[] = [
   CONTAINERS_RELEASE_TWO_SCOPE,
   EXPLORER_RELEASE_TWO_SCOPE,
   EXTENSIONPACK_RELEASE_TWO_SCOPE,
+  WSL_RELEASE_ONE_SCOPE,
   SSH_RELEASE_TWO_SCOPE,
   SSH_EDIT_RELEASE_ONE_SCOPE,
 ];

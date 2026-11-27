@@ -1,0 +1,12 @@
+[
+ {
+  "id": "F-6005",
+  "issue": 16,
+  "repo": "remote-wsl",
+  "kind": "feature",
+  "label": "spec:reviewed",
+  "title": "Package identity, localization, documentation and telemetry names",
+  "epic": "E60",
+  "acCount": 14
+ }
+]
