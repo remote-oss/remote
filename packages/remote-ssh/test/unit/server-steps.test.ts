@@ -774,8 +774,21 @@ describe("the server steps: the CLI's stop", () => {
       channel,
       bound: bound.signal,
       messages: sink.lines.map(line => line.message),
+      steps,
+      plan: result.plan,
     };
   }
+
+  it('ruling-3028-shared-cli: the stop script the connection server keeps is the one the stop runs', async () => {
+    const {channel, steps, plan} = await stopped(
+      lines('Ok', 'cli.stopped=yes'),
+    );
+    const [call] = channel.calls;
+    deepStrictEqual(
+      steps.stopCliScript(INPUT, leaseOn(channel), HOST, plan, 88),
+      call?.operation === 'runScript' ? call.request.script : '',
+    );
+  });
 
   it("themis on #458: the stop names the CLI's process", async () => {
     const {channel} = await stopped(lines('Ok', 'cli.stopped=yes'));

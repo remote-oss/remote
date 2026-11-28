@@ -12,7 +12,9 @@ import {
   type RunBase,
   connectionStart,
   sessionStartFor,
+  SHARED_CLI_STOP_MILLISECONDS,
   type SshRequest,
+  STOP_SHARED_CLI,
 } from 'lib-ssh';
 import {
   effectiveConnectTimeoutSeconds,
@@ -59,10 +61,15 @@ export interface ConnectionRequestEnvironment {
   processEnvironment: Readonly<Record<string, string | undefined>>;
 }
 
-/** The end of the helper: a short grace after the last window, which carries a reload. */
+/**
+ * The end of the helper: a short grace after the last window, which carries a reload; then it stops the command-line
+ * program the connection shares, if any, before it ends.
+ */
 const HELPER_POLICY: EndPolicy = {
-  kind: 'graceAfterLastLease',
+  kind: 'delayedCheckAfterLastLease',
   milliseconds: HELPER_GRACE_MILLISECONDS,
+  action: STOP_SHARED_CLI,
+  actionBound: SHARED_CLI_STOP_MILLISECONDS,
 };
 
 /**
