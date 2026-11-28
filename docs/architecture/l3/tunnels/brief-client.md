@@ -73,8 +73,9 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
     AC-24, AC-31; F-8203 AC-18).
   - That's the criteria's rule, and it supersedes `ruling-3095-state-classes`' class-A placement for this one record
     (`ruling-3331-history-global-state`).
-  - An add is a read, merge and write of the entry, and two windows adding at the same moment keep the later write,
-    as the reference does.
+  - **No change is lost** (F-8201 BR-9, 7.E2, AC-17). Every query, Refresh included, reads the stored entry, and every
+    change reads it, applies the one change, and writes the result. So a Refresh shows other windows' changes, and a
+    window never writes back a stale copy. A removal keeps an empty list under the tunnel's key.
 
 ## 5. Connecting a window (F-8103)
 
@@ -88,7 +89,8 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
   - **Its socket** is `vscode-tunneling-<16 hex>.sock`, a new random name each time, in the user's runtime folder
     (`$XDG_RUNTIME_DIR` on Linux, else lib-helper's endpoint folder; a named pipe on Windows).
   - **Its record:** the profile's proxy record goes in the same runtime folder, not global storage. lib-helper gains a
-    record-location option for it, since today it keeps its registry under global storage.
+    record-location option for it, since today it keeps its registry under global storage. The option's default
+    stays global storage, so Remote - SSH's connection server is unchanged.
   - It's never shared across profiles (BR-6).
 - **Its life:**
   - **A resolve** starts a proxy, or attaches to the profile's running one (AC-21).
