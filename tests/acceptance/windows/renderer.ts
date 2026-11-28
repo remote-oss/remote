@@ -16,6 +16,7 @@ import {
   type ViewRowRead,
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
+import type {InputBoxFacts} from './settled-answer.ts';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
 import {
   activateWindowWithin,
@@ -2130,6 +2131,32 @@ export async function paletteRows(
 export async function paletteRun(name: string, text: string): Promise<void> {
   await openedPalette(name, text);
   await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** What the quick input box of window `name` shows now: whether it is open, its value, its message and whether it validates. */
+export async function inputBoxFacts(name: string): Promise<InputBoxFacts> {
+  return evaluate<InputBoxFacts>(
+    name,
+    `(() => {
+      const input = ${FOLDER_DIALOG_INPUT};
+      if (input === null) {
+        return {open: false, value: '', message: '', validating: false, focused: false};
+      }
+      const widget = input.closest('.quick-input-widget');
+      return {
+        open: true,
+        value: input.value,
+        message: widget.querySelector('.quick-input-message')?.textContent ?? '',
+        validating: widget.querySelector('.monaco-progress-container.active') !== null,
+        focused: document.activeElement === input,
+      };
+    })()`,
+  );
+}
+
+/** Sets the value of the input of the quick input box open in window `name`, as a user's typing would. */
+export function typeInInputBox(name: string, text: string): Promise<void> {
+  return keyInFolderDialog(name, undefined, text);
 }
 
 /** Types `text` into the input box a command of window `name` shows, and accepts it. */

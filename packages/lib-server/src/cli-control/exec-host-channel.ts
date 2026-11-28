@@ -22,6 +22,8 @@ import {
   failFrom,
   type HostChannel,
   JOINED_ERRORS,
+  PROCESS_ID,
+  REPORT_PROCESS_ID,
   LONGEST_PENDING_LINE,
   type PlatformHint,
   preludeCommand,
@@ -33,12 +35,6 @@ import {type ExecServer, ExecServerFailure} from './exec-server.ts';
 
 /** A name an environment variable can have. */
 const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/** A process id as the shell prints it. */
-const PROCESS_ID = /^[1-9][0-9]*$/;
-
-/** The command before the prelude: the shell's own process id, on a line of its own. */
-const REPORT_PROCESS_ID = 'printf "%s\\n" "$$"; ';
 
 /** The channel over `server`, whose host is `identity` on `platform`. */
 export function execServerChannel(
@@ -180,7 +176,7 @@ async function feedUnlessCancelled(
 }
 
 /** Ends the process tree of `processId` on the host, waiting for lib-host's tree-kill script; a failure leaves it. */
-async function endTree(
+export async function endTree(
   server: Pick<ExecServer, 'spawn'>,
   processId: number,
 ): Promise<void> {

@@ -69,6 +69,7 @@ export {
   type NotTranslatable,
   type PathMapper,
 } from './path-mapper.ts';
+export {wslProcessOf} from './child-process.ts';
 export {
   createWslHostChannel,
   type WslHostChannelPorts,

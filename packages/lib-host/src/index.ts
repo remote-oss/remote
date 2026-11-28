@@ -8,6 +8,8 @@ export {
   BoundedLines,
   JOINED_ERRORS,
   LONGEST_PENDING_LINE,
+  PROCESS_ID,
+  REPORT_PROCESS_ID,
   TREE_KILL_SCRIPT,
 } from './channel-rules.ts';
 export {
@@ -33,3 +35,4 @@ export {
   type ScriptRequest,
   type SessionLock,
 } from './host-channel.ts';
+export {localChannel, type LocalChannelOptions} from './local-channel.ts';
