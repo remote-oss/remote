@@ -38,7 +38,7 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 
 - **The relay:** the management client with our domain (`[dev-tunnels]`
   `ts/src/management/tunnelManagementHttpClient.ts:275`, `https://cp.<domain>/`) at the relay's API version
-  (brief-relay §2). The domain comes from the agent's configuration file (§5); release 1 has one relay.
+  (brief-relay §2). The domain comes from the archive's shipped `config.json` (§5); release 1 has one relay.
 - **The first registration:** the agent creates a tunnel, with a fresh id and the name the user chose or the
   machine's host name. It adds port 31545, `[cli]`'s control port (`[cli]` `constants.rs:14`), and registers its
   host endpoint (brief-relay §5).
@@ -50,7 +50,8 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 - **The host leg:** `TunnelRelayTunnelHost` (`[dev-tunnels]` `ts/src/connections/tunnelRelayTunnelHost.ts`) holds it.
   It carries the clients' SSH sessions, and forwards each of the tunnel's ports to the same port on the machine's
   loopback (`tunnelRelayTunnelHost.ts:117,748`).
-- **What the agent reports:** no WSL distribution (F-8201 AC-41).
+- **What the agent reports:** no WSL distribution (F-8201 AC-41). The tunnel's `description` is the machine's host
+  name, set at every registration, which the client shows once the profile has connected (F-8101 AC-10).
 
 ## 4. The control protocol: `[cli]`'s, the subset our client calls
 
@@ -73,6 +74,11 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
   - **`servermsg`**, with **`serverclose`** and **`serverlog`** from the agent: `{i: socket_id, body}`
     (`protocol.rs:89-93`). They carry each of the client's connections to the server, bridged by the agent to the
     server's own socket, as `[cli]` does (`tunnels/server_bridge.rs`).
+    `serverlog` carries the install's lines with a level: a failure at Info, the steps at Trace (F-8104 AC-13, AC-27).
+  - **`serverprogress {phase}`** (ours, agent to client, during `serve`): `"downloading"` while the server's archive is
+    fetched and `"extracting"` while it's unpacked. The client shows "Downloading VS Code Server..." and "Extracting VS
+    Code Server..." (F-8104 AC-22, AC-32). It's our second addition beside `server_source`, and F-8902 Q3's
+    compatibility note names both.
   - **`forward` / `unforward`**: add a port to the tunnel as **private**, or remove it (`ForwardParams {port,
     public}`; a `public: true` is refused). That's how the client reaches a host port through its loopback listener
     (`ruling-22-open-four` point 3). `ForwardResult.uri` carries no web address in release 1, because none is
@@ -90,10 +96,12 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 
 ## 5. What the agent keeps
 
-- **One state folder per user:** `~/.<agent folder>/`. The folder's name comes from lib-identifiers, the family's one
-  source of names users see (D-14), as one new constant, not a literal in the agent. The folder is mode 0700.
+- **One state folder per user:** `~/.remote-oss-tunnel-agent/`, a fixed family name from one lib-identifiers constant
+  (D-14, #3159), since the agent may serve several products' clients. The folder is mode 0700.
+- **Shipped defaults:** `config.json` inside the archive, `{domain, githubClientId}` (the relay's domain and the
+  device flow's public OAuth client id). The release build writes it at the first staging deployment, and tests write
+  the per-run values into the unpacked copy (#3160).
 - **Its files:**
-  - **`config.json`**: the relay's domain;
   - **`tunnel.json`**: the tunnel record `{tunnelId, clusterId, name}`, for §3's re-register;
   - **`host-key`**: the host's SSH key, made once, mode 0600;
   - **`credential`**: the GitHub token, mode 0600.
@@ -122,6 +130,12 @@ The agent's command line is ours (R-113). It has only what the criteria need (R-
 - **The platform:** the server obtained is the build for the host's platform, x64 or arm64.
 - **Locks and clean-up** are lib-server's own (the install lock, F-2408; the old installs' clean-up, F-2413), so two
   clients asking at once share one install.
+- **The default extensions** (`ServeParams.extensions`, F-8104 BR-1):
+  - **a new server** gets them as its start's `--install-extension` arguments, and an id the gallery doesn't have
+    doesn't stop the start (AC-11);
+  - **a running server:** the agent runs that server's own CLI with `--install-extension` for each listed one it lacks,
+    before it answers `serve`. Any failure fails the `serve` (AC-12, AC-28), and an installed one leaves the host's
+    folder unchanged (AC-5, AC-6).
 - **The connection token** is the one the client sent, else a fresh one. It's never logged.
 - **The server's lifetime** follows lib-server's start-and-reuse rules. The agent keeps one server per commit while
   clients use it.
