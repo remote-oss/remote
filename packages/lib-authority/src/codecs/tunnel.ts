@@ -1,5 +1,6 @@
 /**
- * @fileoverview The tunnel codec: the tunnel name, and the distro it carries after `/`.
+ * @fileoverview The tunnel codec: the whole payload is the tunnel's name, as the user wrote it, and no further `+` is
+ * allowed in it.
  */
 import type {
   Codec,
@@ -15,31 +16,23 @@ function refuse(payload: string, reason: string): MalformedAuthority {
   return {family: FAMILY, payload, reason};
 }
 
-/** Decodes a tunnel payload `<tunnelName>[/<distro>]`; an empty name, with or without a distro, is a refusal. */
+/**
+ * Decodes a tunnel payload, which is the tunnel's name whole: `/`, `:`, `@`, `%` and every other character stay in it.
+ * An empty payload is refused as `empty`, and a payload with a `+` anywhere as `plus`.
+ */
 function decode(payload: string): DecodedOrMalformed<TunnelTarget> {
   if (payload === '') {
     return {malformed: refuse(payload, 'empty')};
   }
-  const slash = payload.indexOf('/');
-  const tunnelName = slash === -1 ? payload : payload.slice(0, slash);
-  if (tunnelName === '') {
-    return {malformed: refuse(payload, 'empty')};
+  if (payload.includes('+')) {
+    return {malformed: refuse(payload, 'plus')};
   }
-  const target: TunnelTarget = {tunnelName};
-  if (slash !== -1) {
-    target.distro = payload.slice(slash + 1);
-  }
-  return {
-    target,
-    rawHostString: payload,
-  };
+  return {target: {tunnelName: payload}, rawHostString: payload};
 }
 
-/** Encodes a tunnel target back to `<tunnelName>` or `<tunnelName>/<distro>`. */
+/** Encodes a tunnel target back to its name. */
 function encode(target: TunnelTarget): string {
-  return target.distro === undefined
-    ? target.tunnelName
-    : `${target.tunnelName}/${target.distro}`;
+  return target.tunnelName;
 }
 
 /** The tunnel label: the tunnel name. */

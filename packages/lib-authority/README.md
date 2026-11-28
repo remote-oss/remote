@@ -12,8 +12,9 @@ family's own form, and gives the label the resource label formatter uses.
   `{hostName, user?, port?}`; a plain text may turn out to be a configured alias, but that is decided later by the
   config model, not by the codec; the `label` is `user@hostName:port` with the parts present.
 - `wsl` and the five container families carry an optional outer hop (`@<authority>`) decoded the same way; an outer
-  that does not decode is a `malformed` with reason `badOuter`. `tunnel` carries an optional distro after `/`
-  instead; an empty tunnel name is a `malformed` with reason `empty`.
+  that does not decode is a `malformed` with reason `badOuter`. `tunnel` takes the whole payload as the tunnel's
+  name, with no outer hop and no distro; an empty one is a `malformed` with reason `empty` and one holding a `+` is
+  `malformed` with reason `plus`.
 - `Connected` and `Failed` are what a connect hands back. The host reads their structured fields (`retryable`, `silent`,
   `userAlreadyNotified`, `reason`, `hints`, `diagnostics`) and never a kind, which is a string each extension narrows
   to its own list. The tunnel pieces of `Connected` are type parameters, so the package needs no editor types.

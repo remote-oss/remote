@@ -20,7 +20,7 @@ export type Family = 'ssh-remote' | 'wsl' | 'dev-container' | 'attached-containe
 export type SshTarget = { kind: 'plain'; text: string } | { kind: 'host'; hostName: string; user?: string; port?: number }
 export interface WslTarget { distro: string; outer?: DecodedTarget }          // distro '' = default distro, passed through, no case folding
 export interface ContainerTarget { payload: string; outer?: DecodedTarget }   // payload: the family's own payload text exactly as written (F-0501's shape is decoded by area C later); outer: the hop after '@'
-export interface TunnelTarget { tunnelName: string; distro?: string }
+export interface TunnelTarget { tunnelName: string }
 export interface DecodedTarget { family: Family; target: SshTarget | WslTarget | ContainerTarget | TunnelTarget; rawHostString: string }
 export type MalformedAuthority = { family: Family; payload: string; reason: string };
 export interface Codec<T> { decode(payload: string): { target: T; rawHostString: string } | { malformed: MalformedAuthority }; encode(target: T): string; label(target: T): string }
@@ -54,7 +54,7 @@ user or port the JSON form carries hostName `::1` unbracketed.
 `wsl` payload: `<distro>` or `<distro>@<outer authority>`; distro may be empty; `outer` decoded with `decodeAuthority`
 (a malformed outer → malformed reason `badOuter`); `encode` the reverse; `label` is the distro or `default distro`
 when empty. Container families: payload split at the first `@` into `payload` and `outer` the same way; `label` =
-the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name → malformed `empty`; `label` the name.
+the payload. `tunnel`: `<tunnelName>`, the payload whole (amended by ruling-3344-tunnel-authority: no `/<distro>` split, and a `+` in it → malformed `plus`); empty name → malformed `empty`; `label` the name.
 
 ## 3. Test table
 
@@ -86,7 +86,8 @@ the payload. `tunnel`: `<tunnelName>` or `<tunnelName>/<distro>`; empty name →
 | `'dev-container+abcd@ssh-remote+h'` | payload `abcd`, outer decoded; family dev-container |
 | `'attached-container+abcd'` | payload, no outer |
 | each of the five container families | `containerCodec(f).decode` works and `decodeAuthority` dispatches to it |
-| `'tunnel+mytunnel'` and `'tunnel+mytunnel/Ubuntu'` | `{tunnelName:'mytunnel'}`, `{tunnelName:'mytunnel', distro:'Ubuntu'}` |
+| `'tunnel+mytunnel'`, `'tunnel+a/b'` | `{tunnelName:'mytunnel'}`, `{tunnelName:'a/b'}` (amended by ruling-3344-tunnel-authority: the payload whole) |
+| `'tunnel+a+b'`, `'tunnel+a+'` | malformed `plus` |
 | `'tunnel+'` | malformed `empty` |
 | `decodeAuthority('nope+x')` | malformed `unknownFamily` |
 | `decodeAuthority('noplus')` | malformed `unknownFamily` (no `+`) |

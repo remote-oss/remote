@@ -26,10 +26,9 @@ export interface ContainerTarget {
   outer?: DecodedTarget;
 }
 
-/** A decoded tunnel target: the tunnel name and an optional distro. */
+/** A decoded tunnel target: the tunnel's name, whole as the authority wrote it. */
 export interface TunnelTarget {
   tunnelName: string;
-  distro?: string;
 }
 
 /** A decoded target: its family, the family's own target shape, and the payload exactly as written. */
