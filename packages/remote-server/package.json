@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "lib-helper": "workspace:*"
+    "lib-helper": "workspace:*",
+    "lib-tunnels": "workspace:*"
   }
 }

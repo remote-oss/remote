@@ -286,6 +286,12 @@ importers:
 
   packages/lib-state: {}
 
+  packages/lib-tunnels:
+    dependencies:
+      lib-helper:
+        specifier: workspace:*
+        version: link:../lib-helper
+
   packages/lib-wsl:
     dependencies:
       lib-host:
@@ -365,6 +371,9 @@ importers:
       lib-helper:
         specifier: workspace:*
         version: link:../lib-helper
+      lib-tunnels:
+        specifier: workspace:*
+        version: link:../lib-tunnels
 
   packages/remote-ssh:
     dependencies:

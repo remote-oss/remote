@@ -6,7 +6,7 @@
 import {Duplex, PassThrough} from 'node:stream';
 import type {PlainData} from 'lib-helper';
 import type {OpenOutcome, ProxyLease} from '../proxy/lease.ts';
-import type {OpenFailureReason} from '../proxy/messages.ts';
+import type {OpenFailureReason} from 'lib-tunnels';
 
 /** The far end of an opened stream: what the window wrote, and the way to answer it. */
 export interface FarEnd {

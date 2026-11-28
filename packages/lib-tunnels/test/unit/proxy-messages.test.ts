@@ -1,6 +1,6 @@
 import {deepStrictEqual} from 'node:assert';
 import type {PlainData} from 'lib-helper';
-import {readProxyReply, readProxyRequest} from '../../src/proxy/messages.ts';
+import {readProxyReply, readProxyRequest} from '../../src/index.ts';
 
 const PROXY = {
   url: 'http://proxy:3128',
