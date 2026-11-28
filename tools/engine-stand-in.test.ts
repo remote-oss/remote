@@ -340,8 +340,9 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
 
   it('#2511: an engine that is not there answers 502 with the reason, and the log says so', async () => {
     const port = engine.port;
-    await closed(engine.server);
+    const previous = engine;
     engine = await fakeEngine(() => undefined);
+    await closed(previous.server);
     const absent = await startStandIn(
       {host: '127.0.0.1', port},
       {report: line => lines.push(line), longPathOf},
@@ -350,11 +351,13 @@ describe('the engine stand-in in front of a WSL engine (card #2511)', () => {
       const answer = await through(absent.address, 'GET', '/_ping');
       deepStrictEqual(
         {
+          replacementOnThePort: engine.port === port,
           status: answer.status,
           body: answer.body,
           logged: lines.length,
         },
         {
+          replacementOnThePort: false,
           status: 502,
           body: `engine-stand-in: connect ECONNREFUSED 127.0.0.1:${String(port)}`,
           logged: 1,
