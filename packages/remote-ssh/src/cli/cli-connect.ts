@@ -31,7 +31,7 @@ import type {
   ConnectSteps,
   TunnelOpening,
 } from '../pipeline/steps.ts';
-import type {SharedCli} from 'lib-ssh';
+import type {SharedCli, SharedCliStore} from 'lib-ssh';
 import type {CliBridgeLoss} from './cli-bridge.ts';
 
 /** The error a CLI that requires a token gives to a challenge with another token. */
@@ -178,12 +178,14 @@ function noStop(): Promise<void> {
 }
 
 /**
- * The control of the CLI the connection already runs, which the record's `sharedCli` names: reached through a tunnel and given
- * the token the record keeps, within the take-up bound. None when any of that fails, so that a new CLI is started.
+ * The control of the CLI the connection already runs, which `shared` names: reached through a tunnel and given the
+ * token the record keeps, within the take-up bound. None when any of that fails, which the log line says, ending
+ * with what the window does `otherwise`.
  */
 async function takenUp(
   context: CliControlContext,
   shared: SharedCli,
+  otherwise: string,
 ): Promise<OpenedControl | undefined> {
   const server: StartedServer = {
     endpoint: {kind: 'port', port: shared.port},
@@ -194,7 +196,7 @@ async function takenUp(
   const reached = await controlOf(context, server);
   if ('cause' in reached) {
     context.logger.info(
-      `the CLI the connection shares can't be reached (${reached.cause}): starting another`,
+      `the CLI the connection shares can't be reached (${reached.cause}): ${otherwise}`,
     );
     return undefined;
   }
@@ -207,7 +209,7 @@ async function takenUp(
     control.close();
     tunnel.close();
     context.logger.info(
-      `the CLI the connection shares didn't take its token (${answer?.kind ?? 'no answer'}): starting another`,
+      `the CLI the connection shares didn't take its token (${answer?.kind ?? 'no answer'}): ${otherwise}`,
     );
     return undefined;
   }
@@ -258,7 +260,7 @@ async function openControl(
   const {input, lease, host, plan, steps, logger, cancellation} = context;
   const sharedCli = lease.storedRecord?.sharedCli;
   if (sharedCli !== undefined) {
-    const shared = await takenUp(context, sharedCli);
+    const shared = await takenUp(context, sharedCli, 'starting another');
     if (shared !== undefined) {
       return shared;
     }
@@ -329,6 +331,18 @@ async function openControl(
     };
   }
   const shared = await shareCli(context, started.server, controlToken);
+  if (shared.kind === 'kept') {
+    // Another window shared its program first: this one takes that up, before its first serve, and stops its own.
+    const other = await takenUp(
+      context,
+      shared.sharedCli,
+      'this window keeps its own',
+    );
+    if (other !== undefined) {
+      await abandon();
+      return other;
+    }
+  }
   return {
     kind: 'opened',
     control,
@@ -337,54 +351,61 @@ async function openControl(
     onControlEnded: reached.onControlEnded,
     abandon,
     stop,
-    stopAtRelease: shared ? noStop : stop,
+    stopAtRelease: shared.kind === 'stored' ? noStop : stop,
   };
 }
 
 /**
- * Stores the CLI this window started in the connection's record, for the connection's later windows and for the
- * connection server, which stops it when it ends; whether the connection took it.
+ * Offers the CLI this window started to the connection's record, in place of the one the window found there, for the
+ * connection's later windows and for the connection server, which stops it when it ends. What the connection did
+ * with it: a connection that shares another program by then keeps it and names it.
  */
 async function shareCli(
   context: CliControlContext,
   server: StartedServer,
   controlToken: string,
-): Promise<boolean> {
+): Promise<SharedCliStore> {
   const {input, lease, host, plan, steps, logger} = context;
   if (server.endpoint.kind !== 'port') {
-    return false;
+    return {kind: 'declined'};
   }
   // The record keeps what a direct window left in it: the program's part is added beside it.
   const stored = await lease
-    .storeSharedRecord({
-      ...(lease.storedRecord ?? {
-        remotePort: 0,
-        operatingSystem: host.operatingSystem,
-        architecture: host.architecture,
-        temporaryFolder: host.temporaryFolder,
-        connectionToken: '',
-      }),
-      sharedCli: {
-        port: server.endpoint.port,
-        controlToken,
-        connectionToken: server.connectionToken,
-        stopScript: steps.stopCliScript(
-          input,
-          lease,
-          host,
-          plan,
-          server.processId,
-        ),
+    .storeSharedCli(
+      {
+        ...(lease.storedRecord ?? {
+          remotePort: 0,
+          operatingSystem: host.operatingSystem,
+          architecture: host.architecture,
+          temporaryFolder: host.temporaryFolder,
+          connectionToken: '',
+        }),
+        sharedCli: {
+          port: server.endpoint.port,
+          controlToken,
+          connectionToken: server.connectionToken,
+          stopScript: steps.stopCliScript(
+            input,
+            lease,
+            host,
+            plan,
+            server.processId,
+          ),
+        },
       },
-    })
-    .catch(() => false);
-  logger.info(
-    stored
-      ? 'the CLI is shared with the connection'
-      : "the connection didn't take the CLI: this window stops it",
-  );
+      lease.storedRecord?.sharedCli?.controlToken ?? null,
+    )
+    .catch((): SharedCliStore => ({kind: 'declined'}));
+  logger.info(SHARE_LINES[stored.kind]);
   return stored;
 }
+
+/** The log line of each outcome of a window's offer of its CLI. */
+const SHARE_LINES: Readonly<Record<SharedCliStore['kind'], string>> = {
+  stored: 'the CLI is shared with the connection',
+  kept: 'another window shared its CLI first: this window takes that one up',
+  declined: "the connection didn't take the CLI: this window stops it",
+};
 
 /**
  * Shows the download stage when the CLI has no server folder for the window's commit: its first `serve` then fetches

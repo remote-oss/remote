@@ -50,6 +50,13 @@ export interface SharedRecord {
 /** The command-line program a connection's windows share. */
 export type SharedCli = NonNullable<SharedRecord['sharedCli']>;
 
+/**
+ * What became of the program a window offered the connection: stored; kept out, since the connection shares the
+ * named program by then; or declined, by a connection that is gone or took no record.
+ */
+export type SharedCliStore =
+  {kind: 'stored'} | {kind: 'kept'; sharedCli: SharedCli} | {kind: 'declined'};
+
 /** The end action of a connection server: it stops the command-line program the connection shares. */
 export const STOP_SHARED_CLI = 'stopSharedCli';
 
@@ -63,7 +70,15 @@ export const SESSION_PROBE_MILLISECONDS = 3000;
 export type ConnectionRequest =
   | {type: 'connect'}
   | {type: 'sharedRecord'}
-  | {type: 'setSharedRecord'; record: SharedRecord}
+  | {
+      type: 'setSharedRecord';
+      record: SharedRecord;
+      /**
+       * The control token of the program the window found in the record, null when it found none; absent from an
+       * earlier window, whose record is taken as it comes.
+       */
+      replacing?: string | null;
+    }
   | {type: 'answer'; promptId: number; text: string}
   | {type: 'refuse'; promptId: number}
   | {
@@ -92,6 +107,8 @@ export type Refusal = 'notOwner' | 'alreadyConnecting' | 'alreadyConnected';
 export type ConnectionReply =
   | {type: 'accepted'}
   | {type: 'refused'; reason: Refusal}
+  /** The record names another program than the one the window found: the connection keeps it, and here it is. */
+  | {type: 'sharedCliKept'; sharedCli: SharedCli}
   | {type: 'questionRefused'; accepted: boolean}
   | {
       type: 'sharedRecord';
@@ -304,9 +321,20 @@ export function readConnectionRequest(
       return {type: body.type};
     case 'setSharedRecord': {
       const record = readSharedRecord(body.record);
-      return record === undefined
-        ? undefined
-        : {type: 'setSharedRecord', record};
+      const {replacing} = body;
+      if (
+        record === undefined ||
+        (replacing !== undefined &&
+          replacing !== null &&
+          typeof replacing !== 'string')
+      ) {
+        return undefined;
+      }
+      return {
+        type: 'setSharedRecord',
+        record,
+        ...(replacing === undefined ? {} : {replacing}),
+      };
     }
     case 'answer':
       return typeof body.promptId === 'number' && typeof body.text === 'string'
@@ -371,6 +399,12 @@ export function readConnectionReply(
   switch (body.type) {
     case 'accepted':
       return {type: 'accepted'};
+    case 'sharedCliKept': {
+      const sharedCli = readSharedCli(body.sharedCli);
+      return sharedCli === undefined
+        ? undefined
+        : {type: 'sharedCliKept', sharedCli};
+    }
     case 'refused':
       return typeof body.reason === 'string' && REFUSALS.includes(body.reason)
         ? {type: 'refused', reason: body.reason as Refusal}

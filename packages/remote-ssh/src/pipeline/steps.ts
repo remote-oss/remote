@@ -32,6 +32,7 @@ import type {
   ConnectionNotice,
   FailureHint,
   SessionCheck,
+  SharedCliStore,
   SharedRecord,
 } from 'lib-ssh';
 import type {FailureDetail} from './failure.ts';
@@ -112,6 +113,14 @@ export interface ConnectionLease {
   startedHelper: boolean;
   /** Leaves what a later window needs to reuse the server; true when the connection took it. */
   storeSharedRecord(record: SharedRecord): Promise<boolean>;
+  /**
+   * Offers the command-line program this window started in place of the one it found, named by its control token, or
+   * of none; the connection keeps a program that replaced the one the window found, and names it.
+   */
+  storeSharedCli(
+    record: SharedRecord,
+    replacing: string | null,
+  ): Promise<SharedCliStore>;
   /**
    * Asks the connection whether its session still answers, when the window's transport was lost: a session that does
    * not is ended. A connection with no helper to ask, the terminal mode's own session, is `unchecked`.

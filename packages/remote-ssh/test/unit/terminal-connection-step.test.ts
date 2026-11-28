@@ -642,16 +642,25 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
     deepStrictEqual(terminal.disposed, true);
   });
 
-  it('F-2410 BR-5: the lease stores no shared record', async () => {
-    const made = fixture();
-    const {result, terminal} = await started(made);
+  /** The lease of a connect whose login went through. */
+  async function loggedInLease() {
+    const {result, terminal} = await started(fixture());
     terminal.write(AUTHENTICATED);
     const outcome = await result;
+    if (outcome.kind !== 'done') {
+      throw new Error(`the connect failed: ${outcome.kind}`);
+    }
+    return outcome.value;
+  }
+
+  it('F-2410 BR-5: the lease stores no shared record', async () => {
+    const lease = await loggedInLease();
     deepStrictEqual(
-      outcome.kind === 'done'
-        ? await outcome.value.storeSharedRecord(RECORD)
-        : undefined,
-      false,
+      [
+        await lease.storeSharedRecord(RECORD),
+        await lease.storeSharedCli(RECORD, null),
+      ],
+      [false, {kind: 'declined'}],
     );
   });
 
@@ -925,18 +934,13 @@ describe('the connection in terminal mode (card connect-17 table)', () => {
   });
 
   it('contracts: a lease answers and refuses nothing, since no notice carries a question, and has no helper to check (F-2505 AC-25)', async () => {
-    const made = fixture();
-    const {result, terminal} = await started(made);
-    terminal.write(AUTHENTICATED);
-    const outcome = await result;
+    const lease = await loggedInLease();
     deepStrictEqual(
-      outcome.kind === 'done'
-        ? [
-            await outcome.value.answer(1, 'x'),
-            await outcome.value.refuse(1),
-            await outcome.value.checkSession(),
-          ]
-        : outcome,
+      [
+        await lease.answer(1, 'x'),
+        await lease.refuse(1),
+        await lease.checkSession(),
+      ],
       [false, false, 'unchecked'],
     );
   });

@@ -126,6 +126,8 @@ export interface Recording {
   releasesAtCheck: number[];
   tunnelCloses: number;
   records: SharedRecord[];
+  /** What each offer of a started program named as the program it replaces, in order. */
+  replacing: Array<string | null>;
   phases: PhaseEvent[];
   /** The fake CLI the last control connection reached. */
   program?: FakeCli;
@@ -268,6 +270,11 @@ export function leaseOf(recording: Recording): ConnectionLease {
     storeSharedRecord: record => {
       recording.records.push(record);
       return Promise.resolve(true);
+    },
+    storeSharedCli: (record, replacing) => {
+      recording.records.push(record);
+      recording.replacing.push(replacing);
+      return Promise.resolve({kind: 'stored'});
     },
     onNotice: listener => {
       recording.notice = listener;
@@ -434,6 +441,7 @@ export function emptyRecording(): Recording {
     releasesAtCheck: [],
     tunnelCloses: 0,
     records: [],
+    replacing: [],
     phases: [],
     presented: [],
     secrets: 0,

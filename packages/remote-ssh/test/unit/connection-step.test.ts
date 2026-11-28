@@ -738,6 +738,34 @@ describe('the connection step', () => {
     );
   });
 
+  it('ruling-3305-shared-cli-cas: offers the started program to the helper in place of the one the window found', async () => {
+    const {lease, outcome} = await loggedIn();
+    const record = {
+      remotePort: 0,
+      operatingSystem: 'linux' as const,
+      architecture: 'x64' as const,
+      temporaryFolder: '/tmp',
+      connectionToken: '',
+      sharedCli: {
+        port: 31545,
+        controlToken: 'control-token',
+        connectionToken: 'server-token',
+        stopScript: 'stop it',
+      },
+    };
+    const stored =
+      outcome.kind === 'done'
+        ? await outcome.value.storeSharedCli(record, 'old-token')
+        : outcome;
+    deepStrictEqual(
+      [stored, lease.asked.at(-1)],
+      [
+        {kind: 'stored'},
+        {type: 'setSharedRecord', record, replacing: 'old-token'},
+      ],
+    );
+  });
+
   it('keeps the lease until the pipeline gives it back, and then gives it back once', async () => {
     const {lease, outcome} = await loggedIn();
     const heldBefore = lease.released;

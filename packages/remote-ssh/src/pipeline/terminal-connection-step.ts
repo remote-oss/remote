@@ -280,6 +280,7 @@ export function openTerminalConnectionStep(
             storedRecord: undefined,
             startedHelper: true,
             storeSharedRecord: () => Promise.resolve(false),
+            storeSharedCli: () => Promise.resolve({kind: 'declined'}),
             onNotice: listener => {
               noticeListeners.push(listener);
               return () => {
