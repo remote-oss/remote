@@ -53,6 +53,12 @@ The specs differ from the CLI's own behaviour in seven known places (dossier §4
      channel, or lib-wsl's D4). The pinned CLI and our preload are copied once per version to
      `<the server's data folder>/remote-oss-containers-cli/<version>/`. The spawn environment is that host's, and the
      override file is written there with mode 0600 and deleted after the run.
+     - The folder of a version is copied under a part name and renamed last, with a marker file written before the
+       rename, so that a folder of that name is whole and a run with the same version copies nothing.
+     - The CLI starts as the job of a process group of its own (`set -m`), and an abort signals that group, so that the
+       `docker` children it started end with it; the exec server's own kill reaches one process.
+     - The override file's folder is the host's runtime folder when it sets one, else a folder of the user's own under
+       its temporary folder, and a folder that is not the user's alone is refused.
 2. **How we bend it, in this order, and only this way:**
    1. **the CLI's own inputs:** the flags it already has (`--mount-workspace-git-root=false`, `--id-label`,
       `--docker-path`, …) and the environment it's spawned with;

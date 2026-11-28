@@ -34,26 +34,7 @@ import {
 } from '../../src/connect/server-steps.ts';
 import {CACHE_SCRIPT} from '../../src/connect/extension-cache.ts';
 import {VOLUME_FOLDERS_SCRIPT} from '../../src/connect/volume-folders.ts';
-
-const PROFILE: ProductProfile = {
-  applicationName: 'fixture',
-  commit: 'abc123',
-  version: '1.2.3',
-  release: '',
-  quality: 'stable',
-  serverApplicationName: 'fixture-server',
-  serverDataFolderName: '.fixture-server',
-  serverDownloadRedirectHosts: [],
-  serverDownloadUrlTemplate: '',
-  serverLicense: [],
-  serverLicenseUrl: '',
-  dataFolderName: '.fixture',
-  tunnelApplicationName: 'fixture-tunnel',
-  urlProtocol: 'fixture',
-  cliDownloadUrlTemplate: '',
-  updateUrl: '',
-  downloadUrl: '',
-};
+import {answer, PROFILE} from './server-profile.fixture.ts';
 
 const OVERRIDE: OverrideValue = {
   value: 'https://example.invalid/server-${os}-${arch}.tar.gz',
@@ -115,19 +96,6 @@ const REUSED = blockOf(
   'server.token=abcdefghijklmnopqrstuvwxyz012345',
   'server.reused=yes',
 );
-
-function answer(
-  matches: (script: string) => boolean,
-  lines: readonly string[],
-  status = 0,
-): ScriptAnswer {
-  return {
-    interpreter: 'posixShell',
-    matches,
-    lines,
-    ending: {kind: 'exit', status},
-  };
-}
 
 function isProbe(script: string): boolean {
   return script.includes('fact host.os');

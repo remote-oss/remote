@@ -234,6 +234,11 @@ class Relay {
   }
 }
 
+/** Whether `signal` has fired by now; a call, so a check after an await is not read as the check before it. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 /** Runs `wsl.exe` through `ports`. */
 export function createWslRunner(ports: WslRunnerPorts): WslRunner {
   const {spawner, files, session} = ports;
@@ -311,6 +316,10 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
       return started;
     }
     const {process: handle} = started;
+    if (cancellation.aborted) {
+      handle.kill();
+      return failed('cancelled', 'cancelled while the program started');
+    }
     let output: Uint8Array = new Uint8Array(0);
     handle.onOutput(chunk => {
       output = joined(output, chunk);
@@ -343,6 +352,9 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     if (located.kind === 'failed') {
       return located;
     }
+    if (isAborted(request.cancellation)) {
+      return failed('cancelled', 'cancelled while the program was located');
+    }
     const finished = await runDecoded(
       located.path,
       [...VERB_ARGUMENTS[request.verb], ...request.operands],
@@ -368,6 +380,9 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
         : `${session.systemRoot}\\System32\\wslconfig.exe`;
     if (program === undefined || !(await files.exists(program))) {
       return failed('wslMissing', 'wslconfig.exe is not in System32');
+    }
+    if (isAborted(cancellation)) {
+      return failed('cancelled', 'cancelled while the program was located');
     }
     return runDecoded(program, ['/setdefault', name], cancellation);
   }
@@ -452,6 +467,9 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     if (located.kind === 'failed') {
       return located;
     }
+    if (request.cancellation.aborted) {
+      return failed('cancelled', 'cancelled while the program was located');
+    }
     const started = await start(
       located.path,
       execArguments(request),
@@ -462,6 +480,10 @@ export function createWslRunner(ports: WslRunnerPorts): WslRunner {
     }
     const {process: handle} = started;
     const {cancellation} = request;
+    if (cancellation.aborted) {
+      handle.kill();
+      return failed('cancelled', 'cancelled while the program started');
+    }
     let kept: Uint8Array = new Uint8Array(0);
     function keep(chunk: Uint8Array): void {
       if (kept.length < CLASSIFY_BYTES) {
