@@ -19,6 +19,7 @@ remote/
 │   ├── remote-server/       extension  remote-oss.remote-server
 │   ├── remote-extensionpack/ extension remote-oss.vscode-remote-extensionpack
 │   ├── lib-<name>/          shared libraries (candidates below)
+│   ├── tunnel-agent/        service    the tunnel host agent (ADR-0016)
 │   └── tunnel-relay/        service    the tunnel relay (ADR-0015)
 ├── tests/
 │   └── conformance/
@@ -37,10 +38,10 @@ remote/
    specs define (commands, the companion interface of R-66, exported extension APIs). Shared code goes in a library.
 4. **A library never imports an extension**, and the library graph has no cycles.
 5. **A service is a third kind**, named in `SERVICE_FOLDERS` (`tools/repository.ts`): a workspace package that runs on
-   its own, outside the editor, with no extension manifest, publisher or engine floor. `tunnel-relay` is the only one
-   (ADR-0015; ruling-3062-service-kind). A service imports libraries by package name and is imported by nothing. The
-   extensions' network rule (contracts §5: an extension's HTTP goes through the editor's `fetch`) binds code that runs
-   in the extension host, so it leaves a service out.
+   its own, outside the editor, with no extension manifest, publisher or engine floor. `tunnel-relay` (ADR-0015;
+   ruling-3062-service-kind) and `tunnel-agent` (ADR-0016) are the two. A service imports libraries by package name
+   and is imported by nothing. The extensions' network rule (contracts §5: an extension's HTTP goes through the
+   editor's `fetch`) binds code that runs in the extension host, so it leaves a service out.
 
    Rules 3 and 4 hold for every way of reaching another package: by name, by a relative path into its folder, by
    an alias in a manifest or a `tsconfig`, in code and in types. A package reaches another package only by its
@@ -66,5 +67,5 @@ it never ships (ruled 2026-10-08, card tooling-04).
 
 Confirmed by the container view (`c4-l2-containers.md` §1, 2026-10-06): `lib-log`, `lib-identifiers`,
 `lib-standdown`, `lib-product`, `lib-authority`, `lib-companion`, `lib-host`, `lib-ssh`, `lib-server`, `lib-wsl` (no milestone; cards wsl-00..06, 2026-10-09),
-`lib-forwarding`. A library exists only with at least two consumers; the import graph in the container view is the
+`lib-forwarding`, `lib-state` (card #3100, `ruling-3099-lib-state`: the event files of the folder history and of the session hints, and the reload handoffs). A library exists only with at least two consumers; the import graph in the container view is the
 one the lint enforces. Folders are created by the coding worker of the first package that needs them.

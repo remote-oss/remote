@@ -235,6 +235,30 @@
     {
       "package": "remote-containers",
       "kind": "module",
+      "key": "src/cli/exec-server-cli-host.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the dev container CLI on the SSH host, run through the exec server; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/placed-cli.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the server's node and the pinned CLI placed on the SSH host, once for each version; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/host-override-store.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the override file goes on the SSH host, mode 0600, and is deleted after the run; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
       "key": "src/engine/exec-server-engine-host.ts",
       "card": "#2071",
       "slice": "containers release 1",
@@ -247,6 +271,44 @@
       "card": "#2396",
       "slice": "remote-wsl",
       "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/state.ts",
+      "card": "#3161",
+      "slice": "tunnels release 1"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/config.ts",
+      "card": "#3160",
+      "slice": "tunnels release 1"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/control/codec.ts",
+      "card": "#3162",
+      "slice": "agent card 5",
+      "decision": "the control protocol's session, which the host leg (#3161) hands each port 31545 stream and serve (#3163) fills; the one of those that merges after #3162 consumes it and removes these entries"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/control/ports.ts",
+      "card": "#3162",
+      "slice": "agent card 5",
+      "decision": "the control protocol's session, which the host leg (#3161) hands each port 31545 stream and serve (#3163) fills; the one of those that merges after #3162 consumes it and removes these entries"
+    },
+    {
+      "package": "tunnel-agent",
+      "kind": "module",
+      "key": "src/control/session.ts",
+      "card": "#3162",
+      "slice": "agent card 5",
+      "decision": "the control protocol's session, which the host leg (#3161) hands each port 31545 stream and serve (#3163) fills; the one of those that merges after #3162 consumes it and removes these entries"
     }
   ]
 }

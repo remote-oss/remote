@@ -8,6 +8,8 @@
 #   against that stand-in for Docker Desktop (reading-2511-desktop-stand-in); the other steps reach it at the distro's
 #   address. The hosts' and containers' published ports are reached over WSL2's localhost forwarding.
 #   VSCodium answers on its debugging port there.
+#   The `containers-wsl` group runs the Dev Containers rows with their engine in that distro
+#   (`dev.containers.executeInWSL`), as a job of its own.
 # - macos-15-intel: the macOS client, with colima's Docker for linux/x86_64 (about 10 minutes to start).
 #
 # Each job runs `node tools/acceptance.ts --editor vscodium` for its launch list and leaves the run's summary in the job
@@ -24,7 +26,7 @@ on:
       windows-launches:
         description: The launches of the Windows jobs, joined by commas, in groups separated by semicolons with one job per group; none skips them
         type: string
-        default: local,remote,wsl,windows-host;containers-a;containers-b;containers-trust
+        default: local,remote,wsl,windows-host;containers-a;containers-b;containers-trust;containers-wsl
       macos-launches:
         description: The launches of the macOS job, joined by commas; none skips the job
         type: string
@@ -44,8 +46,15 @@ jobs:
     steps:
       - id: groups
         env:
-          GROUPS_TEXT: ${{ inputs.windows-launches || 'local,remote,wsl,windows-host;containers-a;containers-b;containers-trust' }}
-        run: echo "groups=$(jq -cn --arg text "$GROUPS_TEXT" '$text | split(";") | map(gsub("\\s"; "")) | map(select(. != ""))')" >> "$GITHUB_OUTPUT"
+          GROUPS_TEXT: ${{ inputs.windows-launches || 'local,remote,wsl,windows-host;containers-a;containers-b;containers-trust;containers-wsl;containers-desktop' }}
+        run: |
+          groups=$(jq -cn --arg text "$GROUPS_TEXT" '$text | split(";") | map(gsub("\\s"; "")) | map(select(. != ""))')
+          # Docker Desktop's engine replaces the WSL distro's in the job of containers-desktop, so it is a group of its own
+          if printf '%s' "$groups" | jq -e 'any(.[]; contains("containers-desktop") and (split(",") | length) > 1)' > /dev/null; then
+            echo "containers-desktop needs a group of its own: Docker Desktop's engine replaces the WSL distro's in its job"
+            exit 1
+          fi
+          echo "groups=$groups" >> "$GITHUB_OUTPUT"
 
   windows:
     needs: windows-groups
@@ -69,13 +78,10 @@ jobs:
       # LF line ends: a CRLF shell script would end the host's entrypoint at once
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - name: The Linux side, an Ubuntu distro in WSL2 with its own Docker engine
+        if: ${{ !contains(env.LAUNCHES, 'containers-desktop') }}
         timeout-minutes: 30
         run: |
           wsl --install Ubuntu-24.04 --no-launch --web-download
@@ -102,8 +108,10 @@ jobs:
           }
           if (-not $up) { wsl -d Ubuntu-24.04 -u root -- sh -c 'systemctl status docker --no-pager | tail -15'; exit 1 }
           "DOCKER_HOST=tcp://${engine}:2375" >> $env:GITHUB_ENV
-      # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`
+      # the image's Docker CLI has no buildx plugin, and the harness builds its images with `docker build --load`; Docker
+      # Desktop brings its own, which a plugin in the user's folder would shadow
       - name: Docker's buildx plugin for the Windows CLI
+        if: ${{ !contains(env.LAUNCHES, 'containers-desktop') }}
         run: |
           $plugins = Join-Path $env:USERPROFILE '.docker\cli-plugins'
           New-Item -ItemType Directory -Force $plugins | Out-Null
@@ -112,10 +120,87 @@ jobs:
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           if ($hash -ne 'b39784aed5b3f9b24d1971bbcbad8c8206033fa63ed4fea82c9141728fe0ea26') { "docker-buildx.exe has sha256 $hash, not its pin"; exit 1 }
           docker buildx version
+      # Docker Desktop for the containers-desktop launch, its WSL 2 engine pinned by build and sha256 (the probe on #3020:
+      # download 3 s, install 55 s, engine 50 s on windows-2025), installed and started as a user does: the CLI's current
+      # context is Desktop's own, desktop-linux, and no DOCKER_HOST is set. Its resources\bin, with its CLI and buildx,
+      # leads the job's PATH. The user accepted Desktop's licence for these runs (#3020). It comes before the download
+      # host's rule, whose WSL adapter exists only once a WSL VM runs.
+      - name: Docker Desktop's WSL 2 engine, for the containers-desktop launch
+        if: contains(env.LAUNCHES, 'containers-desktop')
+        timeout-minutes: 20
+        env:
+          # Docker Desktop 4.99.0, build 245822 (2026-11-09), and the sha256 its checksums.txt gives for the installer
+          DESKTOP_URL: https://desktop.docker.com/win/main/amd64/245822/Docker%20Desktop%20Installer.exe
+          DESKTOP_SHA256: a5e299131c9c53d60f3f752b162078945eb5faf6eedcf0be20a214c6e6cea444
+          DESKTOP_BIN: C:\Program Files\Docker\Docker\resources\bin
+        run: |
+          # WSL as the probe found it before the install (the probe's engine came up after these two)
+          wsl --version
+          wsl --status
+          $installer = Join-Path $env:RUNNER_TEMP 'DockerDesktopInstaller.exe'
+          Invoke-WebRequest $env:DESKTOP_URL -OutFile $installer
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:DESKTOP_SHA256) { "the installer has sha256 $hash, not its pin"; exit 1 }
+          $clock = [Diagnostics.Stopwatch]::StartNew()
+          $process = Start-Process $installer -Wait -PassThru -ArgumentList 'install', '--quiet', '--accept-license', '--backend=wsl-2', '--always-run-service'
+          "the installer exited {0} after {1:n0} s" -f $process.ExitCode, $clock.Elapsed.TotalSeconds
+          if ($process.ExitCode -ne 0) { exit 1 }
+          $docker = Join-Path $env:DESKTOP_BIN 'docker.exe'
+          # The image's own Docker Engine (the docker service, for Windows containers) holds \\.\pipe\docker_engine, the
+          # pipe Desktop's API proxy listens on. While it runs, Desktop's backend stops at once ("open
+          # \\.\pipe\docker_engine: Access is denied"), so it is stopped and kept off for this job.
+          Get-Service docker -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
+          Stop-Service docker -Force -ErrorAction SilentlyContinue
+          Set-Service docker -StartupType Disabled -ErrorAction SilentlyContinue
+          Get-Service docker -ErrorAction SilentlyContinue | Format-Table -AutoSize Name, Status, StartType
+          $clock.Restart()
+          Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+          # Desktop's own context, so the image's Windows engine can never answer for it
+          $os = ''
+          while ($os -ne 'linux' -and $clock.Elapsed.TotalMinutes -lt 12) {
+            Start-Sleep 5
+            $os = "$(& $docker --context desktop-linux version --format '{{.Server.Os}}' 2>$null)".Trim()
+          }
+          "the engine answered '{0}' after {1:n0} s" -f $os, $clock.Elapsed.TotalSeconds
+          if ($os -ne 'linux') {
+            # the backend's own logs and WSL's state, since the error dialog's text is the backend's
+            $logs = @(Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+            $logs | Format-Table -AutoSize LastWriteTime, Length, FullName
+            $logs | Where-Object { $_.Name -match 'backend|wsl|vm|monitor|error' } | Select-Object -First 6 |
+              ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 60 }
+            wsl -l -v
+            wsl --status
+            exit 1
+          }
+          $context = "$(& $docker context show)".Trim()
+          if ($context -ne 'desktop-linux') { "the current context is '$context', not Desktop's desktop-linux"; & $docker context ls; exit 1 }
+          & $docker info --format '{{.OperatingSystem}} | {{.KernelVersion}}'
+          wsl -l -v
+          $env:DESKTOP_BIN >> $env:GITHUB_PATH
       # the run's download host listens on the Windows side's WSL adapter, where the distro's containers reach it: inbound
       # to Node on that adapter only
       - name: The download host is reached from the WSL distro
         run: New-NetFirewallRule -DisplayName 'acceptance download host from WSL' -Direction Inbound -Program (Get-Command node).Source -InterfaceAlias 'vEthernet (WSL*)' -Action Allow | Out-Null
+      # With Docker Desktop's engine the harness has the download host listen on the loopback only and gives the
+      # containers host-gateway as its address (clientReachOf), which Desktop forwards to the client's loopback. A listener
+      # there and a container that fetches from it through that name show both, in one line, before any row needs them.
+      - name: Docker Desktop's containers reach the download host's address
+        if: contains(env.LAUNCHES, 'containers-desktop')
+        timeout-minutes: 5
+        run: |
+          # Start-Process joins its arguments with spaces and quotes none, so the listener is a file
+          $script = Join-Path $env:RUNNER_TEMP 'reach-listener.js'
+          # text, or Invoke-WebRequest gives the body as bytes
+          "require('node:http').createServer((request, response) => response.writeHead(200, {'content-type': 'text/plain'}).end('reached')).listen(8077, '127.0.0.1')" | Set-Content $script
+          $listener = Start-Process node -PassThru -NoNewWindow -ArgumentList "`"$script`""
+          Start-Sleep 2
+          $local = try { (Invoke-WebRequest http://127.0.0.1:8077/ -UseBasicParsing -TimeoutSec 10).Content } catch { "$_" }
+          "the client's own fetch from 127.0.0.1:8077: '$local'"
+          docker pull -q mirror.gcr.io/library/alpine:3.22
+          $answer = "$(docker run --rm --add-host downloads:host-gateway mirror.gcr.io/library/alpine:3.22 wget -q -T 10 -O - http://downloads:8077/ 2>&1)".Trim()
+          Stop-Process -InputObject $listener -ErrorAction SilentlyContinue
+          "a container's fetch from downloads:8077 at host-gateway, the client's 127.0.0.1:8077: '$answer'"
+          if ($local -ne 'reached' -or $answer -ne 'reached') { exit 1 }
       # The image's OpenSSH for Windows, whose agent is a service on a named pipe (disabled until a job starts it); the
       # run's keys go into it and the run takes them out again.
       - name: The OpenSSH client and its agent service
@@ -159,6 +244,15 @@ jobs:
       # lives in this step, and the other steps use the engine's own address.
       - name: The launches
         run: |
+          # Docker Desktop's own engine for containers-desktop: no stand-in in front of it
+          if ($env:LAUNCHES -like '*containers-desktop*') {
+            $desktop = "$(docker context show), $(docker info --format '{{.OperatingSystem}}')"
+            "Docker Desktop's engine: $desktop"
+            pnpm test:acceptance:vscodium --launches $env:LAUNCHES
+            $launched = $LASTEXITCODE
+            "The Windows launches ended with exit code ${launched}, against Docker Desktop's own engine ($desktop).`n" >> $env:GITHUB_STEP_SUMMARY
+            exit $launched
+          }
           $addressFile = Join-Path $env:RUNNER_TEMP 'engine-stand-in.address'
           $standInLog = Join-Path $env:RUNNER_TEMP 'engine-stand-in.log'
           $standIn = Start-Process node -PassThru -NoNewWindow -RedirectStandardOutput $standInLog -RedirectStandardError "$standInLog.err" -ArgumentList (Join-Path $env:GITHUB_WORKSPACE 'tools/engine-stand-in.ts'), '--engine', $env:DOCKER_HOST, '--address-file', $addressFile
@@ -222,11 +316,7 @@ jobs:
       HARNESS_RUN_BASE: /tmp/colima
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
+      - uses: ./.github/actions/setup-pnpm
       - run: pnpm install --frozen-lockfile
       - name: Docker for linux/x86_64 through colima
         timeout-minutes: 25

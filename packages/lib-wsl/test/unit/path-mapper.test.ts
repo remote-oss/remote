@@ -263,7 +263,12 @@ describe('D1: -u appears only on the root install’s path', () => {
       status: 0,
     });
     fake.local.set('C:\\x', new Uint8Array(1));
-    const channel = createWslHostChannel({runner, mapper, distro: 'Ubuntu'});
+    const channel = createWslHostChannel({
+      runner,
+      mapper,
+      distro: 'Ubuntu',
+      logLine: () => undefined,
+    });
     await channel.runScript(
       {
         script: 'true',
@@ -298,7 +303,12 @@ describe('D4: the channel’s own rules', () => {
     const {fake, runner, mapper} = mapperOver(behaviour);
     return {
       fake,
-      channel: createWslHostChannel({runner, mapper, distro: 'Ubuntu'}),
+      channel: createWslHostChannel({
+        runner,
+        mapper,
+        distro: 'Ubuntu',
+        logLine: () => undefined,
+      }),
     };
   }
 
@@ -446,6 +456,7 @@ describe('D4: the channel’s own rules', () => {
       runner,
       mapper: createPathMapper(runner),
       distro: 'Ubuntu',
+      logLine: () => undefined,
     });
     deepStrictEqual(
       [await channel.clientPathOnHost?.('C:\\x'), fake.started.length],
@@ -507,6 +518,7 @@ describe('D4: the channel’s own rules', () => {
       runner,
       mapper: createPathMapper(runner),
       distro: 'Ubuntu',
+      logLine: () => undefined,
     });
     const outcome = await channel.runScript(
       {

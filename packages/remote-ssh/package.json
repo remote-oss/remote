@@ -516,7 +516,8 @@
     "lib-product": "workspace:*",
     "lib-server": "workspace:*",
     "lib-ssh": "workspace:*",
-    "lib-standdown": "workspace:*"
+    "lib-standdown": "workspace:*",
+    "lib-state": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

@@ -207,6 +207,14 @@ export {
   type WatchedExecServer,
   watchedExecServer,
 } from './cli-control/exec-server.ts';
+export {endTree, execServerChannel} from './cli-control/exec-host-channel.ts';
+export {
+  type HostProcess,
+  type HostSpawn,
+  type HostSpawnRequest,
+  REPORTING_SCRIPT,
+  spawnOnHost,
+} from './cli-control/host-process.ts';
 export {
   cliServerFolderOf,
   type S045Event,

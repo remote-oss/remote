@@ -15,6 +15,8 @@ export {
   type ContextKeyHost,
   setContextKey,
 } from './context-keys.ts';
+export {TUNNEL_AGENT_NAME} from './agent-name.ts';
+export {CONTAINERS_CLI_FOLDER} from './containers-cli-folder.ts';
 export {appendExtensionIds} from './extension-ids.ts';
 export {
   type CommandManifest,

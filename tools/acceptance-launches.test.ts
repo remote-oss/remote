@@ -28,6 +28,8 @@ import {
   runnerLaunches,
   settingsOfLaunch,
   suitesOf,
+  pathKeysOf,
+  runEnvironmentOf,
   withHarnessBases,
   withRunTokens,
 } from './acceptance-launches.ts';
@@ -151,6 +153,8 @@ function labelsFromExplorer(): string[] {
     'wsl-linux-web',
     'wsl',
     'windows-host',
+    'containers-wsl',
+    'containers-desktop',
     'wsl-linux-standdown',
     'explorer',
     'explorer-alone',
@@ -462,6 +466,13 @@ describe('the launches of the VSCodium run', () => {
         ['wsl-linux-web', ['remote-oss.remote-wsl'], true, undefined],
         ['wsl', ['remote-oss.remote-wsl'], true, undefined],
         ['windows-host', undefined, true, undefined],
+        ['containers-wsl', ['remote-oss.remote-containers'], true, undefined],
+        [
+          'containers-desktop',
+          ['remote-oss.remote-containers'],
+          true,
+          undefined,
+        ],
         ['wsl-linux-standdown', ['remote-oss.remote-wsl'], true, undefined],
         ['explorer', ['remote-oss.remote-explorer'], true, undefined],
         [
@@ -680,6 +691,14 @@ describe('the launches of the VSCodium run', () => {
           launch.proposedApi,
         ]),
       [
+        ['containers-wsl', 'containers-wsl', shared, undefined, undefined],
+        [
+          'containers-desktop',
+          'containers-desktop',
+          shared,
+          undefined,
+          undefined,
+        ],
         ...['containers-a', 'containers-b'].map(label => [
           label,
           'containers',
@@ -912,6 +931,8 @@ describe('the launches of the VSCodium run', () => {
       launches.filter(needsDevContainerImage).map(launch => launch.label),
       [
         'ssh-containers',
+        'containers-wsl',
+        'containers-desktop',
         ...CONTAINERS_LAUNCHES,
         'extensionpack',
         'extensionpack-german',
@@ -1121,6 +1142,8 @@ describe('the launches of the VSCodium run', () => {
         'cli-path',
         'wsl',
         'windows-host',
+        'containers-wsl',
+        'containers-desktop',
         'containers-podman',
         'ports-reuse-prime',
         'install-install-present-prime',
@@ -2147,6 +2170,49 @@ describe('the client-search launches', () => {
   });
 });
 
+describe('the environment of a run (card #3172)', () => {
+  it('#3172: a search path named Path is given as PATH, alone, with the variables over the rest', () => {
+    deepStrictEqual(
+      runEnvironmentOf({Path: 'C:\\Windows', TEMP: 'C:\\Temp'}, {HARNESS: '1'}),
+      {PATH: 'C:\\Windows', TEMP: 'C:\\Temp', HARNESS: '1'},
+    );
+  });
+
+  it('#3172: a search path named PATH stays as it is, and the two casings together give the first in sorted order, PATH, alone', () => {
+    deepStrictEqual(
+      [
+        runEnvironmentOf({PATH: '/bin'}, {}),
+        runEnvironmentOf(
+          {Path: 'C:\\one', PATH: 'C:\\two', path: 'C:\\three'},
+          {},
+        ),
+      ],
+      [{PATH: '/bin'}, {PATH: 'C:\\two'}],
+    );
+  });
+
+  it('#3172: an environment with no search path gives none, and a variable may name PATH over it', () => {
+    deepStrictEqual(
+      [
+        runEnvironmentOf({TEMP: 'x'}, {}),
+        runEnvironmentOf({Path: 'C:\\one'}, {PATH: 'C:\\two'}),
+      ],
+      [{TEMP: 'x'}, {PATH: 'C:\\two'}],
+    );
+  });
+
+  it('#3172: the keys that name the search path are listed in sorted order, whatever their casing', () => {
+    deepStrictEqual(
+      [
+        pathKeysOf({Path: 'a', PATH: 'b', other: 'c'}),
+        pathKeysOf({}),
+        pathKeysOf({path: 'a'}),
+      ],
+      [['PATH', 'Path'], [], ['path']],
+    );
+  });
+});
+
 describe('the run tokens (card coverage-11)', () => {
   it('coverage-11: <run> and <path> are replaced at any depth', () => {
     deepStrictEqual(
@@ -2385,7 +2451,7 @@ describe('the platform cases (card coverage-12)', () => {
     );
   });
 
-  it('containers-72, containers-70, containers-80, tooling-92: containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-config sets a host variable and an empty one for the references of coverage-112 and turns the harness’s echo relay on, containers-nodocker also a PATH with no docker, containers-ssh-engine also the run’s ssh first on its PATH, containers-ssh-env-host that and the SSH host’s address as DOCKER_HOST, and containers-ssh-noclient a PATH of docker alone, and no other containers launch sets an environment', () => {
+  it('containers-72, containers-70, containers-80, tooling-92, #3172: containers-desktop puts Docker Desktop’s client directory first on the editor’s PATH, containers, containers-ports and containers-features put a recording xdg-open of the run’s folder first on the editor’s PATH, containers-features also trusts the run’s download host certificate, the two index launches name the catalogue address they fail on, the three killed launches name their cases, containers-context and containers-trust give the Docker configuration of their own, containers-config sets a host variable and an empty one for the references of coverage-112 and turns the harness’s echo relay on, containers-nodocker also a PATH with no docker, containers-ssh-engine also the run’s ssh first on its PATH, containers-ssh-env-host that and the SSH host’s address as DOCKER_HOST, and containers-ssh-noclient a PATH of docker alone, and no other containers launch sets an environment', () => {
     deepStrictEqual(
       launches
         .filter(launch => launch.label.startsWith('containers'))
@@ -2395,6 +2461,10 @@ describe('the platform cases (card coverage-12)', () => {
         ])
         .filter(([, environment]) => environment !== undefined),
       [
+        [
+          'containers-desktop',
+          {PATH: 'C:\\Program Files\\Docker\\Docker\\resources\\bin;<path>'},
+        ],
         ['containers-a', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-b', {PATH: '<run>/browser-bin:<path>'}],
         ['containers-trust', {DOCKER_CONFIG: '<run>/docker-config'}],

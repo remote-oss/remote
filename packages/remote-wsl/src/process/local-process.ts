@@ -6,6 +6,7 @@
 import {spawn} from 'node:child_process';
 import {createReadStream} from 'node:fs';
 import {access} from 'node:fs/promises';
+import {wslProcessOf} from 'lib-wsl';
 import type {
   WslFiles,
   WslProcess,
@@ -30,39 +31,7 @@ export function localSpawner(
     child.once('error', reject);
     child.once('spawn', () => {
       child.removeListener('error', reject);
-      // A write after the input closed reports through its own callback; the stream's error event says it again.
-      child.stdin.on('error', () => undefined);
-      resolve({
-        onOutput: listener =>
-          child.stdout.on('data', (chunk: Buffer) => {
-            listener(new Uint8Array(chunk));
-          }),
-        onError: listener =>
-          child.stderr.on('data', (chunk: Buffer) => {
-            listener(new Uint8Array(chunk));
-          }),
-        onExit: listener => {
-          child.once('close', (status: number | null) => {
-            listener(status ?? undefined);
-          });
-        },
-        write: data =>
-          new Promise<void>((written, failed) => {
-            child.stdin.write(data, caught => {
-              if (caught === undefined || caught === null) {
-                written();
-              } else {
-                failed(caught);
-              }
-            });
-          }),
-        endInput: () => {
-          child.stdin.end();
-        },
-        kill: () => {
-          child.kill();
-        },
-      });
+      resolve(wslProcessOf(child));
     });
   });
 }

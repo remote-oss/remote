@@ -1,8 +1,11 @@
 import {deepStrictEqual} from 'node:assert';
 import {createLogger} from 'lib-log';
 import {MemorySink} from 'lib-log/testing/memory-sink';
+import {admitsWindow} from '../../src/open/command-window.ts';
 import {rebuildContainer} from '../../src/open/rebuild.ts';
-import {REBUILD_INTENTS_KEY} from '../../src/open/rebuild-intent.ts';
+import {MemoryFiles} from 'lib-state/testing/memory-files';
+import {rebuildHandoffsOn} from './handoff-kinds.fixture.ts';
+import {SHIPPED_MANIFEST} from './shipped-manifest.ts';
 
 /** The window, the store and the log a row steers. */
 interface Setup {
@@ -14,6 +17,8 @@ interface Setup {
   holdReload: Promise<void>;
   /** How many times the window told the shutdown helper that it leaves its container. */
   left: number;
+  /** The commands the window was asked whether the manifest offers, in order. */
+  asked: string[];
 }
 
 function setup(): Setup {
@@ -25,6 +30,7 @@ function setup(): Setup {
     failure: undefined,
     holdReload: Promise.resolve(),
     left: 0,
+    asked: [],
   };
 }
 
@@ -35,10 +41,14 @@ async function reopened(
   calls = 1,
 ): Promise<string[]> {
   const sink = new MemorySink();
+  const held = rebuildHandoffsOn(new MemoryFiles());
   const handler = rebuildContainer(
     {
       window: {
-        remoteName: () => state.remoteName,
+        admits: commandId => {
+          state.asked.push(commandId);
+          return admitsWindow(SHIPPED_MANIFEST, commandId, state.remoteName);
+        },
         remoteAuthority: () => state.authority,
         reload: async () => {
           state.reloads += 1;
@@ -46,18 +56,20 @@ async function reopened(
         },
       },
       intents: {
-        get: () => undefined,
-        update: (key, value) => {
-          if (state.failure !== undefined) {
-            // The row on a rejection that is not an error needs exactly that.
-            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-            return Promise.reject(state.failure);
-          }
-          state.updates.push([key, value]);
-          return Promise.resolve();
+        ...held,
+        store: {
+          ...held.store,
+          leave: (key, value) => {
+            if (state.failure !== undefined) {
+              // The row on a rejection that is not an error needs exactly that.
+              // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+              return Promise.reject(state.failure);
+            }
+            state.updates.push([key, value]);
+            return Promise.resolve();
+          },
         },
       },
-      now: () => 1000,
       shutdown: {
         leave: () => {
           state.left += 1;
@@ -79,19 +91,32 @@ describe('Rebuild Container', () => {
     deepStrictEqual(
       [state.updates, state.reloads, lines],
       [
-        [
-          [
-            REBUILD_INTENTS_KEY,
-            {
-              payload: {
-                storedAt: 1000,
-                value: {removeExistingContainer: true, buildNoCache: false},
-              },
-            },
-          ],
-        ],
+        [['payload', {removeExistingContainer: true, buildNoCache: false}]],
         1,
         ['info: rebuilding the dev container (no cache: false)'],
+      ],
+    );
+  });
+
+  it('F-1302 AC-6: each variant asks the manifest about its own command, and an SSH window, whose manifest clause does not offer the rebuilds, does nothing', async () => {
+    const asked: string[][] = [];
+    for (const buildNoCache of [false, true]) {
+      const state = setup();
+      await reopened(state, {buildNoCache});
+      asked.push(state.asked);
+    }
+    const sshWindow = setup();
+    sshWindow.remoteName = 'ssh-remote';
+    const lines = await reopened(sshWindow);
+    deepStrictEqual(
+      [asked, sshWindow.updates, lines],
+      [
+        [
+          ['remote-containers.rebuildContainer'],
+          ['remote-containers.rebuildContainerNoCache'],
+        ],
+        [],
+        ['info: Rebuild Container does nothing in this window'],
       ],
     );
   });
@@ -99,20 +124,9 @@ describe('Rebuild Container', () => {
   it('F-0405 5.1: the no-cache variant stores buildNoCache', async () => {
     const state = setup();
     await reopened(state, {buildNoCache: true});
-    deepStrictEqual(
-      JSON.stringify(state.updates),
-      JSON.stringify([
-        [
-          REBUILD_INTENTS_KEY,
-          {
-            payload: {
-              storedAt: 1000,
-              value: {removeExistingContainer: true, buildNoCache: true},
-            },
-          },
-        ],
-      ]),
-    );
+    deepStrictEqual(state.updates, [
+      ['payload', {removeExistingContainer: true, buildNoCache: true}],
+    ]);
   });
 
   it('F-0417 BR-9: Rebuild Container tells the shutdown helper that the window leaves, once, and then reloads; with no reload it tells nothing', async () => {
@@ -178,9 +192,10 @@ describe('Rebuild Container', () => {
     const state = setup();
     state.authority = 'dev-container+7b7d';
     await reopened(state);
-    deepStrictEqual(Object.keys((state.updates[0] as [string, object])[1]), [
-      '7b7d',
-    ]);
+    deepStrictEqual(
+      state.updates.map(update => (update as [string, unknown])[0]),
+      ['7b7d'],
+    );
   });
 
   it('contracts: a second call while one runs returns at once', async () => {

@@ -14,6 +14,7 @@ import {
   connectedWithin,
   editorCommandLine,
   extensionActive,
+  heldLines,
   inWindow,
   isOpen,
   nextEmptyWindow,
@@ -23,6 +24,7 @@ import {
   readUserSettings,
   recordLines,
   restoreUserSettings,
+  signal,
   untitledDocuments,
   userSettings,
   variable,
@@ -31,7 +33,7 @@ import {
   windowNames,
   windowState,
 } from '../windows/harness.ts';
-import {closeAllButLocal} from '../windows/maintenance.ts';
+import {closeAllButLocal, password} from '../windows/maintenance.ts';
 import {
   answerDialog,
   answerFolderDialog,
@@ -404,13 +406,21 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
 
   it('F-2504 AC-5 (c2623-new-window): from a window on another host, code --remote <alias> <folder> opens a window titled by the folder with the indicator Opening Remote..., which connects and ends titled with the authority and the indicator SSH: <alias>', async () => {
     await connectedWindow('c2623-other-host');
-    await onHost(['c2623-new-window']);
     const name = 'c2623-new-window';
-    const status = await commandLine(
-      '--remote',
-      'ssh-remote+harness',
-      `${HOME}/${name}`,
+    const folder = `/home/harness-pw/${name}`;
+    await onHostAs('harness-pw', 'mkdir', '-p', folder);
+    // The password account asks its password, and the answer waits for a signal: the connect stands at Opening Remote...
+    // for as long as the row looks, so that the row does not race a connect that a fast runner finishes first.
+    appendScript([{...password(), window: name, after: 'c2623-answer'}]);
+    const status = await commandLine('--remote', 'ssh-remote+password', folder);
+    await waitFor(
+      'the password input to be held',
+      () => heldLines(name).length > 0,
+      120_000,
     );
+    const first = await statusBarText(name, 'status.host');
+    signal('c2623-answer');
+    const last = `[${name} [SSH: password]] | SSH: password`;
     const seen: string[] = [];
     await waitFor(
       'the window to connect',
@@ -419,23 +429,19 @@ describe('opening folders, workspaces and links on an SSH host (card #2623, F-25
         if (seen.at(-1) !== now) {
           seen.push(now);
         }
-        return now === `[${name} [SSH: harness]] | SSH: harness`;
+        return now === last;
       },
       120_000,
     );
     deepStrictEqual(
-      {
-        status,
-        first: seen[0]?.split(' | ')[1],
-        last: seen.at(-1),
-        windows: otherNames(),
-      },
+      {status, first, last: seen.at(-1), windows: otherNames()},
       {
         status: 0,
         first: 'Opening Remote...',
-        last: `[${name} [SSH: harness]] | SSH: harness`,
+        last,
         windows: ['c2623-new-window', 'c2623-other-host'],
       },
+      JSON.stringify(seen),
     );
   });
 

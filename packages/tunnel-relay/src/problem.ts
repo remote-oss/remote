@@ -8,6 +8,8 @@
 export interface Answer {
   status: number;
   body?: unknown;
+  /** Headers the answer carries besides the ones every answer has, such as `Retry-After`. */
+  headers?: Readonly<Record<string, string>>;
 }
 
 /** A problem answer: its status and its detail, with the title of its status. */
@@ -35,6 +37,8 @@ function titleOf(status: number): string {
       return 'Conflict';
     case 413:
       return 'Payload Too Large';
+    case 429:
+      return 'Too Many Requests';
     default:
       return 'Error';
   }

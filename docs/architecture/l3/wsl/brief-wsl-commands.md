@@ -58,15 +58,19 @@ window-advisories, D8 shell-handoff with the build-time D8g, D11's writing side,
 - **Out of context:** `silent` for both commands, also for Reopen in WSL inside a WSL window (7.E5 isn't reproduced).
   There is no default-distro step and no progress before the picker (7.E11, BR-9).
 
-## 4. Labels (F-6205, under revision)
+## 4. Labels (F-6205)
 
 - **Formatters, plural:** `wsl.window-surfaces` registers one per listed distro, `docker-desktop` included, once D6's
   step-4 list read returns, before the connect's outcome. They aren't refreshed afterwards (R-60).
 - **lib-authority** widens `registerAuthorityLabel`: an explicit authority, `workspaceTooltip`, `priority` (where the
   pinned proposal has it). The manifest also declares the static `wsl+*` formatter (F-7901 §2.5).
-- **A distro with no version** gets no tooltip (Q2 option (b), `reading-2348-label-no-version`; AC-19 allows it). STR:S042's
-  `{0}` has Markdown metacharacters escaped, since core renders the tooltip as trusted Markdown.
-- **Waiting on the revision:** AC-3, AC-4, AC-18, AC-19, AC-20.
+- **A distro with no version** gets the tooltip "Running in {0}" (BR-10, `ruling-wsl-6005-6205`, former Q2 option
+  (a)). No version is invented, and the suffix "WSL: {0}" doesn't change.
+- **Escaping:**
+  - in STR:S042's `{0}` and BR-10's, every Markdown character is escaped, `_` included (BR-2), since core renders the
+    tooltip as trusted Markdown;
+  - the suffix STR:S062's `{0}` escapes icon syntax `$(` with a backslash (BR-1), so it isn't the raw name.
+- **Cards:** #2388 (wsl-31) takes AC-3, AC-4, AC-18, AC-19 and AC-21 with these rules.
 
 ## 5. Recommendations (F-6206)
 

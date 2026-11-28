@@ -41,6 +41,8 @@ interface LaunchCommon {
    * one; their names are HARNESS_WSL_DISTROS. Only a Windows client can, and another refuses the launch.
    */
   wslDistros?: true;
+  /** Whether the launch needs a Windows client: left out of the Linux parts, named by platform.yml's Windows job. */
+  windowsClient?: true;
   /**
    * Whether the launch's windows open the run's Windows SSH host, the alias `winhost`: Windows' OpenSSH Server on
    * 127.0.0.1, which the platform workflow's Windows job starts and passes as HARNESS_WINHOST_*. Only a Windows client
@@ -545,6 +547,36 @@ export const CONFIG_FILE_LAUNCHES: readonly string[] = [
   'ssh-askpass-env',
   'ssh-askpass-space',
 ];
+
+/**
+ * The environment of a run: `base` with its search path under the one key `PATH` and `variables` over it. A Windows
+ * process names the variable `Path`, and a copy of its environment keeps that key, so a `<path>` read from `PATH` would
+ * be empty, and a launch's own `PATH` would stand beside the key `Path`, of which Node passes the first in sorted order
+ * to a child: when both casings are present, `PATH` is the one that is kept.
+ */
+export function runEnvironmentOf(
+  base: Readonly<Record<string, string | undefined>>,
+  variables: object,
+): Record<string, string | undefined> {
+  const keys = pathKeysOf(base);
+  const [first] = keys;
+  return {
+    ...Object.fromEntries(
+      Object.entries(base).filter(([key]) => !keys.includes(key)),
+    ),
+    ...(first === undefined ? {} : {PATH: base[first]}),
+    ...variables,
+  };
+}
+
+/** The keys of `base` that name the search path, in sorted order, as the Windows job's log records them. */
+export function pathKeysOf(
+  base: Readonly<Record<string, string | undefined>>,
+): string[] {
+  return Object.keys(base)
+    .filter(key => key.toUpperCase() === 'PATH')
+    .sort();
+}
 
 /** The token for the run's folder, which a launch's settings and environment may name. */
 const RUN_FOLDER_TOKEN = '<run>';
@@ -1415,6 +1447,28 @@ export function launchesOf(root: string): Launch[] {
         ...RENDERER_LAUNCH.settings,
         'remote.SSH.remotePlatform': {winhost: 'windows'},
         'remote.SSH.permitPtyAllocation': true,
+      },
+    },
+    // Dev Containers on a Windows client whose engine is the WSL distro's own, reached through executeInWSL; the platform
+    // workflow's Windows job only, by name.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-wsl',
+      suite: 'containers-wsl',
+      namedOnly: true,
+      windowsClient: true,
+    },
+    // Dev Containers on a Windows client with Docker Desktop's WSL 2 engine; the platform workflow's Windows job only,
+    // by name.
+    {
+      ...CONTAINERS_LAUNCH,
+      label: 'containers-desktop',
+      suite: 'containers-desktop',
+      namedOnly: true,
+      windowsClient: true,
+      // The image's own docker.exe drives Windows containers, so Docker Desktop's client comes first.
+      environment: {
+        PATH: 'C:\\Program Files\\Docker\\Docker\\resources\\bin;<path>',
       },
     },
     {
