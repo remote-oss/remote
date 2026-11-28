@@ -5,10 +5,8 @@
  */
 
 import {PassThrough, Writable} from 'node:stream';
+import {PROCESS_ID} from 'lib-host';
 import type {ExecReadStream, ExecServer} from './exec-server.ts';
-
-/** A process id as the shell prints it. */
-const PROCESS_ID = /^[1-9][0-9]*$/;
 
 /** The longest first line read as a process id; a longer one without a line break is no process id. */
 const LONGEST_REPORT = 32;
