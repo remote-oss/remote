@@ -10,7 +10,15 @@
  * `dist/web/extension.js`; nothing in it may import a `node:` module.
  */
 
-import {copyFileSync, existsSync, mkdirSync, readdirSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import {build} from 'esbuild';
@@ -46,6 +54,11 @@ export interface CopiedFiles {
   from: string;
   files: readonly string[];
   into: string;
+  /**
+   * The list of the sha256 of the shipped files that the package carries: the file it is written to, and the package's
+   * own built files that are listed with them, each under the name a host gives it.
+   */
+  hashes?: {into: string; built: Readonly<Record<string, string>>};
 }
 
 /** The packages that ship files of a dependency byte for byte, which esbuild never bundles or touches. */
@@ -60,6 +73,10 @@ export const COPIED_FILES: Readonly<Record<string, CopiedFiles>> = {
       'ThirdPartyNotices.txt',
     ],
     into: 'dist/devcontainers-cli',
+    hashes: {
+      into: 'dist/cli-hashes.json',
+      built: {'cli-preload.js': 'dist/cli-preload.js'},
+    },
   },
 };
 
@@ -77,6 +94,39 @@ function programEntries(directory: string): string[] {
         .sort()
         .map(name => path.join(folder, name))
     : [];
+}
+
+/** The sha256 of `file`, in hexadecimal. */
+function sha256Of(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
+/**
+ * Writes the list of the sha256 of the shipped files, by their path under the target, and of the package's built files
+ * that go with them, so that what is placed on a remote host can be checked against what the package shipped. A
+ * missing built file fails, naming it.
+ */
+function writeHashes(
+  directory: string,
+  folder: string,
+  shipped: CopiedFiles,
+  hashes: NonNullable<CopiedFiles['hashes']>,
+): void {
+  const listed: Record<string, string> = {};
+  for (const file of shipped.files) {
+    listed[file] = sha256Of(path.join(directory, shipped.into, file));
+  }
+  for (const [name, built] of Object.entries(hashes.built)) {
+    const from = path.join(directory, built);
+    if (!existsSync(from)) {
+      throw new Error(`${folder}: the built file ${built} is missing`);
+    }
+    listed[name] = sha256Of(from);
+  }
+  writeFileSync(
+    path.join(directory, hashes.into),
+    `${JSON.stringify(listed, null, 2)}\n`,
+  );
 }
 
 /** Copies the files of a dependency into the package, byte for byte, and says so; a missing file fails, naming it. */
@@ -98,6 +148,9 @@ function copyShipped(
     const target = path.join(directory, shipped.into, file);
     mkdirSync(path.dirname(target), {recursive: true});
     copyFileSync(from, target);
+  }
+  if (shipped.hashes !== undefined) {
+    writeHashes(directory, folder, shipped, shipped.hashes);
   }
   return `${folder}: ${shipped.into}`;
 }

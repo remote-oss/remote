@@ -140,19 +140,33 @@ describe(`the Ports view after a connect past the licence, on VS Code ${VERSION}
   });
 
   it('ADR-0007 floor (ports-forward): a listener started on the host and forwarded through Forward a Port answers on its local port, at both versions', async () => {
-    await listenOnHost(8681, 'ports-8681');
-    await forwardByHand(window, 8681);
-    const local = await localPortOf(window, 8681);
-    await inWindow(window, FOCUS_PORTS);
-    await waitFor(
-      'the row',
-      async () =>
-        (await portsRows(window).catch(() => [])).some(
-          entry => entry.port === '8681',
-        ),
-      60_000,
-    );
-    deepStrictEqual(await greetingOf(local), 'ports-8681');
+    // Core's own detection must not forward the listener before the row does: the row is about Forward a Port.
+    const before = readUserSettings();
+    await userSettings({
+      'remote.portsAttributes': {'8681': {onAutoForward: 'ignore'}},
+    });
+    try {
+      await listenOnHost(8681, 'ports-8681');
+      const outcome = await forwardByHand(window, 8681);
+      if (outcome === 'alreadyForwarded') {
+        throw new Error(
+          'ports-forward: core forwarded port 8681 although its onAutoForward is ignore, so Forward a Port was not exercised',
+        );
+      }
+      const local = await localPortOf(window, 8681);
+      await inWindow(window, FOCUS_PORTS);
+      await waitFor(
+        'the row',
+        async () =>
+          (await portsRows(window).catch(() => [])).some(
+            entry => entry.port === '8681',
+          ),
+        60_000,
+      );
+      deepStrictEqual(await greetingOf(local), 'ports-8681');
+    } finally {
+      restoreUserSettings(before);
+    }
   });
 
   /** Clicks the status item twice and reads whether the Ports view is on screen before and after each click. */

@@ -176,7 +176,7 @@ async function feedUnlessCancelled(
 }
 
 /** Ends the process tree of `processId` on the host, waiting for lib-host's tree-kill script; a failure leaves it. */
-async function endTree(
+export async function endTree(
   server: Pick<ExecServer, 'spawn'>,
   processId: number,
 ): Promise<void> {

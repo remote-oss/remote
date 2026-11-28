@@ -40,3 +40,6 @@ export const CONTEXT_NAMES = {
   cliFolder: 'devcontainers-cli',
   preload: 'cli-preload.js',
 } as const;
+
+/** The CLI as it was placed on a remote host: its files there, and the `node` that runs it. */
+export type PlacedCli = CliPaths & {node: string};
