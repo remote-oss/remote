@@ -252,16 +252,8 @@ describe("the relay's WebSocket legs", () => {
       },
     );
     await session.connect(stream as never);
-    await until(() => hostCount(tunnelId));
+    await until(() => legs.hostCount(tunnelId) === 1);
     return session;
-  }
-
-  /** Whether the relay takes a client of `tunnelId` now. */
-  function hostCount(tunnelId: string): boolean {
-    return (
-      (legs as unknown as {hosts: Map<string, unknown>}).hosts.get(tunnelId) !==
-      undefined
-    );
   }
 
   /** Echoes every byte of `channel` back. */
@@ -416,6 +408,23 @@ describe("the relay's WebSocket legs", () => {
       );
     });
 
+    it('refuses an eleventh client at a limit of ten, holding the ten connected', async () => {
+      legs = new Legs(authenticate, reportOf, 10, timers);
+      await host('one');
+      for (let count = 1; count <= 10; count += 1) {
+        await client('one');
+      }
+      const refused = await refusal(
+        '/relay/client/one',
+        [CLIENT],
+        'tunnel one connect',
+      );
+      deepStrictEqual(
+        [legs.clientCount('one'), refused],
+        [10, [403, 'The tunnel already has 10 connected clients.']],
+      );
+    });
+
     it('gives the sign-in the address of the upgrade’s socket', async () => {
       addresses.length = 0;
       await refusal('/relay/host/one', [HOST], 'refused');
@@ -448,6 +457,18 @@ describe("the relay's WebSocket legs", () => {
   });
 
   describe('the host leg', () => {
+    it('holds one host at a time: none before a leg, one while it is live, one while a second replaces the first, and none once the leg closes', async () => {
+      const counts: number[] = [legs.hostCount('one'), legs.hostCount('other')];
+      await host('one');
+      counts.push(legs.hostCount('one'));
+      const second = await host('one');
+      counts.push(legs.hostCount('one'));
+      second.dispose();
+      await until(() => legs.hostCount('one') === 0);
+      counts.push(legs.hostCount('one'));
+      deepStrictEqual(counts, [0, 0, 1, 1, 0]);
+    });
+
     it('is an SSH session with no key exchange, host key, cipher or MAC', async () => {
       const session = await host('one');
       deepStrictEqual(
@@ -505,7 +526,7 @@ describe("the relay's WebSocket legs", () => {
       legs.closeTunnel('none');
       await hostClosed;
       await closed(websocket);
-      deepStrictEqual(hostCount('one'), false);
+      deepStrictEqual(legs.hostCount('one'), 0);
     });
   });
 
@@ -793,10 +814,10 @@ describe("the relay's WebSocket legs", () => {
       deepStrictEqual(
         [
           droppedCode,
-          hostCount('two'),
+          legs.hostCount('two'),
           String(await bytesOf(kept.received, 6)),
         ],
-        [1005, false, 'astill'],
+        [1005, 0, 'astill'],
       );
     });
   });

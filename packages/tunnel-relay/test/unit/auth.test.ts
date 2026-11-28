@@ -567,11 +567,12 @@ describe('who a request is from', () => {
     githubStatus = 200,
     tokens = new Tokens(SIGNING_KEY, () => 0),
     stored = TUNNEL_ONE,
+    login = 'octo',
   ): Promise<unknown> {
     const authenticate = authenticateWith({
       github: new GithubIdentity(
         'https://github.test',
-        fetchAnswering(githubStatus, {id: 42, login: 'octo'}).fetch,
+        fetchAnswering(githubStatus, {id: 42, login}).fetch,
         () => 0,
       ),
       lookups: new LookupLimit(() => 0),
@@ -695,6 +696,13 @@ describe('who a request is from', () => {
         await callerFor('github client_id=abc secret'),
       ],
       [account, account],
+    );
+  });
+
+  it('serves an admitted id after its login changes', async () => {
+    deepStrictEqual(
+      await callerFor('github secret', 200, undefined, TUNNEL_ONE, 'renamed'),
+      {kind: 'account', id: 42, login: 'renamed'},
     );
   });
 

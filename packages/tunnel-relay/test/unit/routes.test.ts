@@ -33,6 +33,7 @@ describe('the management routes of the relay', () => {
   let caller: Caller | Answer;
   let closedLegs: string[] = [];
   let clientCounts = new Map<string, number>();
+  let hostCounts = new Map<string, number>();
 
   function authenticate(): ReturnType<Authenticate> {
     return Promise.resolve(caller);
@@ -51,6 +52,9 @@ describe('the management routes of the relay', () => {
         },
         clientCount(tunnelId) {
           return clientCounts.get(tunnelId) ?? 0;
+        },
+        hostCount(tunnelId) {
+          return hostCounts.get(tunnelId) ?? 0;
         },
       },
     };
@@ -93,6 +97,7 @@ describe('the management routes of the relay', () => {
     store = new Store(':memory:');
     caller = OWNER;
     clientCounts = new Map();
+    hostCounts = new Map();
   });
 
   afterEach(() => {
@@ -224,17 +229,20 @@ describe('the management routes of the relay', () => {
             },
           ],
           endpoints: [],
+          status: {hostConnectionCount: 0},
         },
       });
     });
 
-    it('is updated with merge semantics: absent fields are kept and read-only ones ignored', async () => {
+    it('is updated with merge semantics: absent fields are kept and read-only ones ignored, among them the status the legs report', async () => {
       await send('PUT', '/tunnels/one', {
         body: {name: 'web', description: 'first', labels: ['a']},
       });
+      hostCounts.set('one', 1);
       const updated = await send('PUT', '/tunnels/one', {
-        body: {description: 'second', created: 'ignored'},
+        body: {description: 'second', created: 'ignored', status: {}},
       });
+      hostCounts.delete('one');
       deepStrictEqual(updated.body, {
         description: 'second',
         labels: ['a'],
@@ -242,6 +250,7 @@ describe('the management routes of the relay', () => {
         clusterId: 'usw2',
         name: 'web',
         endpoints: [],
+        status: {hostConnectionCount: 1},
       });
     });
 
@@ -437,6 +446,49 @@ describe('the management routes of the relay', () => {
       );
       return (region?.value ?? []).map(tunnel => tunnel.tunnelId);
     }
+
+    it('lists each tunnel with how many hosts it holds: none before a leg, one while a leg is live, and none once it closes', async () => {
+      /** The status the listing gives tunnel `tunnelId`. */
+      async function statusOf(tunnelId: string): Promise<unknown> {
+        const answer = await send('GET', '/tunnels');
+        const [region] = (
+          answer.body as {
+            value: Array<{
+              value: Array<{tunnelId: string; status: unknown}>;
+            }>;
+          }
+        ).value;
+        return (region?.value ?? []).find(each => each.tunnelId === tunnelId)
+          ?.status;
+      }
+      const before = await statusOf('aaa');
+      hostCounts.set('aaa', 1);
+      const live = await statusOf('aaa');
+      hostCounts.delete('aaa');
+      deepStrictEqual(
+        [before, live, await statusOf('aaa')],
+        [
+          {hostConnectionCount: 0},
+          {hostConnectionCount: 1},
+          {hostConnectionCount: 0},
+        ],
+      );
+    });
+
+    it("refuses the listing for an account the allowlist doesn't admit, and lists nothing for it", async () => {
+      caller = problem(
+        403,
+        "The tunnel service doesn't admit the GitHub account stranger.",
+      );
+      deepStrictEqual(await send('GET', '/tunnels'), {
+        status: 403,
+        body: {
+          title: 'Forbidden',
+          detail:
+            "The tunnel service doesn't admit the GitHub account stranger.",
+        },
+      });
+    });
 
     it("lists the caller's own tunnels, with global=true or without", async () => {
       deepStrictEqual(
@@ -1027,6 +1079,40 @@ describe('the management routes of the relay', () => {
           [429, 'This tunnel already has 2 ports.'],
           undefined,
           200,
+        ],
+      );
+    });
+
+    it('refuses an eleventh tunnel and an eleventh port, holding the ten of each', async () => {
+      const tunnelStatuses: number[] = [];
+      for (let count = 1; count <= 11; count += 1) {
+        tunnelStatuses.push(
+          (await send('PUT', `/tunnels/ruled-${String(count)}`, {body: {}}))
+            .status,
+        );
+      }
+      const portStatuses: number[] = [];
+      for (let count = 1; count <= 11; count += 1) {
+        portStatuses.push(
+          (
+            await send('PUT', `/tunnels/ruled-1/ports/${String(count)}`, {
+              body: {},
+            })
+          ).status,
+        );
+      }
+      deepStrictEqual(
+        [
+          tunnelStatuses,
+          portStatuses,
+          store.tunnelsOf(7).length,
+          store.portsOf('ruled-1').length,
+        ],
+        [
+          Array.from({length: 10}, () => 200).concat(429),
+          Array.from({length: 10}, () => 200).concat(429),
+          10,
+          10,
         ],
       );
     });
