@@ -856,3 +856,69 @@ describe('the CLI folder on a host with a real shell (card #3244)', () => {
     deepStrictEqual(readdirSync(host).sort(), ['1.0.0', '9.9.9.part-new']);
   });
 });
+
+describe('the version folder placeCliFiles works in (card #3316)', () => {
+  const cliFolder = '/home/dev/.remote-containers/cli';
+  const refusedFolders = [
+    `${cliFolder}/`,
+    `${cliFolder}/.`,
+    `${cliFolder}/..`,
+    `${cliFolder}/a/b`,
+    `${cliFolder}/a\\b`,
+    `${cliFolder}/a\nb`,
+    `${cliFolder}/1.0\0`,
+    `${cliFolder}/1.0/`,
+    `${cliFolder}/-1.0`,
+    `${cliFolder}/1.0 `,
+    '/elsewhere/0.80.0',
+  ];
+
+  /** What `placeCliFiles` did for `versionFolder`, on a channel that records every call it gets. */
+  async function inFolder(versionFolder: string) {
+    const seen = seenOf();
+    const channel = new RecordingChannel({
+      identity: 'c1',
+      platformHint: 'linux',
+    });
+    const failure = await placeCliFiles(
+      createLogger(seen.sink, {minimumLevel: () => 'info'}),
+      {
+        channel,
+        remoteUser: 'dev',
+        version: path.posix.basename(versionFolder),
+        client: {
+          cliFolder,
+          preload: `${cliFolder}/cli-preload.js`,
+          hashes: {},
+        },
+        newToken: () => 'tok',
+        onPhase: () => undefined,
+        onDownloadPercent: () => undefined,
+        cancellation: NEVER,
+      },
+      {cliFolder, versionFolder},
+    );
+    return {
+      kind: failure?.kind ?? 'none',
+      calls: callsOf(channel),
+      logged: loggedOf(seen),
+    };
+  }
+
+  it('a version folder that is not of its own under the CLI folder is refused, with nothing run on the channel', async () => {
+    const refused = await Promise.all(
+      refusedFolders.map(async folder => inFolder(folder)),
+    );
+    deepStrictEqual(
+      refused.map(each => [each.kind, each.calls]),
+      refusedFolders.map(() => ['cliNotPlaced', []]),
+    );
+  });
+
+  it('the refused folder is named in the log, word for word', async () => {
+    const refused = await inFolder(`${cliFolder}/`);
+    deepStrictEqual(refused.logged, [
+      `the CLI's version folder ${cliFolder}/ is not a folder of its own under ${cliFolder}: nothing is placed`,
+    ]);
+  });
+});
