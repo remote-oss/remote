@@ -287,6 +287,14 @@
       "card": "#3340",
       "slice": "tunnels client",
       "decision": "the proxy's data socket; the proxy program of the same card consumes it"
+    },
+    {
+      "package": "tunnel-proxy",
+      "kind": "module",
+      "key": "src/handler.ts",
+      "card": "#3340",
+      "slice": "tunnels client",
+      "decision": "the proxy's answers to its windows; the proxy program of the same card consumes it"
     }
   ]
 }

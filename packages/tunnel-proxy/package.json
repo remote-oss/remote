@@ -2,5 +2,9 @@
   "name": "tunnel-proxy",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "lib-helper": "workspace:*",
+    "lib-tunnels": "workspace:*"
+  }
 }
