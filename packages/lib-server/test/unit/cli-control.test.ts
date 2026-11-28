@@ -411,7 +411,10 @@ describe('the CLI control client: what a host program that is not the editor\u20
   it('#3344: a serve with no server source sends no server_source key', async () => {
     const {peer, control} = connected(accepting);
     await control.serve(SERVE, () => undefined);
-    strictEqual('server_source' in (peer.requests[0]?.params ?? {}), false);
+    strictEqual(
+      Object.hasOwn(peer.requests[0]?.params as object, 'server_source'),
+      false,
+    );
   });
 
   it('#3344: a notification the client does not handle reaches a listener, with its parameters, in order', async () => {
