@@ -294,12 +294,18 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         connected: each.connected,
         picks: each.picks,
         posixErrors: each.posixErrors,
+        platformOk:
+          each.platform.length > 0 &&
+          each.platform.every(line =>
+            line.startsWith('Host platform: windows'),
+          ),
       })),
       connects.map(each => ({
         name: each.label,
         connected: true,
         picks: 0,
         posixErrors: [],
+        platformOk: true,
       })),
       `${JSON.stringify(seen)}; the last log lines: ${logTail()}`,
     );
