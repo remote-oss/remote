@@ -91,6 +91,7 @@ export {
 } from './lifecycle/extensions.ts';
 export {
   type HostLockLoop,
+  insideSessionLine,
   isAcceptedBindHost,
   rangeProblem,
   type RuntimeDependencies,

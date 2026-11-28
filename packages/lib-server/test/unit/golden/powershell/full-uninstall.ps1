@@ -80,6 +80,20 @@ function Start-Program([hashtable]$Launch) {
   }
   return Start-Process @Launch
 }
+function Start-Detached([string]$Program, [string]$Arguments, [string]$OutputFile, [string]$ErrorFile, [string]$Folder) {
+  try {
+    $Line = '"' + $env:ComSpec + '" /d /s /c "' + (ConvertTo-WindowsArgument $Program) + ' ' + $Arguments + ' > ' + (ConvertTo-WindowsArgument $OutputFile) + ' 2> ' + (ConvertTo-WindowsArgument $ErrorFile) + '"'
+    $Block = [string[]]@(Get-ChildItem Env: | ForEach-Object { $_.Name + '=' + $_.Value })
+    $Startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{EnvironmentVariables = $Block; ShowWindow = [uint16]0}
+    $Created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = $Line; CurrentDirectory = $Folder; ProcessStartupInformation = $Startup} -ErrorAction Stop
+    if ($Created.ReturnValue -ne 0) {
+      return @{Id = 0; Reason = 'Win32_Process.Create returned ' + [string]$Created.ReturnValue}
+    }
+    return @{Id = [int]$Created.ProcessId; Reason = ''}
+  } catch {
+    return @{Id = 0; Reason = Get-FailureMessage $_}
+  }
+}
 function ConvertTo-WindowsArgument([string]$Value) {
   return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
 }

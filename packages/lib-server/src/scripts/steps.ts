@@ -260,6 +260,7 @@ export const STEP_OUTCOMES: Readonly<
       {key: 'server.prerequisitesHelper', only: POSIX_ONLY},
       {key: 'server.prerequisites.<line>', only: POSIX_ONLY},
       {key: 'host.note', only: POWERSHELL_ONLY},
+      {key: 'server.startDetached', only: POWERSHELL_ONLY},
     ],
   },
   installExtensions: {
@@ -276,6 +277,7 @@ export const STEP_OUTCOMES: Readonly<
       'cli.tokenMissing',
       'cli.tokenInvalid',
       {key: 'cli.parent', only: POWERSHELL_ONLY},
+      {key: 'cli.startDetached', only: POWERSHELL_ONLY},
     ],
   },
   stopCli: {statuses: ['Ok'], facts: ['cli.stopped']},
