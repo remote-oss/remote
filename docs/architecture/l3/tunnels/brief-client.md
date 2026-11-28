@@ -1,7 +1,7 @@
 # Brief: the Remote - Tunnels client (D-107)
 
-Status: draft by athena. §5's mechanism waits on the user's answer about the SSH library (§9); the rest stands on its
-own. Sources:
+Status: proposed by athena, for proteus's agreement. The user answered §9 on 2026-11-28 (relayed by hermes): "Lets use
+`@microsoft/dev-tunnels-ssh`", which is option (a) of §5. Sources:
 - `[dev-tunnels]` = `microsoft/dev-tunnels` at `64048c1409ff` (ADR-0014), the TypeScript SDK `ts/src`;
 - `[cli]` = VS Code OSS `cli/src` at 1.139.1;
 - `[oss]` = VS Code OSS at 1.139.1.
@@ -84,14 +84,19 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
      `serverclose`.
 - **No CLI update prompt** at any `remote.tunnels.alwaysUpdateCLI` value (F-8104 AC-34). The client never calls
   `update`.
-- **The mechanism for the client leg (waits on §9):**
-  - **If the user allows the library (option a):** the SDK's own client, `TunnelRelayTunnelClient`
-    (`[dev-tunnels]` `ts/src/connections/tunnelRelayTunnelClient.ts`), on `@microsoft/dev-tunnels-ssh`, in the
-    extension. Only this extension uses it, and only for the tunnel protocol. ADR-0014 decision 2's sentence and
-    ADR-0004's scope note are amended to say so.
-  - **If not (option b):** a local helper process holds the client leg, our agent's archive run in a client mode, and
-    the extension talks to it over a local socket. That moves §5 and §6's streams into that helper, and adds its
-    download to the client machine.
+- **The mechanism for the client leg (the user's answer, §9):** the SDK's own client, `TunnelRelayTunnelClient`
+  (`[dev-tunnels]` `ts/src/connections/tunnelRelayTunnelClient.ts`), on `@microsoft/dev-tunnels-ssh`, in the
+  extension host.
+  - **Only this extension uses it, and only for the tunnel protocol:** the relay's `none`-exchange SSH session over its
+    authenticated WebSocket, which OpenSSH can't speak. Every connection to an SSH host stays OpenSSH's (ADR-0004,
+    whose scope note and ADR-0014 decision 2 say so).
+  - **Versions:** `@microsoft/dev-tunnels-connections`, `-management` and `-contracts` at **1.3.50**, with
+    `@microsoft/dev-tunnels-ssh` and `-ssh-tcp` at **3.12.29**. That's the agent's pin (ADR-0016 decision 1,
+    `ruling-3159-sdk-pin`), so the family has one SDK and one ssh. 1.3.50 already has `TunnelRelayTunnelClient`, so the
+    client needs no other version. A later SDK move moves all three users (relay, agent, client) in one change.
+  - **The bundle:** esbuild into the extension's bundle, with `ws`'s two optional native addons (`bufferutil`,
+    `utf-8-validate`) left out as the agent's bundle does (ADR-0002 rule 8, no native Node modules). The MIT notices
+    of the SDK and the ssh library are carried in the extension's notices (ADR-0002 decision 8).
 
 ## 6. Forwarded ports (F-8202)
 
@@ -128,12 +133,11 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
   3. The list, its bound, Create a Tunnel, and `getTunnelsList` (§4).
   4. The folder history on lib-state (§4), after #3100 creates lib-state. It also updates `remote-server-18.json`'s
      folder-history lines.
-  5. The resolver and the control protocol (§5), once §9 is answered.
+  5. The resolver and the control protocol (§5), with the SDK client.
   6. Forwarded ports (§6).
   7. Usage limits (§7).
 
-## 9. For the user, through hermes (asked 2026-11-24)
+## 9. The user's answer (asked 2026-11-24, answered 2026-11-28)
 
-- **May this extension use `@microsoft/dev-tunnels-ssh` for the tunnel protocol's SSH session?** That session is "none"
-  key exchange over the relay's authenticated WebSocket, which OpenSSH can't speak. The recommendation is (a), this
-  extension only and only for the tunnel protocol; §5 lists both options.
+- **May this extension use `@microsoft/dev-tunnels-ssh` for the tunnel protocol's SSH session?** The user: "Lets use
+  `@microsoft/dev-tunnels-ssh`". That's option (a): this extension only, and only for the tunnel protocol (§5).
