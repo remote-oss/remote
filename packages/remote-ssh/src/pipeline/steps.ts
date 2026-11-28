@@ -295,6 +295,14 @@ export interface ConnectSteps {
     plan: Extract<Plan, {kind: 'cli'}>,
     processId: number,
   ): Promise<void>;
+  /** The script that stops the CLI of `processId`, which the connection server runs when it ends. */
+  stopCliScript(
+    input: ConnectInput,
+    lease: ConnectionLease,
+    host: ProbedHost,
+    plan: Extract<Plan, {kind: 'cli'}>,
+    processId: number,
+  ): string;
   /** Connects to the CLI's control port through a local port the tunnel opened; nothing when it refused. */
   connectControl(localPort: number): Promise<ByteStream | undefined>;
   /**
