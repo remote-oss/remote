@@ -74,6 +74,8 @@ export interface TunnelLegs {
   closeTunnel(tunnelId: string): void;
   /** How many clients tunnel `tunnelId` has connected. */
   clientCount(tunnelId: string): number;
+  /** How many hosts tunnel `tunnelId` holds right now. */
+  hostCount(tunnelId: string): number;
 }
 
 /** Whether `value` is a TCP port number: an integer from 1 to 65535. */
@@ -585,7 +587,7 @@ function portRoute(
 function tunnelView(
   tunnel: TunnelRecord,
   query: URLSearchParams,
-  {store, config, tokens}: RouteContext,
+  {store, config, tokens, legs}: RouteContext,
   owner: boolean,
 ): Record<string, unknown> {
   const scopes = owner
@@ -606,6 +608,7 @@ function tunnelView(
     endpoints: store
       .endpointsOf(tunnel.id)
       .map(endpoint => endpointView(tunnel.id, endpoint, config)),
+    status: {hostConnectionCount: legs.hostCount(tunnel.id)},
     ...(scopes.length === 0
       ? {}
       : {

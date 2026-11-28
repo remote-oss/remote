@@ -182,6 +182,11 @@ export class Legs implements TunnelLegs {
     return this.clients.get(tunnelId) ?? 0;
   }
 
+  /** How many hosts tunnel `tunnelId` holds right now: one while a host leg is live, a later host replaces the earlier, so never more. */
+  hostCount(tunnelId: string): number {
+    return this.hosts.has(tunnelId) ? 1 : 0;
+  }
+
   /** Closes the legs of tunnel `tunnelId`, as its deletion does: its host's session, and so its clients' channels. */
   closeTunnel(tunnelId: string): void {
     void this.hosts
