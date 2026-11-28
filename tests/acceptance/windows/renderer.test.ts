@@ -635,14 +635,16 @@ describe('the keyboard before a palette command (card #2424)', () => {
     );
   });
 
-  it('card #2424: a keyboard anywhere else, and a page with no active element, moves nowhere', () => {
+  it('card #2424: a keyboard anywhere else, on another xterm element, on the textarea’s class with another class beside it, or on a page with no active element, moves nowhere', () => {
     deepStrictEqual(
       [
         paletteCommandWhen(''),
         paletteCommandWhen('monaco-workbench'),
         paletteCommandWhen('quick-input-widget'),
+        paletteCommandWhen('xterm-screen'),
+        paletteCommandWhen('xterm-helper-textarea focused'),
       ],
-      [undefined, undefined, undefined],
+      [undefined, undefined, undefined, undefined, undefined],
     );
   });
 });

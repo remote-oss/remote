@@ -17,7 +17,8 @@ import {
   installedServerOnHost,
   type ServerStepDependencies,
 } from '../connect/server-steps.ts';
-import type {Failed} from 'lib-authority';
+import type {DecodedTarget, Failed} from 'lib-authority';
+import {hostAlias, installFolderFor} from 'lib-server';
 import type {PlacedCli} from './cli-paths.ts';
 
 /** The file that a whole folder holds, written before the folder gets its name. */
@@ -131,12 +132,38 @@ export interface PlaceRequest {
   remoteUser: string;
   /** The version of the extension, which names the folder: another version is another folder. */
   version: string;
+  /** The folder the SSH host's own server is installed under, empty for the default: the CLI runs beside that server. */
+  installRoot: string;
   client: ClientCli;
   /** Names a half-copied folder so that no other run's is the same. */
   newToken: () => string;
   onPhase(phase: 'installing'): void;
   onDownloadPercent(percent: number): void;
   cancellation: AbortSignal;
+}
+
+/**
+ * The folder the server of the window's SSH host is installed under, from the authority's outer hop and the user's
+ * `remote.SSH.serverInstallPath`: the folder the setting names for the hop's alias, else empty for the default. A hop
+ * that is no SSH host gives the default, and so does a value the setting doesn't allow, which the log names.
+ */
+export function installRootOf(
+  outer: DecodedTarget | undefined,
+  setting: unknown,
+  logger: Logger,
+): string {
+  // Only an SSH host's target has a kind: a tunnel, a WSL distro or a container is no SSH host.
+  if (outer === undefined || !('kind' in outer.target)) {
+    return '';
+  }
+  const alias = hostAlias(outer.target);
+  const folder = installFolderFor(setting, alias);
+  if (folder.kind === 'invalid') {
+    logger.info(
+      `remote.SSH.serverInstallPath for ${alias} is no folder a server can be installed in (${folder.value}): the CLI runs beside the server in the default folder`,
+    );
+  }
+  return folder.kind === 'folder' ? folder.folder : '';
 }
 
 /** How a placement ended. */
@@ -184,7 +211,7 @@ function filesOf(
  */
 export async function placeCliFiles(
   logger: Logger,
-  request: PlaceRequest,
+  request: Omit<PlaceRequest, 'installRoot'>,
   folders: CliFolders,
 ): Promise<Failed | undefined> {
   const {channel, cancellation} = request;
