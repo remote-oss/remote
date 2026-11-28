@@ -8,6 +8,7 @@ import {
   pageTitleFor,
   pagesForState,
   pagesOfRemoteness,
+  paletteCommandWhen,
   pressUntilClosed,
   withoutAdministratorMark,
   retypingOf,
@@ -622,6 +623,26 @@ describe('retypingOf (card #2756)', () => {
         retypingOf(`${PATH}/`, reading(`${PATH}/`, ['a']), wait, 60_000),
       ],
       [undefined, undefined],
+    );
+  });
+});
+
+describe('the keyboard before a palette command (card #2424)', () => {
+  it("card #2424: a keyboard in the terminal's textarea moves to the editor group, as a user clicking the editor would", () => {
+    deepStrictEqual(
+      paletteCommandWhen('xterm-helper-textarea'),
+      'workbench.action.focusActiveEditorGroup',
+    );
+  });
+
+  it('card #2424: a keyboard anywhere else, and a page with no active element, moves nowhere', () => {
+    deepStrictEqual(
+      [
+        paletteCommandWhen(''),
+        paletteCommandWhen('monaco-workbench'),
+        paletteCommandWhen('quick-input-widget'),
+      ],
+      [undefined, undefined, undefined],
     );
   });
 });
