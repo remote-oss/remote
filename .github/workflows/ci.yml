@@ -100,6 +100,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       docs-only: ${{ steps.diff.outputs.docs-only }}
+      tunnels: ${{ steps.diff.outputs.tunnels }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -113,6 +114,14 @@ jobs:
             echo docs-only=true >> "$GITHUB_OUTPUT"
           else
             echo docs-only=false >> "$GITHUB_OUTPUT"
+          fi
+          # what reaches the tunnels conformance run: the relay package (and its dev-tunnels pin), the suite, the lockfile
+          # and Node version both images install from, the harness modules run.ts imports, and this workflow
+          if printf '%s\n' "$files" | grep -qE \
+            '^(packages/tunnel-relay/|tests/tunnels-conformance/|pnpm-lock\.yaml$|\.node-version$|tools/(command-runner\.ts|known-reds\.(ts|json))$|\.github/workflows/ci\.yml$)'; then
+            echo tunnels=true >> "$GITHUB_OUTPUT"
+          else
+            echo tunnels=false >> "$GITHUB_OUTPUT"
           fi
 
   # After a merge to main: the parts of the VSCodium job that the merged change can reach (acceptance-select over the
@@ -414,6 +423,38 @@ jobs:
       - run: docker version --format 'Docker {{.Server.Version}}'
       - run: pnpm test:acceptance:containers-cli
 
+  # The tunnels conformance run (#3076): the relay the run builds, the stub identity service and the rows on a Docker
+  # network of the run, with no secret and nothing pushed (ADR-0015 T.3-T.5). A pull request runs it when its change
+  # reaches the relay or the suite (the changes job's tunnels output); a merge to main, the nightly run and a full
+  # dispatch run it always. Its lines go to the job's summary.
+  tunnels-conformance:
+    needs: changes
+    if: >-
+      !cancelled() && !inputs.launches-only && needs.changes.result != 'failure' &&
+      !(github.event_name == 'push' && github.ref_type == 'tag') && (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft &&
+      needs.changes.outputs.tunnels == 'true'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30 # a cold run builds the relay image (and the client image's Rust stage) before the rows
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: docker version --format 'Docker {{.Server.Version}}'
+      - name: The tunnels conformance run
+        run: |
+          set -o pipefail
+          node tests/tunnels-conformance/run.ts | tee "$RUNNER_TEMP/tunnels-conformance.log"
+      - name: The run's lines in the summary
+        if: always()
+        run: |
+          {
+            echo '### The tunnels conformance run'
+            echo '```'
+            cat "$RUNNER_TEMP/tunnels-conformance.log" 2>/dev/null || echo 'no lines: the run did not start'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # A pull request from this repository runs the VSCodium launches its change selects, at most six, and a failing row
   # blocks its merge, since the gate needs this job. A larger selection gets a notice and runs by a dispatch at the head,
   # or under the acceptance-full label, here when the label is on the pull request and in acceptance-full.yml when it
@@ -692,6 +733,7 @@ jobs:
       - acceptance-host-variants
       - acceptance-real-server
       - acceptance-containers-cli
+      - tunnels-conformance
       - acceptance-vscodium
       - acceptance-vscodium-containers
       - acceptance-vscodium-cli
@@ -705,7 +747,7 @@ jobs:
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server containers-cli vscodium vscodium-containers vscodium-cli pr-launches genuine: $RESULTS"
+          echo "changes vscodium-plan checks unit quality slice-1 server host-variants real-server containers-cli tunnels-conformance vscodium vscodium-containers vscodium-cli pr-launches genuine: $RESULTS"
       - name: A failed or cancelled job, or a fork's pull request, fails the gate
         if: >-
           contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') ||
