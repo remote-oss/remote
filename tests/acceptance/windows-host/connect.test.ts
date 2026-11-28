@@ -9,73 +9,10 @@
 import {deepStrictEqual} from 'node:assert';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {
-  closeWindow,
-  connectionLog,
-  openWindow,
-  recordLines,
-  variable,
-  waitFor,
-  windowState,
-} from '../windows/harness.ts';
+import {recordLines, variable} from '../windows/harness.ts';
+import {connectedOnWinhost} from './winhost-support.ts';
 
 const execFileAsync = promisify(execFile);
-
-/** The command lines of this machine's `ssh` processes that forward a SOCKS port: the connection helpers' clients. */
-async function helperSshCommands(): Promise<string[]> {
-  const {stdout} = await execFileAsync('powershell', [
-    '-NoProfile',
-    '-Command',
-    'Get-CimInstance Win32_Process -Filter "Name=\'ssh.exe\'" | ForEach-Object { $_.CommandLine }',
-  ]);
-  return stdout.split(/\r?\n/).filter(line => line.includes(' -D 127.0.0.1:'));
-}
-
-/** Waits until no connection helper's `ssh` runs, so that the next window starts its own. */
-function noHelperSsh(): Promise<void> {
-  return waitFor(
-    'no connection helper ssh to run',
-    async () => (await helperSshCommands()).length === 0,
-    60_000,
-  );
-}
-
-/**
- * Opens window `name` on `alias` of the run's Windows host and waits until its connect resolved, with a helper's `ssh` seen meanwhile, and `ready`
- * holds; gives the helpers' `ssh` command lines and the log lines since the open, with the window closed again. A
- * window on a remote authority names the remote at once, before its connect resolves, so that alone says nothing.
- */
-async function connectedOnWinhost(
-  alias: string,
-  name: string,
-  ready: (logged: readonly string[]) => boolean,
-): Promise<{commands: string[]; logged: string[]}> {
-  await noHelperSsh();
-  const mark = connectionLog().length;
-  const commands = new Set<string>();
-  try {
-    await openWindow(alias, name);
-    await waitFor(
-      `${name} to be on the remote`,
-      async () => {
-        for (const command of await helperSshCommands()) {
-          commands.add(command);
-        }
-        const logged = connectionLog().slice(mark);
-        return (
-          (await windowState(name)).remoteName === 'ssh-remote' &&
-          logged.some(line => line.startsWith('Resolved ssh-remote+')) &&
-          commands.size > 0 &&
-          ready(logged)
-        );
-      },
-      480_000,
-    );
-    return {commands: [...commands], logged: connectionLog().slice(mark)};
-  } finally {
-    await closeWindow(name).catch(() => undefined);
-  }
-}
 
 describe('the Windows SSH host of the run (card #2652)', function () {
   this.timeout(60_000);
