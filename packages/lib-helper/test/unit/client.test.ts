@@ -1,4 +1,4 @@
-import {deepStrictEqual, strictEqual} from 'node:assert';
+import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
 import {
   acquire,
   type AcquireOutcome,
@@ -382,6 +382,27 @@ describe('helper client', () => {
         [record?.startedByProcessId, record?.endpoint.startsWith('/run/rh-')],
         [777, true],
       );
+    });
+
+    it("names the endpoint by the request's own prefix when it gives one", async () => {
+      await drive(
+        acquire(environment, request({endpointPrefix: 'vscode-tunneling-'})),
+      );
+      const record = parseRecord(files.files.get(RECORD_PATH) ?? '');
+      strictEqual(
+        /^\/run\/vscode-tunneling-[0-9a-f]{16}\.sock$/.test(
+          record?.endpoint ?? '',
+        ),
+        true,
+      );
+    });
+
+    it('refuses a prefix that is no endpoint prefix before it claims or prepares anything', async () => {
+      await rejects(
+        acquire(environment, request({endpointPrefix: '../x-'})),
+        /not an endpoint prefix: \.\.\/x-/,
+      );
+      deepStrictEqual([files.files.has(RECORD_PATH), prepares], [false, 0]);
     });
 
     it('lets one of two racing acquirers start the helper and the other join it', async () => {

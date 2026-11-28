@@ -21,9 +21,20 @@ export function runtimeFolder(
   return platform === 'linux' && xdgFolder !== '' ? xdgFolder : temporaryFolder;
 }
 
+/** The name every helper's endpoint starts with unless its acquirer names another. */
+const ENDPOINT_PREFIX = 'rh-';
+
+/** A prefix an endpoint's name may start with: lower-case letters, digits and dashes, ending in a dash. */
+const PREFIX_FORM = /^[a-z0-9][a-z0-9-]*-$/;
+
+/** Whether `prefix` may start an endpoint's name. */
+export function isEndpointPrefix(prefix: string): boolean {
+  return PREFIX_FORM.test(prefix);
+}
+
 /**
- * The endpoint of one helper: `rh-` and 16 hex digits of a digest of its namespace, key and nonce, as the named pipe
- * `\\.\pipe\rh-…` on `win32` and as a `.sock` file in `folder` elsewhere.
+ * The endpoint of one helper: `prefix` and 16 hex digits of a digest of its namespace, key and nonce, as the named
+ * pipe `\\.\pipe\<name>` on `win32` and as a `.sock` file in `folder` elsewhere.
  */
 export function endpointPath(
   platform: string,
@@ -31,11 +42,12 @@ export function endpointPath(
   namespace: string,
   helperKey: string,
   nonce: string,
+  prefix: string = ENDPOINT_PREFIX,
 ): string {
   const digest = createHash('sha256')
     .update(JSON.stringify([namespace, helperKey, nonce]))
     .digest('hex');
-  const name = `rh-${digest.slice(0, NAME_DIGEST_LENGTH)}`;
+  const name = `${prefix}${digest.slice(0, NAME_DIGEST_LENGTH)}`;
   return platform === 'win32'
     ? `\\\\.\\pipe\\${name}`
     : path.posix.join(folder, `${name}.sock`);

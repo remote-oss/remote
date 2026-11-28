@@ -3,7 +3,7 @@
  * helper that holds it, replacing a stale one once), and stop a helper.
  */
 
-import {endpointPath} from '../endpoint/path.ts';
+import {endpointPath, isEndpointPrefix} from '../endpoint/path.ts';
 import type {
   EndpointConnection,
   EndpointPort,
@@ -79,6 +79,8 @@ interface AcquireRequestFields<Refusal> {
   helperKey: string;
   /** The bundled helper script and its own start values. */
   script: string;
+  /** What the helper's endpoint name starts with, when it isn't lib-helper's own: lower-case, ending in a dash. */
+  endpointPrefix?: string;
   policy: EndPolicy;
   /**
    * Called once, and only by the window that claims the key, after the claim and before the helper starts: it makes the
@@ -310,6 +312,12 @@ export async function acquire<Refusal = never>(
   environment: ClientEnvironment,
   request: AcquireRequest<Refusal>,
 ): Promise<AcquireOutcome<Refusal>> {
+  if (
+    request.endpointPrefix !== undefined &&
+    !isEndpointPrefix(request.endpointPrefix)
+  ) {
+    throw new Error(`not an endpoint prefix: ${request.endpointPrefix}`);
+  }
   if (isAborted(request.cancellation)) {
     return {kind: 'failed', failure: 'cancelled'};
   }
@@ -348,6 +356,7 @@ export async function acquire<Refusal = never>(
       request.namespace,
       request.helperKey,
       nonce,
+      request.endpointPrefix,
     ),
     nonce,
     startedByProcessId: environment.processId,

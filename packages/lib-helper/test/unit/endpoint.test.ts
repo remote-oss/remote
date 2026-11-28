@@ -11,7 +11,11 @@ import {
   lineConnection,
   nodeEndpointPort,
 } from '../../src/endpoint/node-endpoint.ts';
-import {endpointPath, runtimeFolder} from '../../src/endpoint/path.ts';
+import {
+  endpointPath,
+  isEndpointPrefix,
+  runtimeFolder,
+} from '../../src/endpoint/path.ts';
 import {readClientMessage} from '../../src/endpoint/protocol.ts';
 
 describe('endpoint path', () => {
@@ -59,6 +63,50 @@ describe('endpoint path', () => {
         endpointPath('darwin', '/var/t', 'ssh', 'host', 'n1'),
       ),
       true,
+    );
+  });
+
+  it("names the endpoint by the acquirer's own prefix when it gives one, as a socket and as a pipe", () => {
+    deepStrictEqual(
+      [
+        /^\/run\/vscode-tunneling-[0-9a-f]{16}\.sock$/.test(
+          endpointPath(
+            'linux',
+            '/run',
+            'tunnels',
+            'p',
+            'n1',
+            'vscode-tunneling-',
+          ),
+        ),
+        /^\\\\\.\\pipe\\vscode-tunneling-[0-9a-f]{16}$/.test(
+          endpointPath(
+            'win32',
+            '/run',
+            'tunnels',
+            'p',
+            'n1',
+            'vscode-tunneling-',
+          ),
+        ),
+      ],
+      [true, true],
+    );
+  });
+
+  it('takes a prefix of lower-case letters, digits and dashes that ends in a dash, and nothing else', () => {
+    deepStrictEqual(
+      [
+        'vscode-tunneling-',
+        'rh-',
+        'a1-',
+        'Upper-',
+        'no-dash',
+        'a/b-',
+        '-lead-',
+        '',
+      ].map(isEndpointPrefix),
+      [true, true, true, false, false, false, false, false],
     );
   });
 
