@@ -1,4 +1,4 @@
-import {deepStrictEqual, rejects, strictEqual} from 'node:assert';
+import {deepStrictEqual, strictEqual} from 'node:assert';
 import {
   acquire,
   type AcquireOutcome,
@@ -398,11 +398,17 @@ describe('helper client', () => {
     });
 
     it('refuses a prefix that is no endpoint prefix before it claims or prepares anything', async () => {
-      await rejects(
-        acquire(environment, request({endpointPrefix: '../x-'})),
-        /not an endpoint prefix: \.\.\/x-/,
+      const refused = await acquire(
+        environment,
+        request({endpointPrefix: '../x-'}),
+      ).then(
+        () => 'acquired',
+        (error: unknown) => String(error),
       );
-      deepStrictEqual([files.files.has(RECORD_PATH), prepares], [false, 0]);
+      deepStrictEqual(
+        [refused, files.files.has(RECORD_PATH), prepares],
+        ['Error: not an endpoint prefix: ../x-', false, 0],
+      );
     });
 
     it('lets one of two racing acquirers start the helper and the other join it', async () => {

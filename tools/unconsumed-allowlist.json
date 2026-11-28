@@ -2,46 +2,6 @@
   "entries": [
     {
       "package": "remote-containers",
-      "kind": "settings",
-      "key": "optimisticallyLaunchDocker",
-      "card": "#2150",
-      "slice": "containers release 2",
-      "decision": "F-0202 BR-3: contributed, read by nothing"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "settings",
-      "key": "enhancedSessionLogs",
-      "card": "#674",
-      "slice": "deferred",
-      "decision": "D-86"
-    },
-    {
-      "package": "remote-ssh",
-      "kind": "settings",
-      "key": "suppressWindowsSshWarning",
-      "card": "#674",
-      "slice": "deferred",
-      "decision": "D-60"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "contextKeys",
-      "key": "hideConnectCommands",
-      "card": "#766",
-      "slice": "containers release 1",
-      "decision": "F-0504 BR-8 (2026-09-26): defined, never set"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "contextKeys",
-      "key": "hideRebuildCommands",
-      "card": "#884",
-      "slice": "containers release 1",
-      "decision": "F-0405 3.2 (2026-09-27): defined, never set"
-    },
-    {
-      "package": "remote-containers",
       "kind": "contextKeys",
       "key": "canReopenInSSH",
       "card": "#1830",
@@ -66,19 +26,43 @@
     },
     {
       "package": "remote-containers",
-      "kind": "module",
-      "key": "src/engine/ssh-questions.ts",
-      "card": "#2064",
-      "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+      "kind": "contextKeys",
+      "key": "hideConnectCommands",
+      "card": "#766",
+      "slice": "containers release 1",
+      "decision": "F-0504 BR-8 (2026-09-26): defined, never set"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "contextKeys",
+      "key": "hideRebuildCommands",
+      "card": "#884",
+      "slice": "containers release 1",
+      "decision": "F-0405 3.2 (2026-09-27): defined, never set"
     },
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/explorer/credentials-welcome.ts",
-      "card": "#2064",
-      "slice": "part A",
-      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
+      "key": "src/cli/exec-server-cli-host.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines \u00a73.2 (2026-11-04): the dev container CLI on the SSH host, run through the exec server; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/host-override-store.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines \u00a73.2 (2026-11-04): the override file goes on the SSH host, mode 0600, and is deleted after the run; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/placed-cli.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines \u00a73.2 (2026-11-04): the server's node and the pinned CLI placed on the SSH host, once for each version; the nested resolve wires it (#3244 builds it)"
     },
     {
       "package": "remote-containers",
@@ -91,10 +75,18 @@
     {
       "package": "remote-containers",
       "kind": "module",
-      "key": "src/engine/wsl-engine-host.ts",
-      "card": "#2156",
-      "slice": "containers release 2",
-      "decision": "F-0207 BR-15 (2026-11-04): the WSL adapter of the engine host; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
+      "key": "src/engine/exec-server-engine-host.ts",
+      "card": "#2071",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines \u00a73.1 (2026-11-04): part (a)'s engine host over the exec server; the nested resolve wires it"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/ssh-questions.ts",
+      "card": "#2064",
+      "slice": "part A",
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
     },
     {
       "package": "remote-containers",
@@ -103,6 +95,22 @@
       "card": "#2156",
       "slice": "containers release 2",
       "decision": "F-0207 BR-3, BR-17 (2026-11-04): the check of a typed distro against WSL's list; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/engine/wsl-engine-host.ts",
+      "card": "#2156",
+      "slice": "containers release 2",
+      "decision": "F-0207 BR-15 (2026-11-04): the WSL adapter of the engine host; the wiring of engineHostOf into the commands consumes it in the next commits of the card"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/explorer/credentials-welcome.ts",
+      "card": "#2064",
+      "slice": "part A",
+      "decision": "part A of the SSH question relay: pure slices, wired by part B (after #2063)"
     },
     {
       "package": "remote-containers",
@@ -121,12 +129,44 @@
       "decision": "F-0207 BR-14 (2026-11-04): contributed; its effect belongs to the relays' cards (F-1003, F-1007, F-1008)"
     },
     {
-      "package": "remote-wsl",
+      "package": "remote-containers",
+      "kind": "settings",
+      "key": "optimisticallyLaunchDocker",
+      "card": "#2150",
+      "slice": "containers release 2",
+      "decision": "F-0202 BR-3: contributed, read by nothing"
+    },
+    {
+      "package": "remote-server",
       "kind": "module",
-      "key": "src/activation/development-build.ts",
-      "card": "#2375",
-      "slice": "remote-wsl",
-      "decision": "pkg-1 builds the development-build guard; its caller is the resolver front (con-4, #2375), which removes this entry"
+      "key": "src/proxy/lease.ts",
+      "card": "#3340",
+      "slice": "tunnels client",
+      "decision": "the window-side lease the proxy client gives; the resolver (#3344) and the proxy client consume it"
+    },
+    {
+      "package": "remote-server",
+      "kind": "module",
+      "key": "src/proxy/messages.ts",
+      "card": "#3340",
+      "slice": "tunnels client",
+      "decision": "the window and the local proxy speak these messages; the proxy client and the proxy program of the same card consume them"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "enhancedSessionLogs",
+      "card": "#674",
+      "slice": "deferred",
+      "decision": "D-86"
+    },
+    {
+      "package": "remote-ssh",
+      "kind": "settings",
+      "key": "suppressWindowsSshWarning",
+      "card": "#674",
+      "slice": "deferred",
+      "decision": "D-60"
     },
     {
       "package": "remote-wsl",
@@ -143,6 +183,22 @@
       "card": "#2365",
       "slice": "remote-wsl",
       "decision": "the reference's remote-indicator clauses test wsl.openInNewWindow (F-7901 2.3, F-6701), and no spec says when it is set (F-6001 3.1: no scenario set it), so nothing sets it (R-60)"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "contextKeys",
+      "key": "wslFeatureInstalled",
+      "card": "#2396",
+      "slice": "remote-wsl",
+      "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
+    },
+    {
+      "package": "remote-wsl",
+      "kind": "module",
+      "key": "src/activation/development-build.ts",
+      "card": "#2375",
+      "slice": "remote-wsl",
+      "decision": "pkg-1 builds the development-build guard; its caller is the resolver front (con-4, #2375), which removes this entry"
     },
     {
       "package": "remote-wsl",
@@ -231,46 +287,6 @@
       "card": "#2394",
       "slice": "remote-wsl",
       "decision": "tgt-2 (#2394) registers the WSL Targets tree and removes this entry"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/exec-server-cli-host.ts",
-      "card": "#3245",
-      "slice": "containers release 1",
-      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the dev container CLI on the SSH host, run through the exec server; the nested resolve wires it (#3244 builds it)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/placed-cli.ts",
-      "card": "#3245",
-      "slice": "containers release 1",
-      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the server's node and the pinned CLI placed on the SSH host, once for each version; the nested resolve wires it (#3244 builds it)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/cli/host-override-store.ts",
-      "card": "#3245",
-      "slice": "containers release 1",
-      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the override file goes on the SSH host, mode 0600, and is deleted after the run; the nested resolve wires it (#3244 builds it)"
-    },
-    {
-      "package": "remote-containers",
-      "kind": "module",
-      "key": "src/engine/exec-server-engine-host.ts",
-      "card": "#2071",
-      "slice": "containers release 1",
-      "decision": "brief-remote-ssh-engines §3.1 (2026-11-04): part (a)'s engine host over the exec server; the nested resolve wires it"
-    },
-    {
-      "package": "remote-wsl",
-      "kind": "contextKeys",
-      "key": "wslFeatureInstalled",
-      "card": "#2396",
-      "slice": "remote-wsl",
-      "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
     }
   ]
 }

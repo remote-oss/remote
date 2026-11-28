@@ -360,7 +360,11 @@ importers:
 
   packages/remote-extensionpack: {}
 
-  packages/remote-server: {}
+  packages/remote-server:
+    dependencies:
+      lib-helper:
+        specifier: workspace:*
+        version: link:../lib-helper
 
   packages/remote-ssh:
     dependencies:
