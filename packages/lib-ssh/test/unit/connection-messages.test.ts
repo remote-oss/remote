@@ -13,16 +13,27 @@ const RECORD: SharedRecord = {
   connectionToken: 'token-value',
 };
 
-/** The data folder a stored record keeps when it is sent with `dataFolder`. */
-function folderOf(dataFolder: string | number): unknown {
+/** What a stored record keeps under `key` when it is sent with `value` there. */
+function storedAs(key: keyof SharedRecord, value: unknown): unknown {
   const request = readConnectionRequest({
     type: 'setSharedRecord',
-    record: {...RECORD, dataFolder},
+    record: {...RECORD, [key]: value},
   });
-  return request?.type === 'setSharedRecord'
-    ? request.record.dataFolder
-    : 'unread';
+  return request?.type === 'setSharedRecord' ? request.record[key] : 'unread';
 }
+
+/** The data folder a stored record keeps when it is sent with `dataFolder`. */
+function folderOf(dataFolder: string | number): unknown {
+  return storedAs('dataFolder', dataFolder);
+}
+
+/** A shared program as a window stores it. */
+const SHARED_PROGRAM = {
+  port: 31545,
+  controlToken: 'control-token',
+  connectionToken: 'server-token',
+  stopScript: 'stop it',
+};
 
 describe('connection requests (contracts §4 S9)', () => {
   it('reads the requests that carry nothing', () => {
@@ -102,6 +113,24 @@ describe('connection requests (contracts §4 S9)', () => {
         record: {...RECORD, dataFolder: 'relative/.server'},
       }),
       readConnectionReply({type: 'sharedRecord', record: {...RECORD}}),
+    );
+  });
+
+  it("ruling-3028-shared-cli: reads a record's shared program, and drops one with a port that isn't one or an empty token or script", () => {
+    deepStrictEqual(
+      [
+        SHARED_PROGRAM,
+        {...SHARED_PROGRAM, port: 0},
+        {...SHARED_PROGRAM, port: 65536},
+        {...SHARED_PROGRAM, port: 1.5},
+        {...SHARED_PROGRAM, port: '31545'},
+        {...SHARED_PROGRAM, controlToken: ''},
+        {...SHARED_PROGRAM, connectionToken: ''},
+        {...SHARED_PROGRAM, stopScript: ''},
+        {...SHARED_PROGRAM, stopScript: 7},
+        'cli',
+      ].map(shared => storedAs('sharedCli', shared)),
+      [SHARED_PROGRAM, ...Array<undefined>(9).fill(undefined)],
     );
   });
 

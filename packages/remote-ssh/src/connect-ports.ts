@@ -94,6 +94,7 @@ import {
   CLIENT_CHECK_MILLISECONDS,
   HOST_LOCK_ATTEMPTS,
   HOST_LOCK_INTERVAL_MILLISECONDS,
+  HELD_SERVER_CHECK_MILLISECONDS,
   PRECONNECT_MILLISECONDS,
   SERVER_BOUNDS,
   SESSION_RUN_LIMITS,
@@ -637,6 +638,7 @@ export function connectAssemblyOf(
         return valueOf(surfaces.settings, 'maxReconnectionAttempts');
       },
       preconnectMilliseconds: PRECONNECT_MILLISECONDS,
+      cliTakeUpMilliseconds: HELD_SERVER_CHECK_MILLISECONDS,
       logger: watch.logger,
       serve: {commit: machine.profile.commit, quality: machine.profile.quality},
       get useExecServer() {
