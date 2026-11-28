@@ -3,6 +3,7 @@ import type {MemorySink} from 'lib-log/testing/memory-sink';
 import type {SessionCheck} from 'lib-ssh';
 import type {
   ProbedHost,
+  StartNotice,
   StartOutcome,
   TransferOutcome,
   TransferPhase,
@@ -2247,26 +2248,29 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     );
   });
 
-  it('F-2401 (ruling-253-helper): a start that found no requirements helper warns once, and the connect goes on', async () => {
+  /** Whether a connect whose start carries `notice` goes on, and the warnings it logs. */
+  async function warningsOfNotice(
+    notice: StartNotice,
+  ): Promise<[boolean, string[]]> {
     const {recording, options, logSink} = setup();
     const result = await connect(
       INPUT,
       steps(recording, {
-        start: () =>
-          Promise.resolve({
-            ...STARTED,
-            notices: [{kind: 'requirementsHelperMissing'}],
-          }),
+        start: () => Promise.resolve({...STARTED, notices: [notice]}),
       }),
       options,
     );
+    return [
+      'connected' in result,
+      logSink.lines
+        .filter(line => line.level === 'warn')
+        .map(line => line.message),
+    ];
+  }
+
+  it('F-2401 (ruling-253-helper): a start that found no requirements helper warns once, and the connect goes on', async () => {
     deepStrictEqual(
-      [
-        'connected' in result,
-        logSink.lines
-          .filter(line => line.level === 'warn')
-          .map(line => line.message),
-      ],
+      await warningsOfNotice({kind: 'requirementsHelperMissing'}),
       [
         true,
         [
@@ -2277,31 +2281,12 @@ describe('the connect pipeline, what it keeps and gives back', () => {
   });
 
   it("#3333: a server that could only start inside the connection's session is logged once, with the reason, and the connect goes on", async () => {
-    const {recording, options, logSink} = setup();
-    const result = await connect(
-      INPUT,
-      steps(recording, {
-        start: () =>
-          Promise.resolve({
-            ...STARTED,
-            notices: [
-              {
-                kind: 'startedInsideSession',
-                program: 'server',
-                reason: 'WMI unavailable',
-              },
-            ],
-          }),
-      }),
-      options,
-    );
     deepStrictEqual(
-      [
-        'connected' in result,
-        logSink.lines
-          .filter(line => line.level === 'warn')
-          .map(line => line.message),
-      ],
+      await warningsOfNotice({
+        kind: 'startedInsideSession',
+        program: 'server',
+        reason: 'WMI unavailable',
+      }),
       [
         true,
         [
