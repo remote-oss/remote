@@ -18,4 +18,4 @@ the sign-in's credential. The relay's domain and the GitHub app it signs in with
 | Maintainers | daedalus |
 | Kind | service (layout.md, rule 5) |
 | Imports | `lib-identifiers` |
-| Coverage exclusions | `src/main.ts`, which starts the agent |
+| Coverage exclusions | `src/main.ts`, which starts the agent. `src/sdk.ts`: the relay's service and the host leg over the dev tunnels SDK, which the conformance job runs against a relay |
