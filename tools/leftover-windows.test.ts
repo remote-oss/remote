@@ -238,111 +238,122 @@ describe('the leftover close on the display (card #3210)', () => {
     return {closed, step};
   }
 
+  /** The nameless X child a top-level draws: the manager does not manage it, so the display pass never targets it. */
+  function childOf(windowPid: string): DisplayWindow {
+    return {name: '', managed: false, windowPid, acceptsClose: true, closes: true};
+  }
+
+  /**
+   * What the display's close passes closed: the first pass settled the launch's own windows `own`, a row left `left`
+   * behind while it ran, and the next `passes` (one) pass did the rest.
+   */
+  async function passesOf(
+    own: Array<[string, DisplayWindow]>,
+    left: Array<[string, DisplayWindow]>,
+    editor: string,
+    passes = 1,
+  ): Promise<string[]> {
+    const table = new Map<string, DisplayWindow>(own);
+    const {closed, step} = stepOf(table, editor);
+    await maintenance.closeLeftoverWindows(step);
+    for (const [windowId, window] of left) {
+      table.set(windowId, window);
+    }
+    for (let pass = 0; pass < passes; pass++) {
+      await maintenance.closeLeftoverWindows(step);
+    }
+    return closed;
+  }
+
   it('settles the launch\u2019s own window on the first pass, so a launch that does not title its windows never closes its local window', async () => {
-    const table = new Map<string, DisplayWindow>([
-      // The launch's local window in a launch that sets no window title: no bracketed folder, and no harness name in its title.
-      [
-        '1',
-        {
-          name: 'Welcome - VSCodium - Insiders',
-          managed: true,
-          windowPid: '42',
-          acceptsClose: true,
-          closes: true,
-        },
-      ],
-      [
-        '2',
-        {
-          name: '',
-          managed: false,
-          windowPid: '42',
-          acceptsClose: true,
-          closes: true,
-        },
-      ],
-    ]);
-    const {closed, step} = stepOf(table, '42');
-    await maintenance.closeLeftoverWindows(step);
-    table.set('3', displayWindowOf('VSCodium - Insiders', '42', true));
-    await maintenance.closeLeftoverWindows(step);
-    deepStrictEqual(closed, ['3']);
+    deepStrictEqual(
+      await passesOf(
+        [
+          // The launch's local window in a launch that sets no window title: no bracketed folder, and no harness name in its title.
+          ['1', displayWindowOf('Welcome - VSCodium - Insiders', '42', true)],
+          ['2', childOf('42')],
+        ],
+        [['3', displayWindowOf('VSCodium - Insiders', '42', true)]],
+        '42',
+      ),
+      ['3'],
+    );
   });
 
   it('closes the editor top-level a row left, and not the launch\u2019s folder-less window or its children', async () => {
-    const table = new Map<string, DisplayWindow>([
-      ['1', displayWindowOf('[]', '42', true)],
-      [
-        '3',
-        {
-          name: '',
-          managed: false,
-          windowPid: '42',
-          acceptsClose: true,
-          closes: true,
-        },
-      ],
-    ]);
-    const {closed, step} = stepOf(table, '42');
-    await maintenance.closeLeftoverWindows(step);
-    table.set('2', displayWindowOf('VSCodium - Insiders', '42', true));
-    await maintenance.closeLeftoverWindows(step);
-    deepStrictEqual(closed, ['2']);
+    deepStrictEqual(
+      await passesOf(
+        [
+          ['1', displayWindowOf('[]', '42', true)],
+          ['2', childOf('42')],
+        ],
+        [['4', displayWindowOf('VSCodium - Insiders', '42', true)]],
+        '42',
+      ),
+      ['4'],
+    );
   });
 
   it('closes nothing on the display of a window whose agent reports, which the named loop closes by its agent', async () => {
     windowReporting(folder, 'harness', ['activated']);
     answering = windowsThatClose(folder, ['harness']);
-    const table = new Map<string, DisplayWindow>([
-      ['1', displayWindowOf('harness', '42', true)],
-    ]);
-    const {closed, step} = stepOf(table, '42');
-    await maintenance.closeLeftoverWindows(step);
-    table.set('2', displayWindowOf('VSCodium - Insiders', '42', true));
-    await maintenance.closeLeftoverWindows(step);
-    deepStrictEqual(closed, ['2']);
+    deepStrictEqual(
+      await passesOf(
+        [['1', displayWindowOf('harness', '42', true)]],
+        [['2', displayWindowOf('VSCodium - Insiders', '42', true)]],
+        '42',
+      ),
+      ['2'],
+    );
   });
 
   it('tells once of a top-level that will not close, holds it in its record, and does not ask it again', async function () {
     this.timeout(45_000);
-    const table = new Map<string, DisplayWindow>([
-      ['1', displayWindowOf('[]', '42', true)],
-    ]);
-    const {closed, step} = stepOf(table, '42');
-    await maintenance.closeLeftoverWindows(step);
-    table.set('2', {
-      name: 'VSCodium - Insiders',
-      managed: true,
-      windowPid: '42',
-      acceptsClose: true,
-      closes: false,
-    });
-    await maintenance.closeLeftoverWindows(step);
-    await maintenance.closeLeftoverWindows(step);
-    deepStrictEqual(closed, ['2']);
+    deepStrictEqual(
+      await passesOf(
+        [['1', displayWindowOf('[]', '42', true)]],
+        [
+          [
+            '2',
+            {
+              name: 'VSCodium - Insiders',
+              managed: true,
+              windowPid: '42',
+              acceptsClose: true,
+              closes: false,
+            },
+          ],
+        ],
+        '42',
+        2,
+      ),
+      ['2'],
+    );
   });
 
   it('closes no top-level of another client, by its pid or by the lack of one', async () => {
-    const table = new Map<string, DisplayWindow>([
-      ['1', displayWindowOf('[]', '42', true)],
-    ]);
-    const {closed, step} = stepOf(table, '42');
-    await maintenance.closeLeftoverWindows(step);
-    table.set('2', displayWindowOf('VSCodium - Insiders', '99', true));
-    table.set('3', displayWindowOf('VSCodium - Insiders', undefined, true));
-    await maintenance.closeLeftoverWindows(step);
-    deepStrictEqual(closed, []);
+    deepStrictEqual(
+      await passesOf(
+        [['1', displayWindowOf('[]', '42', true)]],
+        [
+          ['2', displayWindowOf('VSCodium - Insiders', '99', true)],
+          ['3', displayWindowOf('VSCodium - Insiders', undefined, true)],
+        ],
+        '42',
+      ),
+      [],
+    );
   });
 
   it('skips a top-level that does not accept a close, and tells of it once', async () => {
-    const table = new Map<string, DisplayWindow>([
-      ['1', displayWindowOf('[]', '42', true)],
-    ]);
-    const {closed, step} = stepOf(table, '42');
-    await maintenance.closeLeftoverWindows(step);
-    table.set('2', displayWindowOf('VSCodium - Insiders', '42', false));
-    await maintenance.closeLeftoverWindows(step);
-    await maintenance.closeLeftoverWindows(step);
-    deepStrictEqual(closed, []);
+    deepStrictEqual(
+      await passesOf(
+        [['1', displayWindowOf('[]', '42', true)]],
+        [['2', displayWindowOf('VSCodium - Insiders', '42', false)]],
+        '42',
+        2,
+      ),
+      [],
+    );
   });
 });
