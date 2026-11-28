@@ -1057,6 +1057,34 @@ describe("the connect's CLI path: a later window takes up the connection's progr
     );
   });
 
+  it("#3333: a CLI that could only start inside the connection's session is logged once, with the reason", async () => {
+    const {messages} = await connectOverCli(undefined, () => ({
+      startCli: () =>
+        Promise.resolve({
+          kind: 'started',
+          server: {
+            endpoint: {kind: 'port', port: 4243},
+            processId: 88,
+            connectionToken: 'host-connection-token',
+            reused: false,
+          },
+          notices: [
+            {
+              kind: 'startedInsideSession',
+              program: 'CLI',
+              reason: 'WMI unavailable',
+            },
+          ],
+        }),
+    }));
+    deepStrictEqual(
+      messages().filter(message => message.includes('started inside')),
+      [
+        "the CLI was started inside the connection's session (WMI unavailable): it ends with the connection",
+      ],
+    );
+  });
+
   it('a program started on a socket is not shared: the record names programs by their port', async () => {
     const onSocket = await connectOverCli(undefined, () => ({
       startCli: () =>

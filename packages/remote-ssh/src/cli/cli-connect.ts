@@ -13,6 +13,7 @@ import type {Logger} from 'lib-log';
 import {
   type CliControl,
   cliServerFolderOf,
+  insideSessionLine,
   openCliControl,
   type Plan,
   type ProbedHost,
@@ -293,6 +294,11 @@ async function openControl(
         ofStart(started.failure, {useExecServer: context.useExecServer}),
       ),
     };
+  }
+  for (const notice of started.notices) {
+    if (notice.kind === 'startedInsideSession') {
+      logger.warn(insideSessionLine(notice));
+    }
   }
   const processId = started.server.processId;
   function stop(): Promise<void> {

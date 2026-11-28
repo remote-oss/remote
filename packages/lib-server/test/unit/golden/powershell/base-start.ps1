@@ -80,6 +80,20 @@ function Start-Program([hashtable]$Launch) {
   }
   return Start-Process @Launch
 }
+function Start-Detached([string]$Program, [string]$Arguments, [string]$OutputFile, [string]$ErrorFile, [string]$Folder) {
+  try {
+    $Line = '"' + $env:ComSpec + '" /d /s /c "' + (ConvertTo-WindowsArgument $Program) + ' ' + $Arguments + ' > ' + (ConvertTo-WindowsArgument $OutputFile) + ' 2> ' + (ConvertTo-WindowsArgument $ErrorFile) + '"'
+    $Block = [string[]]@(Get-ChildItem Env: | ForEach-Object { $_.Name + '=' + $_.Value })
+    $Startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{EnvironmentVariables = $Block; ShowWindow = [uint16]0}
+    $Created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = $Line; CurrentDirectory = $Folder; ProcessStartupInformation = $Startup} -ErrorAction Stop
+    if ($Created.ReturnValue -ne 0) {
+      return @{Id = 0; Reason = 'Win32_Process.Create returned ' + [string]$Created.ReturnValue}
+    }
+    return @{Id = [int]$Created.ProcessId; Reason = ''}
+  } catch {
+    return @{Id = 0; Reason = Get-FailureMessage $_}
+  }
+}
 function ConvertTo-WindowsArgument([string]$Value) {
   return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
 }
@@ -306,14 +320,22 @@ if ($null -eq $ServerProcess) {
   Add-Fact 'server.launching' 'yes'
   $LaunchProgram = [System.IO.Path]::Combine($INSTALL_DIR, $LAUNCHER)
   $LaunchArguments = $SERVER_ARGUMENTS
-  if ($LaunchProgram.EndsWith('.cmd')) {
-    $LaunchArguments = '/d /s /c "' + (ConvertTo-WindowsArgument $LaunchProgram) + ' ' + $SERVER_ARGUMENTS + '"'
-    $LaunchProgram = $env:ComSpec
+  $Detached = Start-Detached $LaunchProgram $SERVER_ARGUMENTS $LOG_FILE $ERROR_LOG_FILE $PWD.ProviderPath
+  if ($Detached.Id -eq 0) {
+    Add-Fact 'server.startDetached' $Detached.Reason
+    if ($LaunchProgram.EndsWith('.cmd')) {
+      $LaunchArguments = '/d /s /c "' + (ConvertTo-WindowsArgument $LaunchProgram) + ' ' + $SERVER_ARGUMENTS + '"'
+      $LaunchProgram = $env:ComSpec
+    }
+    $Launch = @{FilePath = $LaunchProgram; ArgumentList = $LaunchArguments; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}
   }
-  $Launch = @{FilePath = $LaunchProgram; ArgumentList = $LaunchArguments; PassThru = $true; RedirectStandardOutput = $LOG_FILE; RedirectStandardError = $ERROR_LOG_FILE}
   try {
-    $ServerProcess = Start-Program $Launch
-    [System.IO.File]::WriteAllText($PID_FILE, [string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks)
+    if ($Detached.Id -eq 0) {
+      $ServerProcess = Start-Program $Launch
+    } else {
+      $ServerProcess = Get-Process -Id $Detached.Id -ErrorAction Stop
+    }
+    Set-Content -LiteralPath $PID_FILE -Value ([string]$ServerProcess.Id + ' ' + [string]$ServerProcess.StartTime.Ticks) -NoNewline -Encoding ascii
   } catch {
     $Message = Get-FailureMessage $_
     if ($null -ne $ServerProcess) {

@@ -26,7 +26,10 @@ import {
   runScript,
   single,
 } from './fake-host.ts';
-import {prerequisiteDetail} from '../../src/lifecycle/runtime.ts';
+import {
+  insideSessionLine,
+  prerequisiteDetail,
+} from '../../src/lifecycle/runtime.ts';
 import {shellChannel} from './shell-channel.ts';
 
 const NEVER_CANCELLED = new AbortController().signal;
@@ -1152,6 +1155,38 @@ describe('startOrReuse (V7) over a real shell', () => {
     deepStrictEqual(
       outcome.kind === 'started' ? outcome.notices : outcome.kind,
       [{kind: 'requirementsHelperMissing'}],
+    );
+  });
+});
+
+describe('the start notice of a server that began inside the session (#3333)', () => {
+  it('names the reason the host gave, and the log line says the server ends with the connection', async () => {
+    const outcome = await start(
+      recording([
+        ...STARTED.slice(0, -1),
+        'server.startDetached=WMI unavailable',
+        STARTED.at(-1) ?? '',
+      ]),
+    );
+    deepStrictEqual(
+      outcome.kind === 'started'
+        ? outcome.notices.map(notice =>
+            notice.kind === 'startedInsideSession'
+              ? insideSessionLine(notice)
+              : notice.kind,
+          )
+        : outcome.kind,
+      [
+        "the server was started inside the connection's session (WMI unavailable): it ends with the connection",
+      ],
+    );
+  });
+
+  it('gives no notice when the host did not report it', async () => {
+    const outcome = await start(recording(STARTED));
+    deepStrictEqual(
+      outcome.kind === 'started' ? outcome.notices : outcome.kind,
+      [],
     );
   });
 });

@@ -2276,6 +2276,41 @@ describe('the connect pipeline, what it keeps and gives back', () => {
     );
   });
 
+  it("#3333: a server that could only start inside the connection's session is logged once, with the reason, and the connect goes on", async () => {
+    const {recording, options, logSink} = setup();
+    const result = await connect(
+      INPUT,
+      steps(recording, {
+        start: () =>
+          Promise.resolve({
+            ...STARTED,
+            notices: [
+              {
+                kind: 'startedInsideSession',
+                program: 'server',
+                reason: 'WMI unavailable',
+              },
+            ],
+          }),
+      }),
+      options,
+    );
+    deepStrictEqual(
+      [
+        'connected' in result,
+        logSink.lines
+          .filter(line => line.level === 'warn')
+          .map(line => line.message),
+      ],
+      [
+        true,
+        [
+          "the server was started inside the connection's session (WMI unavailable): it ends with the connection",
+        ],
+      ],
+    );
+  });
+
   it('#2566: the log says whether the shared record was stored, declined by the connection, or not stored for a socket endpoint', async () => {
     const lines: string[][] = [];
     for (const behaviour of ['stored', 'declined', 'socket'] as const) {

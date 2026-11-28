@@ -996,6 +996,32 @@ describe('the PowerShell start, run under pwsh', function () {
     );
   });
 
+  it('#3333: where the host has no CIM cmdlets the server starts as before, the fact says why, and the pid file holds the pair', () => {
+    const host = powershellHost();
+    const parameters = quickStart();
+    standInServer(host, parameters, READY_SERVER);
+    const block = startOn(host, parameters);
+    const reason =
+      block === 'none' ? undefined : block.serverFacts.startDetached;
+    deepStrictEqual(
+      [
+        factsOf(block, ['server.port']),
+        typeof reason === 'string' && reason !== '',
+        /^[0-9]+ [0-9]+$/.test(
+          readFileSync(
+            path.join(
+              host.home,
+              parameters.dataFolderName,
+              `.${parameters.commit}.pid`,
+            ),
+            'utf8',
+          ),
+        ),
+      ],
+      [{status: 'Ok', 'server.port': '4242'}, true, true],
+    );
+  });
+
   it('F-2409: the server keeps running after the start, and the next start reuses it', () => {
     const host = powershellHost();
     const parameters = quickStart();
@@ -1806,8 +1832,86 @@ function isNewToken(parameters: ScriptParameters): boolean {
   return /^[A-Za-z0-9]{32}$/.test(readFileSync(tokenOf(parameters), 'utf8'));
 }
 
+/** Stand-ins for the CIM cmdlets of the CLI's start: Create names process 999999, and `child` is what its children are. */
+function cliCimStub(child: 'present' | 'absent'): string {
+  return [
+    'function New-CimInstance {',
+    '  param($ClassName, [switch]$ClientOnly, $Property)',
+    '  return [pscustomobject]@{Property = $Property}',
+    '}',
+    'function Invoke-CimMethod {',
+    '  param($ClassName, $MethodName, $Arguments, $ErrorAction)',
+    "  Set-Content -LiteralPath $CliLog -Value 'Listening on 127.0.0.1:4243'",
+    '  return [pscustomobject]@{ReturnValue = 0; ProcessId = 999999}',
+    '}',
+    'function Get-CimInstance {',
+    '  param($ClassName, $Filter, $ErrorAction)',
+    child === 'present'
+      ? '  return [pscustomobject]@{ProcessId = $PID; ExecutablePath = $CLI_FILE}'
+      : '  return $null',
+    '}',
+  ].join('\n');
+}
+
+/** The CLI's start on a host whose CIM calls are stood in (or not, with `stub` empty), and its result block. */
+function cliStartedWith(stub: string): ResultBlock | 'none' {
+  const host = powershellHost();
+  const parameters = cliParameters(host);
+  standInCli(host, parameters, READY_CLI);
+  return runOn(
+    host,
+    single('startCli'),
+    parameters,
+    {...CLI_VARIABLES, ComSpec: 'C:\\Windows\\System32\\cmd.exe'},
+    `${cliStub(host, THREE_PRINCIPALS, 4242)}\n${stub}`,
+  );
+}
+
 describe('the PowerShell CLI start, run under pwsh', function () {
   this.timeout(60000);
+
+  it('#3333: the CLI created through cmd is recorded by its own process, the child of the one Create returned', () => {
+    const block = cliStartedWith(cliCimStub('present'));
+    deepStrictEqual(
+      [
+        factsOf(block, ['cli.port', 'cli.startDetached']),
+        block !== 'none' &&
+          block.cliFacts.pid !== undefined &&
+          block.cliFacts.pid !== '999999',
+      ],
+      [
+        {status: 'Ok', 'cli.port': '4243', 'cli.startDetached': undefined},
+        true,
+      ],
+    );
+  });
+
+  it('#3333: a CLI that does not show under the process Create returned within 5 s ends that process and starts as before, and the fact names it', () => {
+    deepStrictEqual(
+      factsOf(cliStartedWith(cliCimStub('absent')), [
+        'cli.port',
+        'cli.startDetached',
+      ]),
+      {
+        status: 'Ok',
+        'cli.port': '4243',
+        'cli.startDetached':
+          'the CLI did not start under process 999999 within 5 s',
+      },
+    );
+  });
+
+  it('#3333: where the host has no CIM cmdlets the CLI starts as before and the fact says why', () => {
+    const block = cliStartedWith('');
+    const reason = block === 'none' ? undefined : block.cliFacts.startDetached;
+    deepStrictEqual(
+      [
+        factsOf(block, ['cli.port']),
+        typeof reason === 'string' && reason !== '',
+      ],
+      [{status: 'Ok', 'cli.port': '4243'}, true],
+    );
+  });
 
   it('F-2403: the CLI starts with a new token whose ACL is set before the secret, and with its native parent', () => {
     const {host, parameters, block} = startedCli(
@@ -1991,6 +2095,127 @@ describe('the PowerShell bootstrap script, as text', () => {
       scriptFor(single('probe'), 'powershell', parametersFor()).length < 8192,
       true,
     );
+  });
+});
+
+/** Stand-ins for the CIM cmdlets: the Create call records what it was given, writes the ready line, and names this process. */
+function cimStub(record: string, result: {value: number}): string {
+  return [
+    'function New-CimInstance {',
+    '  param($ClassName, [switch]$ClientOnly, $Property)',
+    '  return [pscustomobject]@{Class = $ClassName; Property = $Property}',
+    '}',
+    'function Invoke-CimMethod {',
+    '  param($ClassName, $MethodName, $Arguments, $ErrorAction)',
+    '  $Startup = $Arguments.ProcessStartupInformation.Property',
+    `  Set-Content -LiteralPath '${record}' -Value @(`,
+    "    ('line ' + $Arguments.CommandLine),",
+    "    ('folder ' + $Arguments.CurrentDirectory),",
+    "    ('show ' + $Startup.ShowWindow + ' ' + $Startup.ShowWindow.GetType().Name),",
+    "    ('environment ' + (@($Startup.EnvironmentVariables) -contains ('REMOTE_OSS_PROBE=' + $env:REMOTE_OSS_PROBE))),",
+    "    ('entries ' + (@($Startup.EnvironmentVariables).Count -eq @(Get-ChildItem Env:).Count)))",
+    "  Set-Content -LiteralPath $LOG_FILE -Value 'Extension host agent listening on 4242'",
+    `  return [pscustomobject]@{ReturnValue = ${String(result.value)}; ProcessId = $PID}`,
+    '}',
+  ].join('\n');
+}
+
+describe('the PowerShell start outside the session, run under pwsh with the CIM cmdlets stood in', function () {
+  this.timeout(60000);
+
+  /** A start on a host whose CIM calls are the stand-ins, with the launcher `launcher`; the record of the Create call. */
+  function createdOn(
+    launcher: string,
+    value = 0,
+  ): {block: ResultBlock | 'none'; record: string[]; host: PowershellHost} {
+    const host = powershellHost();
+    const parameters = quickStart();
+    const named = {...parameters, launcher};
+    standInServer(host, named, READY_SERVER);
+    const record = path.join(host.root, 'create.txt');
+    const block = runOn(
+      host,
+      single('start'),
+      named,
+      {
+        ...WINDOWS_VARIABLES,
+        ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+        REMOTE_OSS_PROBE: 'probe-value',
+      },
+      `${tokenStub(host, THREE_PRINCIPALS)}\n${cimStub(record, {value})}`,
+    );
+    return {
+      block,
+      record: existsSync(record)
+        ? readFileSync(record, 'utf8').split('\n').filter(Boolean)
+        : [],
+      host,
+    };
+  }
+
+  it('#3333: the server is created through cmd with its output files, the session’s whole environment and no window, and its pid file holds the process created', () => {
+    const {block, record, host} = createdOn('bin/launcher.exe');
+    const parameters = quickStart();
+    const prefix = path.join(
+      host.home,
+      parameters.dataFolderName,
+      `.${parameters.commit}`,
+    );
+    const launcher = path.join(
+      installFolder(host, parameters),
+      'bin/launcher.exe',
+    );
+    deepStrictEqual(
+      [
+        factsOf(block, ['server.port', 'server.startDetached']),
+        record[0]?.startsWith(
+          `line "C:\\Windows\\System32\\cmd.exe" /d /s /c ""${launcher}" `,
+        ),
+        record[0]?.endsWith(` > "${prefix}.log" 2> "${prefix}.err.log""`),
+        record.slice(1),
+        /^[0-9]+ [0-9]+$/.test(readFileSync(`${prefix}.pid`, 'utf8')),
+      ],
+      [
+        {
+          status: 'Ok',
+          'server.port': '4242',
+          'server.startDetached': undefined,
+        },
+        true,
+        true,
+        [
+          `folder ${process.cwd()}`,
+          'show 0 UInt16',
+          'environment True',
+          'entries True',
+        ],
+        true,
+      ],
+    );
+  });
+
+  it('#3333: a batch launcher is created through the same cmd line, its path quoted once', () => {
+    const {record, host} = createdOn('bin/launcher.cmd');
+    const parameters = quickStart();
+    const launcher = path.join(
+      installFolder(host, parameters),
+      'bin/launcher.cmd',
+    );
+    deepStrictEqual(
+      record[0]?.startsWith(
+        `line "C:\\Windows\\System32\\cmd.exe" /d /s /c ""${launcher}" `,
+      ),
+      true,
+    );
+  });
+
+  it('#3333: a Create that returns a non-zero value falls back to Start-Process and says why', () => {
+    const {block} = createdOn('bin/launcher.exe', 9);
+    deepStrictEqual(factsOf(block, ['server.port', 'server.startDetached']), {
+      status: 'Ok',
+      'server.port': '4242',
+      'server.startDetached': 'Win32_Process.Create returned 9',
+    });
   });
 });
 

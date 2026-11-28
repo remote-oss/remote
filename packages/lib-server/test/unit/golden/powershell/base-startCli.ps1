@@ -80,6 +80,20 @@ function Start-Program([hashtable]$Launch) {
   }
   return Start-Process @Launch
 }
+function Start-Detached([string]$Program, [string]$Arguments, [string]$OutputFile, [string]$ErrorFile, [string]$Folder) {
+  try {
+    $Line = '"' + $env:ComSpec + '" /d /s /c "' + (ConvertTo-WindowsArgument $Program) + ' ' + $Arguments + ' > ' + (ConvertTo-WindowsArgument $OutputFile) + ' 2> ' + (ConvertTo-WindowsArgument $ErrorFile) + '"'
+    $Block = [string[]]@(Get-ChildItem Env: | ForEach-Object { $_.Name + '=' + $_.Value })
+    $Startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{EnvironmentVariables = $Block; ShowWindow = [uint16]0}
+    $Created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine = $Line; CurrentDirectory = $Folder; ProcessStartupInformation = $Startup} -ErrorAction Stop
+    if ($Created.ReturnValue -ne 0) {
+      return @{Id = 0; Reason = 'Win32_Process.Create returned ' + [string]$Created.ReturnValue}
+    }
+    return @{Id = [int]$Created.ProcessId; Reason = ''}
+  } catch {
+    return @{Id = 0; Reason = Get-FailureMessage $_}
+  }
+}
 function ConvertTo-WindowsArgument([string]$Value) {
   return '"' + ([regex]::Replace($Value, '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
 }
@@ -106,6 +120,16 @@ $CLI_FILE = [System.IO.Path]::Combine($DATA_DIR, $CLI_NAME)
 $BOOT_PREFIX = [System.IO.Path]::Combine($DATA_DIR, '.' + $COMMIT)
 if ($INSTALL_TREE -ne '') {
   $LOCK_IN_TEMPORARY = 'yes'
+}
+function Find-ChildProgram([int]$ParentId, [string]$Path) {
+  for ($Waited = 0; $Waited -lt 25; $Waited++) {
+    $Child = @(Get-CimInstance -ClassName Win32_Process -Filter ('ParentProcessId=' + [string]$ParentId) -ErrorAction SilentlyContinue | Where-Object { [string]::Equals([string]$_.ExecutablePath, $Path, [System.StringComparison]::OrdinalIgnoreCase) })
+    if ($Child.Count -gt 0) {
+      return Get-Process -Id ([int]$Child[0].ProcessId) -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 200
+  }
+  return $null
 }
 function Get-CliReadyPort {
   $Found = Select-String -LiteralPath $CliLog -Pattern '^Listening on 127\.0\.0\.1:([0-9]+)$' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -225,8 +249,20 @@ if ($Parent -gt 0) {
   Add-Fact 'cli.parent' 'none'
 }
 try {
-  [System.IO.File]::WriteAllText($CliLog, '')
-  $CliProcess = Start-Program @{FilePath = $CLI_FILE; ArgumentList = $CliArguments; PassThru = $true; RedirectStandardOutput = $CliLog; RedirectStandardError = ($CliLog + '.err')}
+  Set-Content -LiteralPath $CliLog -Value '' -NoNewline
+  $CliProcess = $null
+  $Detached = Start-Detached $CLI_FILE $CliArguments $CliLog ($CliLog + '.err') $PWD.ProviderPath
+  if ($Detached.Id -ne 0) {
+    $CliProcess = Find-ChildProgram $Detached.Id $CLI_FILE
+    if ($null -eq $CliProcess) {
+      Stop-Process -Id $Detached.Id -Force -ErrorAction SilentlyContinue
+      $Detached = @{Id = 0; Reason = 'the CLI did not start under process ' + [string]$Detached.Id + ' within 5 s'}
+    }
+  }
+  if ($null -eq $CliProcess) {
+    Add-Fact 'cli.startDetached' $Detached.Reason
+    $CliProcess = Start-Program @{FilePath = $CLI_FILE; ArgumentList = $CliArguments; PassThru = $true; RedirectStandardOutput = $CliLog; RedirectStandardError = ($CliLog + '.err')}
+  }
 } catch {
   Complete-Step 'ServerFailedToStart'
 }

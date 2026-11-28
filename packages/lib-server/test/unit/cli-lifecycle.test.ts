@@ -135,6 +135,35 @@ describe('the CLI on the host (card cli-03b, contracts V7a)', () => {
       });
     });
 
+    it('#3333: a CLI the host started inside the session tells the notice with the reason, and one it did not gives none', async () => {
+      const inside = await started(
+        block(
+          'Ok',
+          'cli.port=41234',
+          'cli.pid=77',
+          'cli.log=/l',
+          `cli.connectionToken=${HOST_TOKEN}`,
+          'cli.startDetached=WMI unavailable',
+        ),
+      );
+      const outside = await started(STARTED);
+      deepStrictEqual(
+        [inside.outcome, outside.outcome].map(outcome =>
+          outcome.kind === 'started' ? outcome.notices : outcome.kind,
+        ),
+        [
+          [
+            {
+              kind: 'startedInsideSession',
+              program: 'CLI',
+              reason: 'WMI unavailable',
+            },
+          ],
+          [],
+        ],
+      );
+    });
+
     it("athena on #412: the started CLI's connection token is the host's, never the control token", async () => {
       const {outcome} = await started(STARTED);
       deepStrictEqual(

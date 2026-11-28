@@ -11,12 +11,13 @@ import type {Connected, Failed} from 'lib-authority';
 import {shouldApplyDefaults} from 'lib-forwarding';
 import type {Logger} from 'lib-log';
 import type {SessionCheck, SharedRecord} from 'lib-ssh';
-import type {
-  CliControl,
-  Plan,
-  ProbedHost,
-  StartedServer,
-  TransferPhase,
+import {
+  type CliControl,
+  insideSessionLine,
+  type Plan,
+  type ProbedHost,
+  type StartedServer,
+  type TransferPhase,
 } from 'lib-server';
 import {
   CONNECT_WAIT_TIMEOUT,
@@ -882,6 +883,11 @@ async function runSteps(
     options.logger.warn(
       "the server has no requirements helper; the host's requirements weren't checked",
     );
+  }
+  for (const notice of started.notices) {
+    if (notice.kind === 'startedInsideSession') {
+      options.logger.warn(insideSessionLine(notice));
+    }
   }
   if (started.server.endpoint.kind === 'port') {
     options.logger.info(listeningLine(started.server.endpoint.port));

@@ -149,7 +149,16 @@ function outcomeOf(stepRun: StepRun): StartOutcome {
           connectionToken,
           reused: false,
         },
-        notices: [],
+        notices:
+          block.cliFacts.startDetached === undefined
+            ? []
+            : [
+                {
+                  kind: 'startedInsideSession',
+                  program: 'CLI',
+                  reason: block.cliFacts.startDetached,
+                },
+              ],
       }
     : failed({kind: 'unreadableServerFacts'});
 }

@@ -64,7 +64,16 @@ export type StartNotice =
       configured: string;
     }
   /** The policy runs the server's requirements helper and the installed server has none, so nothing was checked. */
-  | {kind: 'requirementsHelperMissing'};
+  | {kind: 'requirementsHelperMissing'}
+  /** A Windows host could not start the process outside the session's processes, so it ends with the connection. */
+  | {kind: 'startedInsideSession'; program: 'server' | 'CLI'; reason: string};
+
+/** The line the log says, once per start, for a process a Windows host could not start outside the session's processes. */
+export function insideSessionLine(
+  notice: Extract<StartNotice, {kind: 'startedInsideSession'}>,
+): string {
+  return `the ${notice.program} was started inside the connection's session (${notice.reason}): it ends with the connection`;
+}
 
 /** Why a launched server did not report a port, when the server says: its range had no free port, or it ended for CVE-2020-1416. */
 type ServerStartCause = 'noFreePort' | 'cveTerminated';
@@ -307,10 +316,21 @@ function outcomeOf(
             connectionToken,
             reused: block.serverFacts.reused === 'yes',
           },
-          notices:
-            block.serverFacts.prerequisitesHelper === 'missing'
-              ? [...notices, {kind: 'requirementsHelperMissing'}]
-              : notices,
+          notices: [
+            ...notices,
+            ...(block.serverFacts.prerequisitesHelper === 'missing'
+              ? [{kind: 'requirementsHelperMissing' as const}]
+              : []),
+            ...(block.serverFacts.startDetached === undefined
+              ? []
+              : [
+                  {
+                    kind: 'startedInsideSession' as const,
+                    program: 'server' as const,
+                    reason: block.serverFacts.startDetached,
+                  },
+                ]),
+          ],
         }
       : failed({kind: 'unreadableServerFacts'});
   }
