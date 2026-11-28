@@ -1,3 +1,4 @@
 packages:
   - packages/*
   - tests/acceptance
+  - tests/tunnels-conformance

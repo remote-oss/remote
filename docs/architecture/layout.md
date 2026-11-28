@@ -63,6 +63,17 @@ imports, coverage exclusions) moves out of shipped READMEs before any publicatio
 `tests/acceptance` is a private workspace package that may import any extension or library; nothing imports it;
 it never ships (ruled 2026-10-08, card tooling-04).
 
+## The tunnels conformance package
+
+`tests/tunnels-conformance` is a private workspace package for the tunnels conformance run (#3076,
+`ruling-3076-conformance-package`). It tests the relay over the wire, so:
+- it depends on npm packages only, through the lockfile: the dev tunnels SDK at the family's 1.3.50 / 3.12.29 pin;
+- it imports no workspace package, and nothing imports it;
+- it never ships.
+
+Its `pnpm deploy` is the Node stage of the run's client image. `tools/check-workspace.ts` enforces all of this, and the
+tools' unit rows may import its modules.
+
 ## Libraries
 
 Confirmed by the container view (`c4-l2-containers.md` §1, 2026-10-06): `lib-log`, `lib-identifiers`,

@@ -34,7 +34,7 @@ describe('check-layout', () => {
     });
     workspace.write(
       'pnpm-workspace.yaml',
-      'packages:\n  - packages/*\n  - tests/acceptance\n',
+      'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\n',
     );
     for (const file of [
       'AGENTS.md',

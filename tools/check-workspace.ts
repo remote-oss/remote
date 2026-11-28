@@ -92,8 +92,19 @@ interface WorkspacePackage {
   name: string;
   isLibrary: boolean;
   acceptance: boolean;
+  conformance: boolean;
   manifest: Manifest;
 }
+
+/**
+ * The workspace packages outside packages/ (layout.md, the test packages): the acceptance package, which may import any
+ * extension or library and which nothing imports, and the tunnels conformance package, which imports no workspace
+ * package and which nothing imports either.
+ */
+const TEST_PACKAGES = [
+  {folder: 'acceptance', acceptance: true, conformance: false},
+  {folder: 'tunnels-conformance', acceptance: false, conformance: true},
+] as const;
 
 /** The package a `name@range` alias names: `remote-wsl@*` gives `remote-wsl`, `@scope/name@^1` gives `@scope/name`. */
 function aliasTarget(specifier: string): string | undefined {
@@ -233,25 +244,28 @@ class WorkspaceChecker {
             name: manifest.name ?? folder,
             isLibrary: isLibraryFolder(folder),
             acceptance: false,
+            conformance: false,
             manifest,
           });
         }
       }
     }
-    // The acceptance package sits outside packages/: the one package that may import any extension or
-    // library, and the one nothing may import (layout.md, the acceptance package).
-    const acceptanceFile = path.join('tests', 'acceptance', 'package.json');
-    if (existsSync(path.join(this.root, acceptanceFile))) {
-      const manifest = this.readFile(acceptanceFile, JSON.parse) as
+    for (const {folder, acceptance, conformance} of TEST_PACKAGES) {
+      const manifestFile = path.join('tests', folder, 'package.json');
+      if (!existsSync(path.join(this.root, manifestFile))) {
+        continue;
+      }
+      const manifest = this.readFile(manifestFile, JSON.parse) as
         Manifest | undefined;
       if (manifest !== undefined) {
         found.push({
-          folder: 'acceptance',
-          directory: path.join(this.root, 'tests', 'acceptance'),
-          manifestDir: 'tests/acceptance',
-          name: manifest.name ?? 'acceptance',
+          folder,
+          directory: path.join(this.root, 'tests', folder),
+          manifestDir: `tests/${folder}`,
+          name: manifest.name ?? folder,
           isLibrary: false,
-          acceptance: true,
+          acceptance,
+          conformance,
           manifest,
         });
       }
@@ -265,7 +279,10 @@ class WorkspaceChecker {
 
   private checkWorkspaceFile(): void {
     const {packages: globs, linkWorkspacePackages} = this.workspaceFile;
-    const expected = ['packages/*', 'tests/acceptance'];
+    const expected = [
+      'packages/*',
+      ...TEST_PACKAGES.map(({folder}) => `tests/${folder}`),
+    ];
     if (JSON.stringify(globs) !== JSON.stringify(expected)) {
       this.problems.push(
         `pnpm-workspace.yaml: packages is ${JSON.stringify(globs)}, expected ${JSON.stringify(expected)}`,
@@ -394,6 +411,18 @@ class WorkspaceChecker {
     where: string,
   ): void {
     if (target === undefined || target === owner) {
+      return;
+    }
+    if (owner.conformance) {
+      this.problems.push(
+        `${where}: the tunnels conformance package depends on no workspace package`,
+      );
+      return;
+    }
+    if (target.conformance) {
+      this.problems.push(
+        `${where}: nothing may depend on the tunnels conformance package`,
+      );
       return;
     }
     if (owner.acceptance) {

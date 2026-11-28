@@ -46,13 +46,18 @@ describe('check-workspace', () => {
     });
     write(
       'pnpm-workspace.yaml',
-      'packages:\n  - packages/*\n  - tests/acceptance\n',
+      'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\n',
     );
     manifest('remote-a');
     manifest('remote-b');
     manifest('lib-x');
     write('tests/acceptance/package.json', {
       name: 'acceptance',
+      version: '0.0.0',
+      private: true,
+    });
+    write('tests/tunnels-conformance/package.json', {
+      name: 'tunnels-conformance',
       version: '0.0.0',
       private: true,
     });
@@ -80,7 +85,7 @@ describe('check-workspace', () => {
     manifest('lib-x', {imports: {'#internal': './src/internal.ts'}});
     write(
       'pnpm-workspace.yaml',
-      'packages:\n  - packages/*\n  - tests/acceptance\ncatalog:\n  mocha: ^11.8.0\nnodeLinker: isolated\n',
+      'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\ncatalog:\n  mocha: ^11.8.0\nnodeLinker: isolated\n',
     );
     write('packages/lib-x/tsconfig.json', {
       extends: '../../tsconfig.base.json',
@@ -148,7 +153,7 @@ describe('check-workspace', () => {
     it('follows catalog: entries', () => {
       write(
         'pnpm-workspace.yaml',
-        'packages:\n  - packages/*\n  - tests/acceptance\ncatalogs:\n  tools:\n    bridge: link:packages/remote-b\n',
+        'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\ncatalogs:\n  tools:\n    bridge: link:packages/remote-b\n',
       );
       manifest('remote-a', {dependencies: {bridge: 'catalog:tools'}});
       deepStrictEqual(problems(), [
@@ -231,6 +236,7 @@ describe('check-workspace', () => {
           'packages:',
           '  - packages/*',
           '  - tests/acceptance',
+          '  - tests/tunnels-conformance',
           'overrides:',
           "  'foo>bar': workspace:remote-b@*",
           'packageExtensions:',
@@ -254,7 +260,7 @@ describe('check-workspace', () => {
         'packages:\n  - packages/*\n  - extras/*\nlinkWorkspacePackages: true\n',
       );
       deepStrictEqual(problems(), [
-        'pnpm-workspace.yaml: packages is ["packages/*","extras/*"], expected ["packages/*","tests/acceptance"]',
+        'pnpm-workspace.yaml: packages is ["packages/*","extras/*"], expected ["packages/*","tests/acceptance","tests/tunnels-conformance"]',
         'pnpm-workspace.yaml: sets linkWorkspacePackages',
       ]);
     });
@@ -262,7 +268,7 @@ describe('check-workspace', () => {
     it('reports a packages list without tests/acceptance', () => {
       write('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
       deepStrictEqual(problems(), [
-        'pnpm-workspace.yaml: packages is ["packages/*"], expected ["packages/*","tests/acceptance"]',
+        'pnpm-workspace.yaml: packages is ["packages/*"], expected ["packages/*","tests/acceptance","tests/tunnels-conformance"]',
       ]);
     });
 
@@ -274,7 +280,7 @@ describe('check-workspace', () => {
         ),
         [
           'pnpm-workspace.yaml: cannot be read',
-          'pnpm-workspace.yaml: packages is undefined, expected ["packages/*","tests/acceptance"]',
+          'pnpm-workspace.yaml: packages is undefined, expected ["packages/*","tests/acceptance","tests/tunnels-conformance"]',
         ],
       );
     });
@@ -284,7 +290,7 @@ describe('check-workspace', () => {
       write('packages/remote-a/pnpmfile.mjs', 'export default {};');
       write(
         'pnpm-workspace.yaml',
-        'packages:\n  - packages/*\n  - tests/acceptance\npnpmfile: hooks.cjs\n',
+        'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\npnpmfile: hooks.cjs\n',
       );
       write('.npmrc', 'global-pnpmfile=/tmp/hooks.cjs\n');
       deepStrictEqual(problems(), [
@@ -298,7 +304,7 @@ describe('check-workspace', () => {
     it('reports hoisting into the root', () => {
       write(
         'pnpm-workspace.yaml',
-        'packages:\n  - packages/*\n  - tests/acceptance\nnodeLinker: hoisted\nshamefullyHoist: true\npublicHoistPattern: ["*"]\n',
+        'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\nnodeLinker: hoisted\nshamefullyHoist: true\npublicHoistPattern: ["*"]\n',
       );
       write('.npmrc', 'shamefully-hoist=true\npublic-hoist-pattern[]=*\n');
       deepStrictEqual(problems(), [
@@ -339,6 +345,46 @@ describe('check-workspace', () => {
       });
       deepStrictEqual(problems(), [
         'tests/acceptance/package.json: "private" is not true',
+      ]);
+    });
+  });
+
+  describe('the tunnels conformance package (ruling-3076-conformance-package)', () => {
+    it('the conformance package depending on npm packages only passes', () => {
+      write('tests/tunnels-conformance/package.json', {
+        name: 'tunnels-conformance',
+        version: '0.0.0',
+        private: true,
+        dependencies: {'@microsoft/dev-tunnels-connections': '1.3.50'},
+      });
+      deepStrictEqual(problems(), []);
+    });
+
+    it('the conformance package depending on a library fails: it depends on no workspace package', () => {
+      write('tests/tunnels-conformance/package.json', {
+        name: 'tunnels-conformance',
+        version: '0.0.0',
+        private: true,
+        dependencies: {'lib-x': 'workspace:*'},
+      });
+      deepStrictEqual(problems(), [
+        'tests/tunnels-conformance/package.json: dependencies.lib-x: the tunnels conformance package depends on no workspace package',
+      ]);
+    });
+
+    it('an extension and the acceptance package depending on it fail: nothing may depend on the conformance package', () => {
+      manifest('remote-b', {
+        devDependencies: {'tunnels-conformance': 'workspace:*'},
+      });
+      write('tests/acceptance/package.json', {
+        name: 'acceptance',
+        version: '0.0.0',
+        private: true,
+        devDependencies: {'tunnels-conformance': 'workspace:*'},
+      });
+      deepStrictEqual(problems(), [
+        'packages/remote-b/package.json: devDependencies.tunnels-conformance: nothing may depend on the tunnels conformance package',
+        'tests/acceptance/package.json: devDependencies.tunnels-conformance: nothing may depend on the tunnels conformance package',
       ]);
     });
   });
