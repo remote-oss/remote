@@ -134,6 +134,45 @@ describe('connection requests (contracts §4 S9)', () => {
     );
   });
 
+  it('ruling-3305-shared-cli-cas: reads the program a record replaces, by its control token or none, and absent from an earlier window', () => {
+    deepStrictEqual(
+      ['control-token', null, undefined].map(replacing =>
+        readConnectionRequest({
+          type: 'setSharedRecord',
+          record: {...RECORD, sharedCli: SHARED_PROGRAM},
+          ...(replacing === undefined ? {} : {replacing}),
+        }),
+      ),
+      [
+        {
+          type: 'setSharedRecord',
+          record: {...RECORD, sharedCli: SHARED_PROGRAM},
+          replacing: 'control-token',
+        },
+        {
+          type: 'setSharedRecord',
+          record: {...RECORD, sharedCli: SHARED_PROGRAM},
+          replacing: null,
+        },
+        {
+          type: 'setSharedRecord',
+          record: {...RECORD, sharedCli: SHARED_PROGRAM},
+        },
+      ],
+    );
+  });
+
+  it('ruling-3305-shared-cli-cas: reads nothing from a record request whose replaced program is no token', () => {
+    deepStrictEqual(
+      readConnectionRequest({
+        type: 'setSharedRecord',
+        record: {...RECORD},
+        replacing: 7,
+      }),
+      undefined,
+    );
+  });
+
   it('reads an answer to a question', () => {
     deepStrictEqual(
       readConnectionRequest({type: 'answer', promptId: 3, text: 'yes'}),

@@ -31,6 +31,7 @@ import {
   type Refusal,
   type ScriptFailureReason,
   SESSION_PROBE_MILLISECONDS,
+  type SharedCliStore,
   type SharedRecord,
 } from './messages.ts';
 
@@ -482,6 +483,32 @@ export class SharedConnection {
       record: {...record},
     });
     return asked.kind === 'answered' && asked.reply.type === 'accepted';
+  }
+
+  /**
+   * Offers the program this window started in place of the one it found in the record, named by its control token,
+   * or of none. An earlier helper takes it as it comes, which reads as stored.
+   */
+  async storeSharedCli(
+    record: SharedRecord,
+    replacing: string | null,
+  ): Promise<SharedCliStore> {
+    const asked = await this.askHelper({
+      type: 'setSharedRecord',
+      record: {...record},
+      replacing,
+    });
+    if (asked.kind !== 'answered') {
+      return {kind: 'declined'};
+    }
+    switch (asked.reply.type) {
+      case 'accepted':
+        return {kind: 'stored'};
+      case 'sharedCliKept':
+        return {kind: 'kept', sharedCli: asked.reply.sharedCli};
+      default:
+        return {kind: 'declined'};
+    }
   }
 
   /**

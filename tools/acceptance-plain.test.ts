@@ -35,6 +35,7 @@ import {
   userDataFolderOf,
   writeStandIns,
 } from './acceptance-plain.ts';
+import {HARNESS_SUITE_VARIABLE} from './acceptance-display-reporter.ts';
 import {
   launchesOf,
   launchLabelled,
@@ -459,6 +460,24 @@ describe('the Node tests of a plain launch', () => {
       {
         EXTRA_VARIABLE: '1',
       },
+    );
+  });
+
+  it('card #3210: the ssh-core launch is reported by the display reporter, named to its own suite', () => {
+    const program = plainTestsOf(
+      '/repo',
+      {...LAUNCH, label: 'ssh-core', suite: 'ssh-core'},
+      {},
+    );
+    deepStrictEqual(
+      [program.programArguments.slice(4, 6), program.environment],
+      [
+        [
+          '--reporter',
+          path.join('/repo', 'tools', 'acceptance-display-reporter.ts'),
+        ],
+        {[HARNESS_SUITE_VARIABLE]: 'ssh-core'},
+      ],
     );
   });
 });

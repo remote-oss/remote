@@ -199,6 +199,30 @@ export class ConnectionHandler implements MessageHandler {
     }
   }
 
+  /**
+   * Takes a window's record. A record with no program keeps the one the connection shares: the direct and the
+   * program's parts stay apart. A record with a program replaces the one the window found, or none; when the
+   * connection shares another program by then, it keeps that one and names it, so that the window takes it up.
+   */
+  private storeRecord(
+    record: SharedRecord,
+    replacing: string | null | undefined,
+  ): PlainData {
+    const shared = this.sharedRecord?.sharedCli;
+    if (shared !== undefined && record.sharedCli === undefined) {
+      this.sharedRecord = {...record, sharedCli: shared};
+    } else if (
+      shared !== undefined &&
+      replacing !== undefined &&
+      replacing !== shared.controlToken
+    ) {
+      return {type: 'sharedCliKept', sharedCli: {...shared}};
+    } else {
+      this.sharedRecord = record;
+    }
+    return {type: 'accepted'};
+  }
+
   /** Answers one request of a window. */
   async onRequest(
     body: PlainData,
@@ -221,13 +245,7 @@ export class ConnectionHandler implements MessageHandler {
         if (this.state !== 'connected') {
           throw new Error('the connection is not set up');
         }
-        // A record with no program keeps the one the connection shares: the direct and the program's parts stay apart.
-        this.sharedRecord =
-          request.record.sharedCli === undefined &&
-          this.sharedRecord?.sharedCli !== undefined
-            ? {...request.record, sharedCli: this.sharedRecord.sharedCli}
-            : request.record;
-        return {type: 'accepted'};
+        return this.storeRecord(request.record, request.replacing);
       case 'answer':
         return this.answer(request.promptId, request.text);
       case 'refuse':
