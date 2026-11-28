@@ -296,9 +296,7 @@ describe('a Windows SSH host in terminal mode and local-server mode (card #2678,
         posixErrors: each.posixErrors,
         platformOk:
           each.platform.length > 0 &&
-          each.platform.every(line =>
-            line.startsWith('Host platform: win32'),
-          ),
+          each.platform.every(line => line.startsWith('Host platform: win32')),
       })),
       connects.map(each => ({
         name: each.label,
