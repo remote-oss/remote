@@ -6,7 +6,14 @@
  */
 
 import {deepStrictEqual} from 'node:assert';
-import {runShellTask, windowState} from '../windows/harness.ts';
+import {
+  connectionLog,
+  hostAnswer,
+  runShellTask,
+  waitFor,
+  windowState,
+} from '../windows/harness.ts';
+import {runWith} from '../windows/maintenance.ts';
 import {
   connectedOnWinhost,
   noHelperSsh,
@@ -102,6 +109,142 @@ describe('the server on the run’s Windows SSH host outlives its connection (ca
     deepStrictEqual(
       [/^[0-9.]+ [0-9]+ [0-9.]+ [0-9]+$/.test(seen), seen !== own],
       [true, true],
+    );
+  });
+});
+
+/** The processIds of process `processId` and of all its descendants on the host, one per line. */
+async function treeIds(processId: string): Promise<string[]> {
+  return (
+    await onWinhost(
+      `$All = Get-CimInstance Win32_Process; function Tree($Id) { $Id; $All | Where-Object { $_.ParentProcessId -eq $Id } | ForEach-Object { Tree $_.ProcessId } }; Tree ${processId}`,
+    )
+  )
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => /^[0-9]+$/.test(line));
+}
+
+/** Whether any of `processIds` still runs on the host. */
+async function anyRuns(processIds: readonly string[]): Promise<boolean> {
+  return (
+    (
+      await onWinhost(
+        `@(${processIds.join(',')}) | ForEach-Object { if (Get-Process -Id $_ -ErrorAction SilentlyContinue) { 'yes' } } | Select-Object -First 1`,
+      )
+    ).trim() === 'yes'
+  );
+}
+
+describe('Kill VS Code Server on the Windows host, from a new connection (card #3333)', function () {
+  this.timeout(900_000);
+
+  it('#3333: the server and its whole tree are gone within 5 s of the kill, and the next connect starts a new one', async () => {
+    await connectedOnWinhost('winhost', 'r3333-kill', () => true);
+    await noHelperSsh();
+    const before = await recordedServer();
+    const processId = before.split(' ')[0] ?? '';
+    const tree = await treeIds(processId);
+    readout(
+      `before the kill: server pid file [${before}], tree [${tree.join(',')}]`,
+    );
+    await runWith('local', 'opensshremotes.cleanRemoteServer', [
+      hostAnswer('local', {label: 'winhost'}),
+    ]);
+    const ended = Date.now();
+    await waitFor(
+      'the server and its tree to end',
+      async () => !(await anyRuns(tree)),
+      5_000,
+    ).catch(() => undefined);
+    const gone = !(await anyRuns(tree));
+    readout(
+      `the tree is gone ${String(Date.now() - ended)} ms after the kill finished: ${String(gone)}`,
+    );
+    await connectedOnWinhost('winhost', 'r3333-after-kill', () => true);
+    await noHelperSsh();
+    const after = await recordedServer();
+    readout(`after the next connect: server pid file [${after}]`);
+    deepStrictEqual(
+      [tree.length > 0, gone, after !== '' && after !== before],
+      [true, true, true],
+    );
+  });
+});
+
+describe('the start without WMI on the Windows host (card #3333)', function () {
+  this.timeout(900_000);
+  let kept = {start: '', status: ''};
+
+  /** The service's start type and status, as the host reads them. */
+  async function winmgmt(): Promise<{start: string; status: string}> {
+    const [start = '', status = ''] = (
+      await onWinhost(
+        '$Service = Get-Service winmgmt; [string]$Service.StartType; [string]$Service.Status',
+      )
+    )
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    return {start, status};
+  }
+
+  afterEach(async () => {
+    if (kept.start === '') {
+      return;
+    }
+    await onWinhost(
+      `Set-Service -Name winmgmt -StartupType ${kept.start}; if ('${kept.status}' -eq 'Running') { Start-Service -Name winmgmt }`,
+    );
+    await waitFor(
+      'CIM to answer again',
+      async () => {
+        try {
+          return (
+            (
+              await onWinhost(
+                "if (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue) { 'yes' }",
+              )
+            ).trim() === 'yes'
+          );
+        } catch {
+          return false;
+        }
+      },
+      120_000,
+    );
+    kept = {start: '', status: ''};
+  });
+
+  it('#3333: with WMI stopped and disabled the connect still succeeds, the log tells once that the server started inside the session, and the server ends with the connection', async () => {
+    await runWith('local', 'opensshremotes.cleanRemoteServer', [
+      hostAnswer('local', {label: 'winhost'}),
+    ]);
+    kept = await winmgmt();
+    await onWinhost(
+      'Set-Service -Name winmgmt -StartupType Disabled; Stop-Service -Name winmgmt -Force',
+    );
+    const disabled = await winmgmt();
+    const mark = connectionLog().length;
+    await connectedOnWinhost('winhost', 'r3333-fallback', () => true);
+    await noHelperSsh();
+    const recorded = await recordedServer();
+    const processId = recorded.split(' ')[0] ?? '';
+    const lines = connectionLog()
+      .slice(mark)
+      .filter(line => line.includes('was started inside the connection'));
+    await waitFor(
+      'the server to end with its connection',
+      async () => (await runs(processId)) === 'no',
+      60_000,
+    ).catch(() => undefined);
+    const after = await runs(processId);
+    readout(
+      `WMI ${JSON.stringify(disabled)}; fallback lines ${JSON.stringify(lines)}; server ${processId} running after the connection ended: ${after}`,
+    );
+    deepStrictEqual(
+      [disabled, lines.length, after],
+      [{start: 'Disabled', status: 'Stopped'}, 1, 'no'],
     );
   });
 });
