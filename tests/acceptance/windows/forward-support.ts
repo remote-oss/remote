@@ -13,7 +13,18 @@ import {
   tunnelsOf,
   waitFor,
 } from './harness.ts';
-import {answerInputBox} from './renderer.ts';
+import {activeWindowName} from './display.ts';
+import {
+  inputBoxFacts,
+  pressEnter,
+  pressEscape,
+  typeInInputBox,
+} from './renderer.ts';
+import {
+  type AnswerOutcome,
+  answerSettled,
+  describedBox,
+} from './settled-answer.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -153,12 +164,56 @@ export async function showPorts(name: string): Promise<void> {
   );
 }
 
-/** Forwards `port` of the window by hand, as a user does with Forward a Port. */
+/** How long Forward a Port may take to finish after it was answered, in milliseconds. */
+const FORWARD_MILLISECONDS = 20_000;
+
+/**
+ * Forwards `port` of the window by hand, as a user does with Forward a Port: the answer waits until the box has taken
+ * the port and finished validating it, and a command that has not finished by `FORWARD_MILLISECONDS` fails with what the
+ * window shows: the input box and the window the display holds active. When core had forwarded the port already, the
+ * command is not exercised: that says so on one line, and the answer says `alreadyForwarded`.
+ */
 export async function forwardByHand(
   window: string,
   port: number,
-): Promise<void> {
+): Promise<AnswerOutcome> {
   const forwarding = inWindow(window, 'remote.tunnel.forwardCommandPalette');
-  await answerInputBox(window, String(port));
-  await forwarding;
+  const answer = await answerSettled(
+    {
+      facts: () => inputBoxFacts(window),
+      type: text => typeInInputBox(window, text),
+      enter: () => pressEnter(window),
+      escape: () => pressEscape(window),
+      sleep: milliseconds =>
+        new Promise(resolve => setTimeout(resolve, milliseconds)),
+      now: Date.now,
+    },
+    String(port),
+  );
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<'late'>(resolve => {
+    timer = setTimeout(() => {
+      resolve('late');
+    }, FORWARD_MILLISECONDS);
+  });
+  // An answer the box refused as already forwarded was closed with Escape: the command ends, and the port is forwarded.
+  const outcome = await Promise.race([forwarding.then(() => 'done'), late]);
+  clearTimeout(timer);
+  if (outcome === 'late') {
+    const inputBox = await inputBoxFacts(window).catch(
+      (caught: unknown) => `unreadable: ${String(caught)}`,
+    );
+    const active = await activeWindowName().catch(
+      (caught: unknown) => `unreadable: ${String(caught)}`,
+    );
+    throw new Error(
+      `window ${window}: Forward a Port was ${answer === 'answered' ? 'answered' : 'closed'} with ${String(port)} and had not finished ${String(FORWARD_MILLISECONDS / 1000)} s later; the input box: ${typeof inputBox === 'string' ? inputBox : describedBox(inputBox)}; the display's active window: ${active}`,
+    );
+  }
+  if (answer === 'alreadyForwarded') {
+    console.log(
+      `forwardByHand: window ${window}, port ${String(port)}: core had forwarded it already, so Forward a Port was not exercised`,
+    );
+  }
+  return answer;
 }

@@ -25,6 +25,9 @@ export function utf8Output(text: string): Uint8Array {
   return new TextEncoder().encode(text);
 }
 
+/** The size of the pieces the fake reads a local file in, as a disk stream gives them. */
+const CHUNK = 64 * 1024;
+
 /** What the fake does for one started process. */
 export type FakeRun =
   /** Prints, then exits with `status`. */
@@ -187,7 +190,13 @@ export function fakeWsl(
       read: (file: string) => {
         const bytes = local.get(file) ?? new Uint8Array(0);
         return (async function* () {
-          yield await Promise.resolve(bytes);
+          for (
+            let start = 0;
+            start === 0 || start < bytes.length;
+            start += CHUNK
+          ) {
+            yield await Promise.resolve(bytes.subarray(start, start + CHUNK));
+          }
         })();
       },
     },

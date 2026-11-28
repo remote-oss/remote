@@ -16,6 +16,7 @@ import {
   type ViewRowRead,
 } from '../../../tools/view-rows.ts';
 import path from 'node:path';
+import type {InputBoxFacts} from './settled-answer.ts';
 import {inWindow, isOpen, variable, windowState} from './harness.ts';
 import {
   activateWindowWithin,
@@ -324,6 +325,51 @@ export async function pageFocusFacts(): Promise<string[]> {
     lines.push(`${page.title}: ${JSON.stringify(facts)}`);
   }
   return lines;
+}
+
+/** The class of the element that holds the keyboard in the page of window `name`, read the way the focus facts read it; an empty one while the page has no active element. */
+async function activeElementClassOf(name: string): Promise<string> {
+  const address = await pageOf(name);
+  return evaluateAt<string>(
+    address,
+    `page ${name}`,
+    `(() => {
+      const element = document.activeElement;
+      return element === null ? '' : String(element.className);
+    })()`,
+  );
+}
+
+/** The class of the element that holds a terminal's keyboard: the helper textarea of the window's terminal widget. */
+const TERMINAL_TEXTAREA_CLASS = 'xterm-helper-textarea';
+
+/**
+ * The command that puts the keyboard where a palette command reaches it, given the class of the page's active
+ * element: while the keyboard is in the terminal's textarea, the editor group's focus, the way a user clicking the
+ * editor would. A revealed login terminal holds the keyboard for the life of the connection (F-2308), and a quick
+ * input does not take it from there, so a palette command sent to such a window reaches the terminal, not the
+ * workbench (#2424).
+ */
+export function paletteCommandWhen(classOfActive: string): string | undefined {
+  return classOfActive === TERMINAL_TEXTAREA_CLASS
+    ? 'workbench.action.focusActiveEditorGroup'
+    : undefined;
+}
+
+/**
+ * Puts the keyboard of window `name` where a palette command reaches it: a page whose active element is the
+ * terminal's textarea gets the editor group focused, with the move told on stderr and the element that held the
+ * keyboard named; a page a read cannot say is left as it is.
+ */
+export async function focusForPalette(name: string): Promise<void> {
+  const classOfActive = await activeElementClassOf(name).catch(() => '');
+  const command = paletteCommandWhen(classOfActive);
+  if (command !== undefined) {
+    process.stderr.write(
+      `window ${name}, before a palette command: the keyboard stood in ${classOfActive}, and the editor group takes it\n`,
+    );
+    await inWindow(name, command);
+  }
 }
 
 /** The number of renderer pages, one per open window: a window that reloads in place keeps its page count. */
@@ -2130,6 +2176,32 @@ export async function paletteRows(
 export async function paletteRun(name: string, text: string): Promise<void> {
   await openedPalette(name, text);
   await pressKey(await pageOf(name), name, 'Enter');
+}
+
+/** What the quick input box of window `name` shows now: whether it is open, its value, its message and whether it validates. */
+export async function inputBoxFacts(name: string): Promise<InputBoxFacts> {
+  return evaluate<InputBoxFacts>(
+    name,
+    `(() => {
+      const input = ${FOLDER_DIALOG_INPUT};
+      if (input === null) {
+        return {open: false, value: '', message: '', validating: false, focused: false};
+      }
+      const widget = input.closest('.quick-input-widget');
+      return {
+        open: true,
+        value: input.value,
+        message: widget.querySelector('.quick-input-message')?.textContent ?? '',
+        validating: widget.querySelector('.monaco-progress-container.active') !== null,
+        focused: document.activeElement === input,
+      };
+    })()`,
+  );
+}
+
+/** Sets the value of the input of the quick input box open in window `name`, as a user's typing would. */
+export function typeInInputBox(name: string, text: string): Promise<void> {
+  return keyInFolderDialog(name, undefined, text);
 }
 
 /** Types `text` into the input box a command of window `name` shows, and accepts it. */

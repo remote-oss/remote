@@ -1,6 +1,7 @@
 import {deepStrictEqual, match, rejects} from 'node:assert';
 import {spawnSync} from 'node:child_process';
 import {existsSync, readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {buildPackages, COPIED_FILES} from './build.ts';
 import {REPOSITORY_ROOT} from './repository.ts';
@@ -194,7 +195,52 @@ describe('build', () => {
           'ThirdPartyNotices.txt',
         ],
         into: 'dist/devcontainers-cli',
+        hashes: {
+          into: 'dist/cli-hashes.json',
+          built: {'cli-preload.js': 'dist/cli-preload.js'},
+        },
       });
+    });
+
+    /** The sha256 of `data`, in hexadecimal. */
+    function sha256(data: string | Buffer): string {
+      return createHash('sha256').update(data).digest('hex');
+    }
+
+    /** What ships with the list of hashes: the shipped files and one built file. */
+    const HASHED = {
+      'remote-a': {
+        ...SHIPPED['remote-a'],
+        hashes: {
+          into: 'dist/hashes.json',
+          built: {'extra.js': 'dist/extra.js'},
+        },
+      },
+    };
+
+    it('a built file that is to be listed with the hashes and is missing fails the build, naming it', async () => {
+      await rejects(
+        buildPackages(workspace.root, ['remote-a'], HASHED),
+        /remote-a: the built file dist\/extra\.js is missing/,
+      );
+    });
+
+    it('the list of hashes holds the sha256 of each shipped file and of each built file that goes with them', async () => {
+      workspace.write('packages/remote-a/dist/extra.js', 'built');
+      await buildPackages(workspace.root, ['remote-a'], HASHED);
+      deepStrictEqual(
+        JSON.parse(
+          readFileSync(
+            path.join(workspace.root, 'packages/remote-a/dist/hashes.json'),
+            'utf8',
+          ),
+        ),
+        {
+          'a.txt': sha256('text\r\nwith ends\n'),
+          'sub/b.bin': sha256('\u0000\u00ff bytes'),
+          'extra.js': sha256('built'),
+        },
+      );
     });
   });
 });

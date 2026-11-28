@@ -235,6 +235,30 @@
     {
       "package": "remote-containers",
       "kind": "module",
+      "key": "src/cli/exec-server-cli-host.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the dev container CLI on the SSH host, run through the exec server; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/placed-cli.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the server's node and the pinned CLI placed on the SSH host, once for each version; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
+      "key": "src/cli/host-override-store.ts",
+      "card": "#3245",
+      "slice": "containers release 1",
+      "decision": "brief-remote-ssh-engines §3.2 (2026-11-04): the override file goes on the SSH host, mode 0600, and is deleted after the run; the nested resolve wires it (#3244 builds it)"
+    },
+    {
+      "package": "remote-containers",
+      "kind": "module",
       "key": "src/engine/exec-server-engine-host.ts",
       "card": "#2071",
       "slice": "containers release 1",

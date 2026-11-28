@@ -14,6 +14,7 @@ import {
   type ContractScenario,
   type StagedChannel,
 } from 'lib-host/testing/channel-contract';
+import {localProcesses} from 'lib-host/testing/local-processes';
 import {execServerChannel} from '../../src/cli-control/exec-host-channel.ts';
 import {
   type ExecReadStream,
@@ -136,16 +137,6 @@ function failingFiles(
   };
 }
 
-/** Whether the local process `processId` is running. */
-function isRunning(processId: number): boolean {
-  try {
-    process.kill(processId, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** The commands that print `lines`, one each. */
 function printing(lines: readonly string[]): string[] {
   return lines.map(line => `printf '%s\\n' '${line}'`);
@@ -194,13 +185,7 @@ describe('host channel over an exec server: the lib-host contract', function () 
     scriptFailures: ['channelClosed', 'spawnFailed'],
     copyFailures: ['copyFailed', 'channelClosed'],
     reachesClientFiles: false,
-    processes: {
-      alive: processId => Promise.resolve(isRunning(processId)),
-      end: processId => {
-        process.kill(processId, 'SIGKILL');
-        return Promise.resolve();
-      },
-    },
+    processes: localProcesses,
     boundedCopy: {
       kind: 'notApplicable',
       reason: "the exec server's write stream gives no drain signal",
@@ -427,27 +412,37 @@ describe('host channel over an exec server', () => {
   it("kills the run's shell on the host when it is cancelled, so the rest of the script never runs", async () => {
     const marker = path.join(folder, 'after-cancel');
     const controller = new AbortController();
+    let shell = 0;
     const running = execServerChannel(
       localExecServer(),
       'host',
       'linux',
     ).runScript(
       {
-        script: `printf 'started\\n'; sleep 0.5; touch '${marker}'`,
+        script: `printf '%s\\n' "$$"; sleep 5; touch '${marker}'`,
         interpreter: 'posixShell',
         environment: {},
         input: {kind: 'text', text: ''},
         cancellation: controller.signal,
       },
-      () => {
+      line => {
+        shell = Number(line);
         controller.abort();
       },
     );
     const outcome = await running;
-    await new Promise(resolve => setTimeout(resolve, 900));
+    // The script's shell sleeps far longer than any kill takes: one still running after the cancel was never killed.
+    let alive = true;
+    for (let tries = 0; alive && tries < 40; tries += 1) {
+      alive = await localProcesses.alive(shell);
+      if (alive) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
     deepStrictEqual(
       [
         outcome,
+        alive,
         await readFile(marker).then(
           () => 'written',
           () => 'absent',
@@ -458,6 +453,7 @@ describe('host channel over an exec server', () => {
           kind: 'failed',
           failure: {kind: 'cancelled', detail: 'the run was cancelled'},
         },
+        false,
         'absent',
       ],
     );
