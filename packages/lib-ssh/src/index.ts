@@ -172,7 +172,10 @@ export {
   type Refusal,
   type ScriptFailureReason,
   readConnectionRequest,
+  type SharedCli,
+  SHARED_CLI_STOP_MILLISECONDS,
   type SharedRecord,
+  STOP_SHARED_CLI,
   type StoredAgentLink,
   type StoredDisplay,
 } from './connection-server/messages.ts';

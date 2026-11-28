@@ -181,7 +181,12 @@ describe("the shared connection's acquire request", () => {
       {
         folder: '/storage/registry',
         script: '/extension/dist/connection-helper.js',
-        policy: {kind: 'graceAfterLastLease', milliseconds: 3000},
+        policy: {
+          kind: 'delayedCheckAfterLastLease',
+          milliseconds: 3000,
+          action: 'stopSharedCli',
+          actionBound: 10_000,
+        },
         options: {
           request: '',
           unboundedWaitSeconds: 600,

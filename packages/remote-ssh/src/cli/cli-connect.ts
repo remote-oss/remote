@@ -31,6 +31,7 @@ import type {
   ConnectSteps,
   TunnelOpening,
 } from '../pipeline/steps.ts';
+import type {SharedCli} from 'lib-ssh';
 import type {CliBridgeLoss} from './cli-bridge.ts';
 
 /** The error a CLI that requires a token gives to a challenge with another token. */
@@ -76,6 +77,8 @@ export interface CliConnectContext {
   useExecServer: boolean;
   /** Builds the window's failure from a detail, as the connect does for its own failures. */
   failedOf: (detail: FailureDetail) => Failed;
+  /** How long a later window waits for the program its connection shares to take the shared token. */
+  takeUpMilliseconds: number;
   /** Shows a stage of the server's setup, or of the window's connection to it, in the connection's notification. */
   onServerPhase: (
     phase:
@@ -101,6 +104,7 @@ export type CliControlContext = Pick<
   | 'steps'
   | 'logger'
   | 'useExecServer'
+  | 'takeUpMilliseconds'
   | 'cancellation'
 >;
 
@@ -112,15 +116,137 @@ interface OpenedControl {
   tunnel: TunnelOpening;
   /** Hears the end of the control connection; the listener runs once. */
   onControlEnded: (listener: () => void) => void;
-  /** Closes the control connection and the tunnel, and stops the CLI. */
+  /** Closes the control connection and the tunnel, and stops the CLI this window started. */
   abandon: () => Promise<void>;
-  /** Stops the CLI. */
+  /** Stops the CLI this window started. */
   stop: () => Promise<void>;
+  /**
+   * What the window's release does to the CLI: nothing when the connection shares it, since the connection server stops
+   * it when it ends; the stop when this window started it and couldn't share it.
+   */
+  stopAtRelease: () => Promise<void>;
+}
+
+/** A control connection reached through a tunnel, before any token is given. */
+interface ReachedControl {
+  control: CliControl;
+  tunnel: TunnelOpening;
+  onControlEnded: (listener: () => void) => void;
+}
+
+/** Reaches the control port of the CLI that `server` names through a tunnel; the cause when it can't. */
+async function controlOf(
+  context: CliControlContext,
+  server: StartedServer,
+): Promise<ReachedControl | {cause: string}> {
+  const {input, lease, steps, cancellation} = context;
+  const tunnelResult = await steps.openTunnel(
+    input,
+    lease,
+    server,
+    () => undefined,
+    cancellation,
+  );
+  if (tunnelResult.kind === 'failed') {
+    return {cause: `no tunnel to the CLI: ${tunnelResult.failure.kind}`};
+  }
+  const tunnel: TunnelOpening = tunnelResult.value;
+  const stream = await steps.connectControl(tunnel.opened.address.port);
+  if (stream === undefined) {
+    tunnel.close();
+    return {cause: 'the CLI refused a control connection'};
+  }
+  let controlEnded: Array<() => void> = [];
+  stream.onClose(() => {
+    for (const listener of controlEnded) {
+      listener();
+    }
+    controlEnded = [];
+  });
+  return {
+    control: openCliControl(stream),
+    tunnel,
+    onControlEnded: listener => {
+      controlEnded.push(listener);
+    },
+  };
+}
+
+/** Nothing to do: the stop of a CLI another window or the connection server owns. */
+function noStop(): Promise<void> {
+  return Promise.resolve();
 }
 
 /**
- * Places the CLI, starts it with a control token, reaches its control port through a tunnel, checks that it requires
- * its token, and authenticates. A failure before the window resolves falls back to the direct install.
+ * The control of the CLI the connection already runs, which the record's `sharedCli` names: reached through a tunnel and given
+ * the token the record keeps, within the take-up bound. None when any of that fails, so that a new CLI is started.
+ */
+async function takenUp(
+  context: CliControlContext,
+  shared: SharedCli,
+): Promise<OpenedControl | undefined> {
+  const server: StartedServer = {
+    endpoint: {kind: 'port', port: shared.port},
+    processId: 0,
+    connectionToken: shared.connectionToken,
+    reused: true,
+  };
+  const reached = await controlOf(context, server);
+  if ('cause' in reached) {
+    context.logger.info(
+      `the CLI the connection shares can't be reached (${reached.cause}): starting another`,
+    );
+    return undefined;
+  }
+  const {control, tunnel} = reached;
+  const answer = await withinBound(
+    control.authenticate(shared.controlToken),
+    context.takeUpMilliseconds,
+  );
+  if (answer?.kind !== 'authenticated') {
+    control.close();
+    tunnel.close();
+    context.logger.info(
+      `the CLI the connection shares didn't take its token (${answer?.kind ?? 'no answer'}): starting another`,
+    );
+    return undefined;
+  }
+  function closeBoth(): Promise<void> {
+    control.close();
+    tunnel.close();
+    return noStop();
+  }
+  return {
+    kind: 'opened',
+    control,
+    server,
+    tunnel,
+    onControlEnded: reached.onControlEnded,
+    abandon: closeBoth,
+    stop: noStop,
+    stopAtRelease: noStop,
+  };
+}
+
+/** What `running` gives, or none when `milliseconds` pass first. */
+async function withinBound<Value>(
+  running: Promise<Value>,
+  milliseconds: number,
+): Promise<Value | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const outlasted = new Promise<undefined>(resolve => {
+    timer = setTimeout(resolve, milliseconds, undefined);
+  });
+  const result = await Promise.race([running, outlasted]);
+  clearTimeout(timer);
+  return result;
+}
+
+/**
+ * The CLI's control for this connect: the one the connection already shares, when its record names one that takes the
+ * shared token; else a new one, placed, started with a control token, reached through a tunnel, checked to require its
+ * token, authenticated, and stored in the record for the connection's later windows. A failure before the window
+ * resolves falls back to the direct install.
  */
 async function openControl(
   context: CliControlContext,
@@ -130,6 +256,13 @@ async function openControl(
   | {kind: 'fallback'; cause: string}
 > {
   const {input, lease, host, plan, steps, logger, cancellation} = context;
+  const sharedCli = lease.storedRecord?.sharedCli;
+  if (sharedCli !== undefined) {
+    const shared = await takenUp(context, sharedCli);
+    if (shared !== undefined) {
+      return shared;
+    }
+  }
   const installed = await steps.installCli(
     input,
     lease,
@@ -165,35 +298,12 @@ async function openControl(
   function stop(): Promise<void> {
     return steps.stopCli(input, lease, host, plan, processId);
   }
-  const tunnelResult = await steps.openTunnel(
-    input,
-    lease,
-    started.server,
-    () => undefined,
-    cancellation,
-  );
-  if (tunnelResult.kind === 'failed') {
+  const reached = await controlOf(context, started.server);
+  if ('cause' in reached) {
     await stop();
-    return {
-      kind: 'fallback',
-      cause: `no tunnel to the CLI: ${tunnelResult.failure.kind}`,
-    };
+    return {kind: 'fallback', cause: reached.cause};
   }
-  const tunnel: TunnelOpening = tunnelResult.value;
-  let controlEnded: Array<() => void> = [];
-  const stream = await steps.connectControl(tunnel.opened.address.port);
-  if (stream === undefined) {
-    tunnel.close();
-    await stop();
-    return {kind: 'fallback', cause: 'the CLI refused a control connection'};
-  }
-  stream.onClose(() => {
-    for (const listener of controlEnded) {
-      listener();
-    }
-    controlEnded = [];
-  });
-  const control = openCliControl(stream);
+  const {control, tunnel} = reached;
 
   async function abandon(): Promise<void> {
     control.close();
@@ -218,17 +328,62 @@ async function openControl(
       cause: `the CLI refused its token: ${authenticated.kind}`,
     };
   }
+  const shared = await shareCli(context, started.server, controlToken);
   return {
     kind: 'opened',
     control,
     server: started.server,
     tunnel,
-    onControlEnded: listener => {
-      controlEnded.push(listener);
-    },
+    onControlEnded: reached.onControlEnded,
     abandon,
     stop,
+    stopAtRelease: shared ? noStop : stop,
   };
+}
+
+/**
+ * Stores the CLI this window started in the connection's record, for the connection's later windows and for the
+ * connection server, which stops it when it ends; whether the connection took it.
+ */
+async function shareCli(
+  context: CliControlContext,
+  server: StartedServer,
+  controlToken: string,
+): Promise<boolean> {
+  const {input, lease, host, plan, steps, logger} = context;
+  if (server.endpoint.kind !== 'port') {
+    return false;
+  }
+  // The record keeps what a direct window left in it: the program's part is added beside it.
+  const stored = await lease
+    .storeSharedRecord({
+      ...(lease.storedRecord ?? {
+        remotePort: 0,
+        operatingSystem: host.operatingSystem,
+        architecture: host.architecture,
+        temporaryFolder: host.temporaryFolder,
+        connectionToken: '',
+      }),
+      sharedCli: {
+        port: server.endpoint.port,
+        controlToken,
+        connectionToken: server.connectionToken,
+        stopScript: steps.stopCliScript(
+          input,
+          lease,
+          host,
+          plan,
+          server.processId,
+        ),
+      },
+    })
+    .catch(() => false);
+  logger.info(
+    stored
+      ? 'the CLI is shared with the connection'
+      : "the connection didn't take the CLI: this window stops it",
+  );
+  return stored;
 }
 
 /**
@@ -272,7 +427,7 @@ export async function connectOverCli(
   if (opened.kind !== 'opened') {
     return opened;
   }
-  const {control, server, tunnel, abandon, stop} = opened;
+  const {control, server, tunnel, abandon, stopAtRelease} = opened;
   const serveParams = {
     commit: context.serve.commit,
     quality: context.serve.quality,
@@ -333,7 +488,7 @@ export async function connectOverCli(
       bridge.close();
       tunnel.close();
       // The lease goes back once the stop has settled, which the step bounds: the stop runs over the lease's channel.
-      void stop().then(giveBack, giveBack);
+      void stopAtRelease().then(giveBack, giveBack);
     },
     onTransport: listener => {
       let active = true;
@@ -417,7 +572,7 @@ export async function holdOverCli(
       opened.control.close();
       opened.tunnel.close();
       // The lease goes back once the stop has settled, which the step bounds: the stop runs over the lease's channel.
-      void opened.stop().then(giveBack, giveBack);
+      void opened.stopAtRelease().then(giveBack, giveBack);
     },
     onTransport: listener => {
       function wrapped(): void {

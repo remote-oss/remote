@@ -13,6 +13,7 @@ import {
   startCli,
   type StartOutcome,
   stopCli,
+  stopCliScript,
   type TransferDependencies,
 } from '../../src/index.ts';
 import {parametersFor} from './fake-host.ts';
@@ -440,6 +441,13 @@ describe("the CLI's stop (card cli-04, themis on #458)", () => {
     const script = scriptRequests(channel)[0];
     return script?.operation === 'runScript' ? script.request.script : '';
   }
+
+  it('ruling-3028-shared-cli: the script the connection server runs at its end is the one the stop runs, for the same process', async () => {
+    deepStrictEqual(
+      stopCliScript(startingChannel([]), baseParameters(), 4242),
+      await stopScript(),
+    );
+  });
 
   it('themis on #458: the stop checks the process is still the CLI, by its first two arguments, before it kills it', async () => {
     const text = await stopScript();

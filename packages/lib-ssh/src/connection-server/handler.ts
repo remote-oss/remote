@@ -36,7 +36,9 @@ import {
   type ConnectionRequest,
   readConnectionRequest,
   SESSION_PROBE_MILLISECONDS,
+  SHARED_CLI_STOP_MILLISECONDS,
   type SharedRecord,
+  STOP_SHARED_CLI,
 } from './messages.ts';
 import {LoginOwnership} from './ownership.ts';
 import {
@@ -163,9 +165,38 @@ export class ConnectionHandler implements MessageHandler {
     this.askpass.closeAll();
   }
 
-  /** The helper has no end action: its policy only waits out a grace. */
-  runAction(): Promise<void> {
-    return Promise.resolve();
+  /**
+   * The helper's end action: it stops the command-line program the connection shares, by the script the record keeps,
+   * over the session while it still runs, and forgets the program. With no program, or no session, nothing runs: a
+   * program whose session is gone is left to its own end.
+   */
+  async runAction(action: string): Promise<void> {
+    const record = this.sharedRecord;
+    const runs = this.runs;
+    if (
+      action !== STOP_SHARED_CLI ||
+      record?.sharedCli === undefined ||
+      this.state !== 'connected' ||
+      runs === undefined
+    ) {
+      return;
+    }
+    const {sharedCli, ...kept} = record;
+    this.sharedRecord = kept;
+    const end = await runs.execute(
+      {
+        script: sharedCli.stopScript,
+        environment: {},
+        inputBase64: null,
+        deadlineMilliseconds: SHARED_CLI_STOP_MILLISECONDS,
+      },
+      () => undefined,
+    );
+    if (end.kind !== 'ended' || end.status !== 0) {
+      this.options.logLine(
+        `the shared CLI was not stopped: ${end.kind === 'ended' ? `status ${String(end.status)}` : end.reason}`,
+      );
+    }
   }
 
   /** Answers one request of a window. */
@@ -190,7 +221,12 @@ export class ConnectionHandler implements MessageHandler {
         if (this.state !== 'connected') {
           throw new Error('the connection is not set up');
         }
-        this.sharedRecord = request.record;
+        // A record with no program keeps the one the connection shares: the direct and the program's parts stay apart.
+        this.sharedRecord =
+          request.record.sharedCli === undefined &&
+          this.sharedRecord?.sharedCli !== undefined
+            ? {...request.record, sharedCli: this.sharedRecord.sharedCli}
+            : request.record;
         return {type: 'accepted'};
       case 'answer':
         return this.answer(request.promptId, request.text);

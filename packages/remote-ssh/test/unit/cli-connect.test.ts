@@ -308,9 +308,21 @@ describe("the connect's CLI path: the window resolves", () => {
 });
 
 describe("the connect's CLI path: what it leaves for later windows", () => {
-  it('ruling-2995-held-server: a connect over the CLI stores no shared record, so no later window takes up a server the CLI holds', async () => {
+  it("ruling-3028-shared-cli: a connect over the CLI stores only the record's cli part, with no data folder, so no direct take-up uses it", async () => {
     const {result, recording} = await connectOverCli();
-    deepStrictEqual(['connected' in result, recording.records], [true, []]);
+    deepStrictEqual(
+      [
+        'connected' in result,
+        recording.records.map(record => [
+          record.dataFolder,
+          record.remotePort,
+          record.sharedCli?.port,
+          record.sharedCli?.controlToken,
+          record.sharedCli?.stopScript,
+        ]),
+      ],
+      [true, [[undefined, 0, 5432, CONTROL_TOKEN, 'stop the CLI 88']]],
+    );
   });
 });
 
@@ -612,8 +624,11 @@ describe("the connect's CLI path: after the window resolved", () => {
     deepStrictEqual(heard, []);
   });
 
-  /** A resolved CLI connect whose release steps note their order; `stopCli` replaces the fixture's stop. */
-  async function releasable(stopCli?: ConnectSteps['stopCli']) {
+  /**
+   * A resolved CLI connect whose release steps note their order; `stopCli` replaces the fixture's stop, and `shared` is
+   * whether the connection took the CLI into its record.
+   */
+  async function releasable(stopCli?: ConnectSteps['stopCli'], shared = false) {
     const order: string[] = [];
     const {recording, options} = setup();
     const lease = leaseOf(recording);
@@ -625,6 +640,7 @@ describe("the connect's CLI path: after the window resolved", () => {
             kind: 'done',
             value: {
               ...lease,
+              storeSharedRecord: () => Promise.resolve(shared),
               release: () => {
                 order.push('lease');
               },
@@ -668,11 +684,18 @@ describe("the connect's CLI path: after the window resolved", () => {
     });
   }
 
-  it("athena on #412: release closes the bridge and the tunnel, stops this connect's CLI, then gives the lease back", async () => {
+  it("athena on #412: release closes the bridge and the tunnel, stops this connect's CLI when the connection didn't take it, then gives the lease back", async () => {
     const {connection, order} = await releasable();
     connection.release();
     await settled();
     deepStrictEqual(order, ['bridge', 'tunnel', 'stop 88', 'lease']);
+  });
+
+  it('ruling-3028-shared-cli: a release never stops a CLI the connection shares: the connection server does when it ends', async () => {
+    const {connection, order} = await releasable(undefined, true);
+    connection.release();
+    await settled();
+    deepStrictEqual(order, ['bridge', 'tunnel', 'lease']);
   });
 
   it('athena on #412: a stop that rejects still gives the lease back', async () => {
@@ -867,6 +890,202 @@ describe("the connect's CLI path: a first resolve shows the server's setup while
         setupStages(recording.phases),
       ],
       [false, false, []],
+    );
+  });
+});
+
+/** A program the connection shares, as an earlier window stored it. */
+const SHARED_CLI = {
+  port: 6543,
+  controlToken: CONTROL_TOKEN,
+  connectionToken: 'shared-server-token',
+  stopScript: 'stop the CLI 77',
+};
+
+/** A connect over the CLI path whose connection's record names `shared`, with `script` as every CLI's answers. */
+async function joining(
+  shared: typeof SHARED_CLI,
+  script: CliScript = requiringToken(CONTROL_TOKEN),
+  changes: Changes = () => ({}),
+) {
+  return connectOverCli(script, recording => ({
+    openConnection: () =>
+      Promise.resolve({
+        kind: 'done',
+        value: {
+          ...leaseOf(recording),
+          storedRecord: {
+            remotePort: 0,
+            operatingSystem: 'linux',
+            architecture: 'x64',
+            temporaryFolder: '/tmp',
+            connectionToken: '',
+            sharedCli: shared,
+          },
+        },
+      }),
+    ...changes(recording),
+  }));
+}
+
+/** The steps of a connect that place and start a CLI of its own. */
+function startedOwn(calls: readonly string[]): boolean {
+  return calls.includes('installCli') && calls.includes('startCli');
+}
+
+describe("the connect's CLI path: a later window takes up the connection's program (ruling-3028-shared-cli)", () => {
+  it('F-2103 AC-10: a window whose connection shares a program that takes its token places and starts none, stores nothing, and serves through it', async () => {
+    const {result, recording, bridged} = await joining(SHARED_CLI);
+    deepStrictEqual(
+      [
+        kindOf(result),
+        startedOwn(recording.calls),
+        recording.records,
+        bridged.serveParams?.connectionToken,
+      ],
+      ['connected', false, [], 'shared-server-token'],
+    );
+  });
+
+  it("a taken-up program whose first serve fails fails the resolve, and the window stops nothing of the connection's", async () => {
+    const {result, recording} = await joining(
+      SHARED_CLI,
+      undefined,
+      firstServing([], {kind: 'controlClosed'}),
+    );
+    deepStrictEqual(
+      [
+        kindOf(result),
+        recording.calls.filter(call => call.startsWith('stopCli')),
+      ],
+      ['serverStart', []],
+    );
+  });
+
+  it('a shared program that refuses its token is stale: a new one is started and stored in its place', async () => {
+    const {result, recording, messages} = await joining({
+      ...SHARED_CLI,
+      controlToken: 'an old token',
+    });
+    deepStrictEqual(
+      [
+        kindOf(result),
+        startedOwn(recording.calls),
+        recording.records.map(record => record.sharedCli?.port),
+        messages().some(line =>
+          line.includes("the CLI the connection shares didn't take its token"),
+        ),
+      ],
+      ['connected', true, [5432], true],
+    );
+  });
+
+  it('a shared program that gives no answer within the take-up bound is stale too', async () => {
+    /** A CLI that never answers the challenge of the silent token. */
+    function silent(request: Request): readonly unknown[] {
+      return request.method === 'challenge_issue' &&
+        (request.params as {token: string}).token === 'a silent token'
+        ? []
+        : requiringToken(CONTROL_TOKEN)(request);
+    }
+    const {recording, messages} = await joining(
+      {...SHARED_CLI, controlToken: 'a silent token'},
+      silent,
+    );
+    deepStrictEqual(
+      [
+        startedOwn(recording.calls),
+        messages().some(line => line.includes('(no answer): starting another')),
+      ],
+      [true, true],
+    );
+  });
+
+  it("a shared program the window can't reach through a tunnel is stale too", async () => {
+    let tunnels = 0;
+    const {recording, messages} = await joining(
+      SHARED_CLI,
+      undefined,
+      recording => ({
+        openTunnel: () => {
+          tunnels += 1;
+          return Promise.resolve(
+            tunnels === 1
+              ? ({
+                  kind: 'failed',
+                  failure: {kind: 'channelClosed', reason: {text: 'gone'}},
+                } as const)
+              : ({kind: 'done', value: tunnelOf(recording)} as const),
+          );
+        },
+      }),
+    );
+    deepStrictEqual(
+      [
+        startedOwn(recording.calls),
+        messages().some(line =>
+          line.includes("the CLI the connection shares can't be reached"),
+        ),
+      ],
+      [true, true],
+    );
+  });
+
+  it('a window whose connection refuses its record keeps its own program, says so, and stops it at its release', async () => {
+    const refused = await connectOverCli(undefined, recording => ({
+      openConnection: () =>
+        Promise.resolve({
+          kind: 'done',
+          value: {
+            ...leaseOf(recording),
+            storeSharedRecord: () => Promise.reject(new Error('gone')),
+          },
+        }),
+    }));
+    connectedOf(refused.result).release();
+    await new Promise(resolve => {
+      setImmediate(resolve);
+    });
+    deepStrictEqual(
+      [
+        refused
+          .messages()
+          .includes("the connection didn't take the CLI: this window stops it"),
+        refused.recording.calls.filter(call => call.startsWith('stopCli')),
+      ],
+      [true, ['stopCli 88']],
+    );
+  });
+
+  it('a program started on a socket is not shared: the record names programs by their port', async () => {
+    const onSocket = await connectOverCli(undefined, () => ({
+      startCli: () =>
+        Promise.resolve({
+          kind: 'started',
+          server: {
+            endpoint: {kind: 'socket', path: '/tmp/cli.sock'},
+            processId: 88,
+            connectionToken: 'host-connection-token',
+            reused: false,
+          },
+          notices: [],
+        }),
+    }));
+    deepStrictEqual(onSocket.recording.records, []);
+  });
+
+  it('contracts S10: no log line of a window that stores or takes up a program holds its tokens', async () => {
+    const stored = await connectOverCli();
+    const taken = await joining(SHARED_CLI);
+    const lines = [...stored.messages(), ...taken.messages()];
+    deepStrictEqual(
+      lines.filter(
+        line =>
+          line.includes(CONTROL_TOKEN) ||
+          line.includes('shared-server-token') ||
+          line.includes('host-connection-token'),
+      ),
+      [],
     );
   });
 });
