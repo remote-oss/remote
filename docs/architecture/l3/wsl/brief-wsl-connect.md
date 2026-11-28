@@ -95,6 +95,9 @@ start command's line in the "WSL" terminal.
   and falls back to wget in the distro. The start step always sources `server-env-setup`; the install step sources it
   only when it downloads in the distro, which needs its proxy variables. So a connect reads it once unless the fallback
   runs (`reading-2348-setup-once`, F-6303 BR-2, AC-1).
+  - **The start step doesn't end its run before the server reports ready.** On real WSL, a `nohup` process whose
+    `wsl.exe` run ends at once is lost (0 of 10), and one whose run waits about 1 s or for readiness survives (10 of
+    10). The distro never restarted (#3312, W63). lib-server's start already waits for the listening line.
 - **Script-less start** (`remote.WSL.experimental.scriptLessStartup`, the stepwise driver): no in-distro fallback, so a
   failed client download fails the connect (F-6304 Q2 answered (a), `reading-2348-scriptless-no-fallback`; AC-11 and
   F-7902 AC-14 hold as written). Its requirements check follows the mode (AC-7, AC-24). Only its start step sources the

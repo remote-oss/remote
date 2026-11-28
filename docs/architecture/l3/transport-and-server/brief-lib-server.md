@@ -35,6 +35,18 @@
   planner and the runtime options against the synthetic product fixture of lib-product.
 - Strings shown to the user (S027, S043, S071, S075, S076, S088, S135, S157, S168) are ids resolved by the package's
   string table, never literals in the library.
+- **A Windows host's server and CLI start outside the ssh session's job** (`ruling-3325-windows-start`). Windows
+  OpenSSH puts a session's processes in a job with `KILL_ON_JOB_CLOSE`, so a process `Start-Process` starts ends with
+  the session (#3308, #3325). The start creates the launcher line through cmd's redirects with
+  `Invoke-CimMethod -ClassName Win32_Process -MethodName Create`, passing the session's environment block. So the
+  server lives as on POSIX: past the last window, until its own idle exit or Kill Server. If the CIM call fails, it
+  falls back to `Start-Process`, and the log says once per connection that the server ends with the connection.
+
+## Known limits
+
+- **Windows hosts that lock PowerShell to `ConstrainedLanguage`** aren't supported in release 1. The start script uses
+  .NET calls that mode blocks (`[System.Environment]::OSVersion`, the token generator), and no criterion names such
+  hosts. The user is asked whether to take it on (2026-11-28); if so, it becomes a feature with its own criteria.
 
 ## Done
 
