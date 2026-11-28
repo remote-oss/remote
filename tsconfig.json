@@ -95,6 +95,12 @@
       "path": "packages/tunnel-agent/tsconfig.test.json"
     },
     {
+      "path": "packages/tunnel-proxy"
+    },
+    {
+      "path": "packages/tunnel-proxy/tsconfig.test.json"
+    },
+    {
       "path": "packages/tunnel-relay"
     },
     {

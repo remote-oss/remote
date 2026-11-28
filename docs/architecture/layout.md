@@ -20,6 +20,7 @@ remote/
 │   ├── remote-extensionpack/ extension remote-oss.vscode-remote-extensionpack
 │   ├── lib-<name>/          shared libraries (candidates below)
 │   ├── tunnel-agent/        service    the tunnel host agent (ADR-0016)
+│   ├── tunnel-proxy/        service    the Remote - Tunnels local proxy (ruling-3340-proxy-package)
 │   └── tunnel-relay/        service    the tunnel relay (ADR-0015)
 ├── tests/
 │   └── conformance/
@@ -39,7 +40,8 @@ remote/
 4. **A library never imports an extension**, and the library graph has no cycles.
 5. **A service is a third kind**, named in `SERVICE_FOLDERS` (`tools/repository.ts`): a workspace package that runs on
    its own, outside the editor, with no extension manifest, publisher or engine floor. `tunnel-relay` (ADR-0015;
-   ruling-3062-service-kind) and `tunnel-agent` (ADR-0016) are the two. A service imports libraries by package name
+   ruling-3062-service-kind), `tunnel-agent` (ADR-0016) and `tunnel-proxy` (`ruling-3340-proxy-package`: its bundle is
+   copied into `remote-server`'s `dist/proxy.js` by the build) are the three. A service imports libraries by package name
    and is imported by nothing. The extensions' network rule (contracts §5: an extension's HTTP goes through the
    editor's `fetch`) binds code that runs in the extension host, so it leaves a service out.
 

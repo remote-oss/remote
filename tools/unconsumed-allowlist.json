@@ -279,6 +279,14 @@
       "card": "#2394",
       "slice": "remote-wsl",
       "decision": "tgt-2 (#2394) registers the WSL Targets tree and removes this entry"
+    },
+    {
+      "package": "tunnel-proxy",
+      "kind": "module",
+      "key": "src/data-socket.ts",
+      "card": "#3340",
+      "slice": "tunnels client",
+      "decision": "the proxy's data socket; the proxy program of the same card consumes it"
     }
   ]
 }
