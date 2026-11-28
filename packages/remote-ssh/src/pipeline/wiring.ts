@@ -667,6 +667,8 @@ export function stepsOf(
       serverSteps(input).certainlyDirect(input, host),
     installExtensions: (input, ...rest) =>
       serverSteps(input).installExtensions(input, ...rest),
+    stopCliScript: (input, ...rest) =>
+      serverSteps(input).stopCliScript(input, ...rest),
     ...tunnelStep,
     serverAnswers: async (address, connectionToken, cancellation) => {
       const status = await ports.serverStatus(

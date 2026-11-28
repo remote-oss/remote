@@ -14,6 +14,7 @@ import {
   recordLines,
 } from '../windows/harness.ts';
 import {
+  closeAllButLocal,
   DATA_FOLDER,
   freshHost,
   INSTALL_MILLISECONDS,
@@ -77,6 +78,9 @@ describe("the connection's notification over the CLI on a host without the serve
     } finally {
       await closeWindow(first).catch(() => undefined);
     }
+    // A window of the first one's connection would take up its CLI and resolve before any stage shows: the second
+    // connect makes a connection of its own to the host that now has the server.
+    await closeAllButLocal();
     const second = 'c3028-exec-present';
     await openWindow('harness', second);
     let secondStages: string[];
