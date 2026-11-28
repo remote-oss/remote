@@ -38,7 +38,8 @@
 - **A Windows host's server and CLI start outside the ssh session's job** (`ruling-3325-windows-start`). Windows
   OpenSSH puts a session's processes in a job with `KILL_ON_JOB_CLOSE`, so a process `Start-Process` starts ends with
   the session (#3308, #3325). The start creates the launcher line through cmd's redirects with
-  `Invoke-CimMethod -ClassName Win32_Process -MethodName Create`, passing the session's environment block. So the
+  `Invoke-CimMethod -ClassName Win32_Process -MethodName Create`, passing the session's environment block through
+  `Win32_ProcessStartup.EnvironmentVariables` (card #3333, whose row measures whether it replaces or merges). So the
   server lives as on POSIX: past the last window, until its own idle exit or Kill Server. If the CIM call fails, it
   falls back to `Start-Process`, and the log says once per connection that the server ends with the connection.
 
