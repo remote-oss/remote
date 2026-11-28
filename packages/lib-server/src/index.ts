@@ -72,7 +72,15 @@ export {
   type PlanFailure,
   type PlanInput,
   type PlanNote,
+  serverDataFolderOf,
 } from './install/plan.ts';
+export {
+  exactEntry,
+  hostAlias,
+  type HostTarget,
+  type InstallFolder,
+  installFolderFor,
+} from './install/install-folder.ts';
 export {
   type ExtensionResult,
   type ExtensionsNotRun,
