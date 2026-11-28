@@ -46,6 +46,7 @@ import {
   type StartFailure,
   startOrReuse,
   stopCli,
+  stopCliScript,
   templatePlatformOf,
   transfer,
   type TransferFailure,
@@ -178,7 +179,8 @@ type ServerStepNames =
   | 'maintain'
   | 'heldServer'
   | 'certainlyDirect'
-  | 'installExtensions';
+  | 'installExtensions'
+  | 'stopCliScript';
 
 /** The archive source the planner reads, from what the resolution found. */
 function sourceOf(resolution: ArchiveResolution): PlanInput['source'] {
@@ -679,6 +681,8 @@ export function createServerSteps(
         );
       }
     },
+    stopCliScript: (input, lease, host, cliPlan, processId) =>
+      stopCliScript(lease.channel, cliParametersFor(cliPlan, host), processId),
     installExtensions: async (input, lease, cancellation, dataFolder) => {
       await installExtensions(
         lease.channel,

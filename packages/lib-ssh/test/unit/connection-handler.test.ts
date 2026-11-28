@@ -8,7 +8,11 @@ import {
   ConnectionHandler,
   type ConnectionHandlerOptions,
 } from '../../src/index.ts';
-import {ScriptedSpawner, startError} from './fake-client-process.ts';
+import {
+  type FakeClientProcess,
+  ScriptedSpawner,
+  startError,
+} from './fake-client-process.ts';
 import {AUTHENTICATED, authenticate} from './connection-fixture.ts';
 import {
   platformProbeInput,
@@ -1494,6 +1498,109 @@ describe('connection handler (contracts §4 S9)', () => {
     });
   });
 
+  describe('the program the connection shares (ruling-3028-shared-cli)', () => {
+    const SHARED_PROGRAM = {
+      port: 31545,
+      controlToken: 'control-token',
+      connectionToken: 'server-token',
+      stopScript: 'stop it',
+    };
+
+    /** The record the connection gives a later window. */
+    async function sharedRecord(): Promise<unknown> {
+      return ((await send(2, {type: 'sharedRecord'})) as {record: unknown})
+        .record;
+    }
+
+    /** Runs the end action with a program shared, and lets `session` answer the stop before it ends. */
+    async function endedWith(
+      session: (started: FakeClientProcess) => void,
+    ): Promise<void> {
+      await connected();
+      await send(1, {
+        type: 'setSharedRecord',
+        record: {...RECORD, sharedCli: SHARED_PROGRAM},
+      });
+      const ended = handler.runAction('stopSharedCli');
+      await settled();
+      const started = spawner.started[0];
+      if (started !== undefined) {
+        session(started);
+      }
+      await ended;
+    }
+
+    it("keeps the record's program when a window stores a record without one, and takes a new one when stored", async () => {
+      await connected();
+      await send(1, {
+        type: 'setSharedRecord',
+        record: {...RECORD, sharedCli: SHARED_PROGRAM},
+      });
+      await send(1, {
+        type: 'setSharedRecord',
+        record: {...RECORD, remotePort: 41002},
+      });
+      const kept = await sharedRecord();
+      const other = {...SHARED_PROGRAM, port: 31546};
+      await send(1, {
+        type: 'setSharedRecord',
+        record: {...RECORD, sharedCli: other},
+      });
+      deepStrictEqual(
+        [kept, await sharedRecord()],
+        [
+          {...RECORD, remotePort: 41002, sharedCli: SHARED_PROGRAM},
+          {...RECORD, sharedCli: other},
+        ],
+      );
+    });
+
+    it('at the end runs the stop script over the session, and forgets the program', async () => {
+      await endedWith(started => {
+        started.output('m1:start\nm1:end 0\n');
+      });
+      deepStrictEqual(
+        [
+          spawner.started[0]?.inputText().includes("sh -c 'stop it'"),
+          await sharedRecord(),
+          logged.filter(line => line.includes('shared CLI')),
+        ],
+        [true, RECORD, []],
+      );
+    });
+
+    it('logs a stop that fails, by its status', async () => {
+      await endedWith(started => {
+        started.output('m1:start\nm1:end 3\n');
+      });
+      deepStrictEqual(
+        logged.filter(line => line.includes('shared CLI')),
+        ['the shared CLI was not stopped: status 3'],
+      );
+    });
+
+    it('logs a stop the session ends under, by its reason', async () => {
+      await endedWith(started => {
+        started.exit(255);
+      });
+      deepStrictEqual(
+        logged.filter(line => line.includes('shared CLI')),
+        ['the shared CLI was not stopped: channelClosed'],
+      );
+    });
+
+    it('runs nothing at the end when no program is shared, or when the session is gone', async () => {
+      await connected();
+      await send(1, {type: 'setSharedRecord', record: RECORD});
+      const before = spawner.started[0]?.inputText();
+      await handler.runAction('stopSharedCli');
+      const unshared = spawner.started[0]?.inputText() === before;
+      create();
+      await handler.runAction('stopSharedCli');
+      deepStrictEqual([unshared, spawner.started.length], [true, 1]);
+    });
+  });
+
   describe('other requests', () => {
     it('answers no question, since none is open', async () => {
       deepStrictEqual(await send(1, {type: 'answer', promptId: 1, text: 'x'}), {
@@ -1506,8 +1613,8 @@ describe('connection handler (contracts §4 S9)', () => {
       await rejects(send(1, {type: 'dance'}), /not a connection request/);
     });
 
-    it('has no end action', async () => {
-      await handler.runAction();
+    it('runs no end action it does not know', async () => {
+      await handler.runAction('dance');
     });
   });
 });

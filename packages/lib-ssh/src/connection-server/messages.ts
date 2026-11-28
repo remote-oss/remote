@@ -34,7 +34,27 @@ export interface SharedRecord {
   display?: StoredDisplay;
   /** The data folder the held server was installed in: a later window checks the server and prunes old installs there. */
   dataFolder?: string;
+  /**
+   * The editor's command-line program the connection runs, which a later window on the connection uses: its control
+   * port on the host, the token it requires, the connection token of the server its `serve` starts, and the script that
+   * stops it, which the connection server runs when it ends. Both tokens are secrets: they must not reach a log.
+   */
+  sharedCli?: {
+    port: number;
+    controlToken: string;
+    connectionToken: string;
+    stopScript: string;
+  };
 }
+
+/** The command-line program a connection's windows share. */
+export type SharedCli = NonNullable<SharedRecord['sharedCli']>;
+
+/** The end action of a connection server: it stops the command-line program the connection shares. */
+export const STOP_SHARED_CLI = 'stopSharedCli';
+
+/** How long the end action's stop of the shared program may take, in milliseconds. */
+export const SHARED_CLI_STOP_MILLISECONDS = 10 * 1000;
 
 /** How long the shared session has to answer the probe of a session check, in milliseconds. */
 export const SESSION_PROBE_MILLISECONDS = 3000;
@@ -210,6 +230,28 @@ function readDataFolder(value: unknown): string | undefined {
     : value;
 }
 
+/** Whether `value` is a text that isn't empty. */
+function isText(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+/** A shared program the record names: a TCP port, and two tokens and a stop script that aren't empty; none for any other value. */
+function readSharedCli(value: unknown): SharedCli | undefined {
+  if (!isFields(value)) {
+    return undefined;
+  }
+  const {port, controlToken, connectionToken, stopScript} = value;
+  return typeof port === 'number' &&
+    Number.isInteger(port) &&
+    port >= 1 &&
+    port <= 65535 &&
+    isText(controlToken) &&
+    isText(connectionToken) &&
+    isText(stopScript)
+    ? {port, controlToken, connectionToken, stopScript}
+    : undefined;
+}
+
 function readSharedRecord(value: unknown): SharedRecord | undefined {
   if (!isFields(value)) {
     return undefined;
@@ -233,6 +275,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
   const agentLink = readAgentLink(value.agentLink);
   const display = readDisplay(value.display);
   const dataFolder = readDataFolder(value.dataFolder);
+  const sharedCli = readSharedCli(value.sharedCli);
   return {
     remotePort,
     operatingSystem,
@@ -242,6 +285,7 @@ function readSharedRecord(value: unknown): SharedRecord | undefined {
     ...(agentLink === undefined ? {} : {agentLink}),
     ...(display === undefined ? {} : {display}),
     ...(dataFolder === undefined ? {} : {dataFolder}),
+    ...(sharedCli === undefined ? {} : {sharedCli}),
   };
 }
 

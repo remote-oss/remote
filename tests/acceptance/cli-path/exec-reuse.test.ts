@@ -44,7 +44,7 @@ function stagesOf(name: string): string[] {
 describe('the exec-server mode across windows and modes (card #3028, F-2103)', function () {
   this.timeout(900_000);
 
-  it.skip('F-2103 AC-10 (c3028-second-window): waits for athena’s ruling on #3028 (the CLI path starts a CLI per connect, so a second window makes a second command-shell): New Window on Active Host in an exec-mode window opens a second window that connects with no new login, and the host still runs one server and one CLI', async () => {
+  it('F-2103 AC-10 (c3028-second-window): New Window on Active Host in an exec-mode window opens a second window that connects with no new login, and the host still runs one server and one CLI', async () => {
     await keepingSettings(async () => {
       const rowName = 'c3028-second-window';
       await stamped(rowName, 'the host is made fresh', 120_000, freshExecHost);
