@@ -23,6 +23,12 @@
       "path": "packages/lib-state/tsconfig.test.json"
     },
     {
+      "path": "packages/lib-tunnels"
+    },
+    {
+      "path": "packages/lib-tunnels/tsconfig.test.json"
+    },
+    {
       "path": "packages/remote-containers"
     },
     {

@@ -5,7 +5,7 @@
 
 import type {Duplex} from 'node:stream';
 import type {PlainData} from 'lib-helper';
-import type {OpenFailureReason} from './messages.ts';
+import type {OpenFailureReason} from 'lib-tunnels';
 
 /** A stream to a tunnel's port, or why there is none. */
 export type OpenOutcome =

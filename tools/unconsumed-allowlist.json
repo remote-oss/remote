@@ -145,14 +145,6 @@
       "decision": "the window-side lease the proxy client gives; the resolver (#3344) and the proxy client consume it"
     },
     {
-      "package": "remote-server",
-      "kind": "module",
-      "key": "src/proxy/messages.ts",
-      "card": "#3340",
-      "slice": "tunnels client",
-      "decision": "the window and the local proxy speak these messages; the proxy client and the proxy program of the same card consume them"
-    },
-    {
       "package": "remote-ssh",
       "kind": "settings",
       "key": "enhancedSessionLogs",
