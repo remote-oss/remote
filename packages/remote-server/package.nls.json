@@ -1,0 +1,10 @@
+{
+  "description": "Reach your machines from anywhere through a secure tunnel, with nothing to expose and no ports to forward.",
+  "commands.category": "Remote-Tunnels",
+  "commands.connectCurrentWindowToTunnel.title": "Connect to Tunnel...",
+  "commands.getStarted.title": "Get Started with Tunnels",
+  "commands.reportIssue.title": "Report Issue...",
+  "commands.settings.title": "Settings",
+  "commands.showUsageLimits.title": "Show Usage Limits",
+  "commands.signIntoTunnelWithDifferentAccount.title": "Sign in to Tunnel with a Different Account"
+}

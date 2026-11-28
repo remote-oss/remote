@@ -116,6 +116,50 @@ describe('build', () => {
     ]);
   });
 
+  describe('the relay domain of Remote - Tunnels (card #3339)', () => {
+    const ENTRY =
+      "import * as vscode from 'vscode';\nexport function activate(): void {\n  void vscode.window;\n}\n";
+    const RELAY = 'packages/remote-server/relay.json';
+
+    beforeEach(() => {
+      workspace.writeManifest('remote-server');
+      workspace.write('packages/remote-server/src/extension.ts', ENTRY);
+    });
+
+    it('writes relay.json into the package when the release build names a domain', async () => {
+      const outcomes = await buildPackages(
+        workspace.root,
+        ['remote-server'],
+        COPIED_FILES,
+        {REMOTE_OSS_RELAY_DOMAIN: 'relay.example.org'},
+      );
+      deepStrictEqual(
+        [outcomes, readFileSync(path.join(workspace.root, RELAY), 'utf8')],
+        [
+          ['remote-server: dist/extension.js', 'remote-server: relay.json'],
+          '{"domain":"relay.example.org"}\n',
+        ],
+      );
+    });
+
+    it('writes no relay.json without a domain, or for another package', async () => {
+      await buildPackages(workspace.root, ['remote-server'], COPIED_FILES, {});
+      await buildPackages(workspace.root, ['remote-server'], COPIED_FILES, {
+        REMOTE_OSS_RELAY_DOMAIN: '',
+      });
+      await buildPackages(workspace.root, ['remote-a'], COPIED_FILES, {
+        REMOTE_OSS_RELAY_DOMAIN: 'relay.example.org',
+      });
+      deepStrictEqual(
+        [
+          existsSync(path.join(workspace.root, RELAY)),
+          existsSync(path.join(workspace.root, 'packages/remote-a/relay.json')),
+        ],
+        [false, false],
+      );
+    });
+  });
+
   describe('files shipped from a dependency (card containers-04)', () => {
     const SHIPPED = {
       'remote-a': {

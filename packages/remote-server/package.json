@@ -1,5 +1,125 @@
 {
   "name": "remote-server",
+  "displayName": "Remote - Tunnels",
+  "description": "%description%",
   "version": "0.0.0",
-  "private": true
+  "publisher": "remote-oss",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remote-oss/remote.git",
+    "directory": "packages/remote-server"
+  },
+  "bugs": {
+    "url": "https://github.com/remote-oss/remote/issues"
+  },
+  "homepage": "https://github.com/remote-oss/remote/tree/main/packages/remote-server",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "extensionPack": [
+    "remote-oss.remote-explorer"
+  ],
+  "activationEvents": [
+    "onCommand:remote-tunnels.isConnectedToRemote",
+    "onCommand:remote-tunnels.connectNewWindowToTunnel",
+    "onCommand:remote-tunnels.internal.isAuthenticated",
+    "onCommand:remote-tunnels.internal.getTunnelsList",
+    "onCommand:remote-tunnels.internal.getActiveRemote",
+    "onCommand:remote-tunnels.internal.getFoldersHistory",
+    "onCommand:remote-tunnels.internal.connectToRemote",
+    "onCommand:remote-tunnels.internal.deleteFolderFromHistory",
+    "onCommand:remote-tunnels.internal.unregisterTunnel",
+    "onResolveRemoteAuthority:tunnel"
+  ],
+  "enabledApiProposals": [
+    "resolvers"
+  ],
+  "l10n": "./l10n",
+  "contributes": {
+    "commands": [
+      {
+        "command": "remote-tunnels.connectCurrentWindowToTunnel",
+        "title": "%commands.connectCurrentWindowToTunnel.title%",
+        "category": "%commands.category%"
+      },
+      {
+        "command": "remote-tunnels.getStarted",
+        "title": "%commands.getStarted.title%",
+        "category": "%commands.category%"
+      },
+      {
+        "command": "remote-tunnels.reportIssue",
+        "title": "%commands.reportIssue.title%",
+        "category": "%commands.category%"
+      },
+      {
+        "command": "remote-tunnels.settings",
+        "title": "%commands.settings.title%",
+        "category": "%commands.category%"
+      },
+      {
+        "command": "remote-tunnels.showUsageLimits",
+        "title": "%commands.showUsageLimits.title%",
+        "category": "%commands.category%"
+      },
+      {
+        "command": "remote-tunnels.signIntoTunnelWithDifferentAccount",
+        "title": "%commands.signIntoTunnelWithDifferentAccount.title%",
+        "category": "%commands.category%"
+      }
+    ],
+    "menus": {
+      "statusBar/remoteIndicator": [
+        {
+          "command": "remote-tunnels.connectCurrentWindowToTunnel",
+          "group": "remote_10_tunnel_0_local@1",
+          "when": "!remote-tunnels.standingDown"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "remote-tunnels.connectCurrentWindowToTunnel",
+          "when": "!remote-tunnels.standingDown"
+        },
+        {
+          "command": "remote-tunnels.getStarted",
+          "when": "!remote-tunnels.standingDown"
+        },
+        {
+          "command": "remote-tunnels.reportIssue",
+          "when": "!remote-tunnels.standingDown"
+        },
+        {
+          "command": "remote-tunnels.settings",
+          "when": "!remote-tunnels.standingDown"
+        },
+        {
+          "command": "remote-tunnels.showUsageLimits",
+          "when": "!remote-tunnels.standingDown"
+        },
+        {
+          "command": "remote-tunnels.signIntoTunnelWithDifferentAccount",
+          "when": "!remote-tunnels.standingDown"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "lib-identifiers": "workspace:*",
+    "lib-standdown": "workspace:*"
+  }
 }

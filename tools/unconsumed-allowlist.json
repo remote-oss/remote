@@ -271,6 +271,14 @@
       "card": "#2396",
       "slice": "remote-wsl",
       "decision": "core sets it on a Windows desktop, and only D9b (the outer-context module, tgt-4 #2396) may set it in the extension (ruling-2348-shared-context-key); D9b isn't built, so nothing in the package sets it yet"
+    },
+    {
+      "package": "remote-server",
+      "kind": "module",
+      "key": "src/relay/relay-address.ts",
+      "card": "#3339",
+      "slice": "tunnels C1",
+      "decision": "the local proxy program of #3340 (C5) bundles and calls it; this card gives the module and its rows"
     }
   ]
 }
