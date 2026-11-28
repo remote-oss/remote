@@ -41,13 +41,16 @@
   `Invoke-CimMethod -ClassName Win32_Process -MethodName Create`, passing the session's environment block through
   `Win32_ProcessStartup.EnvironmentVariables` (card #3333, whose row measures whether it replaces or merges). So the
   server lives as on POSIX: past the last window, until its own idle exit or Kill Server. If the CIM call fails, it
-  falls back to `Start-Process`, and the log says once per connection that the server ends with the connection.
+  falls back to `Start-Process`, and the log says once per connection that the server ends with the connection. The
+  PID file pair, and the CLI's log file at its start, are written with `Set-Content`, not
+  `[System.IO.File]::WriteAllText` (`powershell-script.ts:252`).
 
 ## Known limits
 
 - **Windows hosts that lock PowerShell to `ConstrainedLanguage`** aren't supported in release 1. That mode blocks
-  `[System.IO.File]::WriteAllText` and `Add-Type` (measured, #3325). The script's other .NET calls
-  (`[System.Environment]::OSVersion`, the token generator) haven't been checked there. No criterion names such hosts.
+  `Add-Type` and `[System.IO.File]::WriteAllText`, and allows `Set-Content` and `Invoke-CimMethod` (measured, #3325).
+  So the start's own writes use `Set-Content`. The script's other .NET calls (`[System.Environment]::OSVersion`, the
+  token generator) haven't been checked there. No criterion names such hosts.
   The user is asked whether to take it on (2026-11-28); if so, it becomes a feature with its own criteria.
 
 ## Done
