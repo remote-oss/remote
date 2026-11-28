@@ -204,4 +204,63 @@ describe('host channel over WSL: a cancel (#3282)', () => {
       [['exited', 'exited', 'exited'], 0, []],
     );
   });
+
+  it('#3282: a tree-kill that rejects is swallowed, and the cancel is still reported', async () => {
+    const fake = fakeWsl(() => ({kind: 'printsUntilKilled', lines: ['4242']}));
+    const real = createWslRunner(fake);
+    const runner: WslRunner = {
+      ...real,
+      exec: (request, onLine) =>
+        request.programArguments.includes(TREE_KILL_SCRIPT)
+          ? Promise.reject(new Error('wsl.exe is gone'))
+          : real.exec(request, onLine),
+    };
+    const {channel} = channelOver(runner);
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, 20);
+    const outcome = await channel.runScript(
+      requestOf(controller.signal),
+      () => undefined,
+    );
+    deepStrictEqual(
+      outcome.kind === 'failed' ? outcome.failure.kind : outcome.kind,
+      'cancelled',
+    );
+  });
+
+  it('#3282: a run whose runner rejects leaves no listener, so a later abort ends no tree', async () => {
+    const fake = fakeWsl(() => ({kind: 'exits', status: 0}));
+    const real = createWslRunner(fake);
+    const runner: WslRunner = {
+      ...real,
+      exec: request =>
+        request.programArguments.includes(TREE_KILL_SCRIPT)
+          ? real.exec(request, () => undefined)
+          : Promise.reject(new Error('wsl.exe is gone')),
+    };
+    const {channel, logged} = channelOver(runner);
+    const shared = new AbortController();
+    const ended = await channel
+      .runScript(requestOf(shared.signal), () => undefined)
+      .then(
+        () => 'resolved',
+        () => 'rejected',
+      );
+    shared.abort();
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 2 * BOUND_MS);
+    });
+    deepStrictEqual(
+      [
+        ended,
+        fake.started.filter(started =>
+          started.programArguments.includes(TREE_KILL_SCRIPT),
+        ).length,
+        logged,
+      ],
+      ['rejected', 0, []],
+    );
+  });
 });

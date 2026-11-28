@@ -39,8 +39,9 @@ export type ContractScenario =
   | {kind: 'clientFile'; reachable: boolean}
   // The script backgrounds a long `sleep`, prints its pid, then waits.
   | {kind: 'backgroundsThenWaits'}
-  // The script starts a long `sleep` that leaves its tree (re-parented), prints its pid, then waits.
-  | {kind: 'detachesThenWaits'}
+  // The script starts a long `sleep` as the product starts its server (`nohup … </dev/null >/dev/null 2>&1 &`), prints its pid,
+  // waits until the process says it is ready, and ends normally.
+  | {kind: 'startsDetached'}
   // The script prints `out one` to standard output, `err one` to standard error, then `out two` to standard output.
   | {kind: 'printsBothStreams'}
   // The script prints `LONG_LINE_LENGTH` characters `x` with no line end, then exits 0.
@@ -405,8 +406,33 @@ async function cancelledAtProcessId(
   return {processId: Number(lines[0]), outcome};
 }
 
+/** The POSIX shell script that plays `scenario` out on a real shell, for the scenarios of the rules that run one. */
+export function ruleScriptOf(scenario: ContractScenario): string | undefined {
+  switch (scenario.kind) {
+    case 'backgroundsThenWaits':
+      return `sleep 40 & printf '%s\\n' "$!"; wait`;
+    case 'startsDetached':
+      return [
+        'READY=/tmp/channel-contract-ready.$$',
+        'export READY',
+        'rm -f "$READY"',
+        `nohup sh -c 'echo ready >"$READY"; exec sleep 40' </dev/null >/dev/null 2>&1 &`,
+        `printf '%s\\n' "$!"`,
+        'waited=0',
+        'while [ ! -e "$READY" ] && [ "$waited" -lt 50 ]; do sleep 0.1; waited=$((waited + 1)); done',
+        'rm -f "$READY"',
+      ].join('\n');
+    case 'printsBothStreams':
+      return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
+    case 'printsLongLine':
+      return `head -c ${String(LONG_LINE_LENGTH)} /dev/zero | tr '\\0' x`;
+    default:
+      return undefined;
+  }
+}
+
 /** The cases of `ruling-3269-channel-contract`'s rules: the cancel, the error stream and the bounds. */
-function ruleCases(harness: ChannelHarness): ContractCase[] {
+export function ruleCases(harness: ChannelHarness): ContractCase[] {
   /** The host's processes the harness sees, which these cases need. */
   function processesOf(): HostProcesses {
     if (harness.processes === undefined) {
@@ -427,16 +453,29 @@ function ruleCases(harness: ChannelHarness): ContractCase[] {
       },
     },
     {
-      name: 'leaves a process the script detached from its tree running after a cancel',
+      name: 'leaves a process an ended run started with nohup running after a later run is cancelled',
       check: async () => {
-        const staged = await harness.stage({kind: 'detachesThenWaits'});
-        const {processId, outcome} = await cancelledAtProcessId(staged);
+        const started = await runCollecting(
+          await harness.stage({kind: 'startsDetached'}),
+          new AbortController(),
+        );
+        const processId = Number(started.lines[0]);
         await pause(100);
-        const alive = await processesOf().alive(processId);
+        const aliveAfterStart = await processesOf().alive(processId);
+        const cancelled = await cancelledAtProcessId(
+          await harness.stage({kind: 'backgroundsThenWaits'}),
+        );
+        await pause(100);
+        const aliveAfterCancel = await processesOf().alive(processId);
         await processesOf().end(processId);
         deepStrictEqual(
-          [failureKindOf(outcome), alive],
-          ['failed:cancelled', true],
+          [
+            failureKindOf(started.outcome),
+            aliveAfterStart,
+            failureKindOf(cancelled.outcome),
+            aliveAfterCancel,
+          ],
+          ['exited', true, 'failed:cancelled', true],
         );
       },
     },

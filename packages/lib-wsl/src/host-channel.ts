@@ -165,43 +165,49 @@ export function createWslHostChannel(ports: WslHostChannelPorts): HostChannel {
         stopping: undefined,
       };
       async function endScript(): Promise<void> {
-        const target = await within(reported, bound, undefined);
-        if (target === undefined) {
-          logLine(
-            `cancelled before the shell reported its process id in ${distro}: only wsl.exe is ended`,
-          );
-        } else if (!(await endTree(runner, distro, target, bound))) {
-          logLine(
-            `the tree of process ${String(target)} in ${distro} was not confirmed ended within ${String(bound)} ms: wsl.exe is ended anyway`,
-          );
+        try {
+          const target = await within(reported, bound, undefined);
+          if (target === undefined) {
+            logLine(
+              `cancelled before the shell reported its process id in ${distro}: only wsl.exe is ended`,
+            );
+          } else if (!(await endTree(runner, distro, target, bound))) {
+            logLine(
+              `the tree of process ${String(target)} in ${distro} was not confirmed ended within ${String(bound)} ms: wsl.exe is ended anyway`,
+            );
+          }
+        } finally {
+          inner.abort();
         }
-        inner.abort();
       }
       function onAbort(): void {
         progress.stopping = endScript().catch(() => undefined);
       }
       request.cancellation.addEventListener('abort', onAbort, {once: true});
       let seen = false;
-      const outcome = await runner.exec(
-        {
-          distro,
-          folder: '~',
-          program: 'sh',
-          programArguments: planned.program,
-          environment: request.environment,
-          input: planned.input,
-          cancellation: inner.signal,
-        },
-        line => {
-          if (!seen && PROCESS_ID.test(line)) {
-            seen = true;
-            reportProcessId(Number(line));
-          } else {
-            onLine(line);
-          }
-        },
-      );
-      request.cancellation.removeEventListener('abort', onAbort);
+      const outcome = await runner
+        .exec(
+          {
+            distro,
+            folder: '~',
+            program: 'sh',
+            programArguments: planned.program,
+            environment: request.environment,
+            input: planned.input,
+            cancellation: inner.signal,
+          },
+          line => {
+            if (!seen && PROCESS_ID.test(line)) {
+              seen = true;
+              reportProcessId(Number(line));
+            } else {
+              onLine(line);
+            }
+          },
+        )
+        .finally(() => {
+          request.cancellation.removeEventListener('abort', onAbort);
+        });
       reportProcessId(undefined);
       if (progress.stopping !== undefined) {
         await progress.stopping;

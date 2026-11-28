@@ -9,6 +9,7 @@ import {
   channelContractCases,
   LARGE_COPY_LENGTH,
   LONG_LINE_LENGTH,
+  ruleScriptOf,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
@@ -157,8 +158,8 @@ function scriptOf(scenario: ContractScenario): string {
       return "sha256sum | cut -d ' ' -f 1";
     case 'backgroundsThenWaits':
       return `sleep 40 & printf '%s\\n' "$!"; wait`;
-    case 'detachesThenWaits':
-      return `(sleep 40 >/dev/null 2>&1 & printf '%s\\n' "$!"); sleep 30`;
+    case 'startsDetached':
+      return ruleScriptOf(scenario) ?? 'true';
     case 'printsBothStreams':
       return "printf 'out one\\n'; printf 'err one\\n' >&2; printf 'out two\\n'";
     case 'printsLongLine':
