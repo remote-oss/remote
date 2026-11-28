@@ -86,6 +86,11 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
   there, still in this extension only.
   - **How it starts:** lib-helper's detached start, on the editor's own runtime (`ELECTRON_RUN_AS_NODE`), running the
     extension's bundled proxy program.
+  - **Where its code lives** (`ruling-3340-proxy-package`): the proxy program, with the SDK client (§5.3) and the
+    management client (§2), is a **service** package, `packages/tunnel-proxy` (layout.md rule 5), bundled under
+    ADR-0016's bundle rules. The repository's build copies that bundle into the extension as `dist/proxy.js`, so
+    `remote-server`'s manifest names no SDK package and its VSIX passes ADR-0008's public-surface scan. The window's
+    side (the messages, the lease and the proxy client) stays in `remote-server`, on lib-helper.
   - **Its socket** is `vscode-tunneling-<16 hex>.sock`, a new random name each time, in the user's runtime folder
     (`$XDG_RUNTIME_DIR` on Linux, else lib-helper's endpoint folder; a named pipe on Windows).
   - **Its record:** the profile's proxy record goes in the same runtime folder, not global storage. lib-helper gains a
@@ -144,7 +149,7 @@ The relay is `brief-relay.md`, and the host is `brief-agent.md`.
     `@microsoft/dev-tunnels-ssh` and `-ssh-tcp` at **3.12.29**. That's the agent's pin (ADR-0016 decision 1,
     `ruling-3159-sdk-pin`), so the family has one SDK and one ssh. 1.3.50 already has `TunnelRelayTunnelClient`, so
     the client needs no other version. A later SDK move moves all three users (relay, agent, client) in one change.
-  - **The bundle, per ADR-0016's bundle rules:** esbuild into the proxy program's bundle, with no native addon. The
+  - **The bundle, per ADR-0016's bundle rules:** esbuild into `tunnel-proxy`'s bundle, with no native addon. The
     connections package's WebSocket is the `websocket` package, whose two addons (`bufferutil`, `utf-8-validate`)
     are left out, so it runs on its JavaScript paths. The build fails if the metafile names a `.node` file or
     `node-gyp-build` (ADR-0002 rule 8). Every bundled package's licence goes into the extension's notices: the SDK
@@ -190,15 +195,16 @@ For a per-tunnel limit, the current value is the highest count over the account'
   coverage line it doesn't name. daedalus replaces `C1` to `C11` with card numbers there as he cuts them.
 - **Client cards:**
   - **C1, the package and activation** (F-8001's desktop items, F-8901): manifest, activation, coexistence,
-    localisation, no telemetry, `relay.json`, and the management client (§2).
+    localisation, no telemetry, and `relay.json` (§2). The management client is C5's, in `tunnel-proxy`.
   - **C2, sign-in** (F-8102): §3, Switch Account, `signIntoTunnelWithDifferentAccount`, and the providers answer.
   - **C3, Connect to Tunnel** (F-8101): its commands, menus, context keys, settings, and the picker with its groups,
     Learn More, Switch Account, the list's bound, Online and Offline, descriptions, and Create a Tunnel (§4).
   - **C4, Remote Explorer's data and actions** (F-8201): `getTunnelsList`, `getActiveRemote`, `connectToRemote`,
     `deleteFolderFromHistory`, `unregisterTunnel`, `isConnectedToRemote`, `setActiveFolders`, and the folder history
     in global state (§4).
-  - **C5, the local proxy** (§5.1): lib-helper's record-location option, the proxy program with the SDK client
-    (§5.3), its socket, sharing, lifetime, the once-per-proxy `serve`, and the token hand-over.
+  - **C5, the local proxy** (§5.1): lib-helper's record-location option, the `tunnel-proxy` service package with the
+    SDK client (§5.3) and the management client (§2), the build's copy into the extension, its socket, sharing,
+    lifetime, the once-per-proxy `serve`, and the token hand-over.
   - **C6, the resolver and the connected window** (F-8103, F-8104's client side): §5.2, progress, the output
     channel, the label formatter, Close Remote Connection, reconnection, and the connection's error paths.
   - **C7, forwarded ports** (F-8202): §6.
