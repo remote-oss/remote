@@ -90,6 +90,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 
 - **The owner:** a tunnel is its creator's, by numeric id. Release 1's access is **owner only**: the owner manages,
   hosts and connects. That is "private" in the protocol's terms.
+- **Online:** every listed or fetched `Tunnel` carries `status.hostConnectionCount`, the number of host legs the relay
+  holds for it right now (§5). The client lists a tunnel at 0 as Offline (F-8101 AC-22; F-8902 AC-13).
 - **Access control:** the relay stores the ACL it's given (`contracts/tunnel_access_control_entry.rs:16-89`), and
   honours only deny entries and the owner. An **allow** entry of type `Anonymous` (public) gets 400 with the detail
   "Public access isn't offered." `[cli]`'s private ports send an `Anonymous` *deny* entry (`[cli] dev_tunnels.rs:1288-1317`),
@@ -141,7 +143,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
   which `[cli]` matches to delete an idle tunnel and retry (`dev_tunnels.rs:37,657-679,746-773`).
 - **Ports per tunnel:** 10, then 429 with the detail "This tunnel already has 10 ports."
 - **Connected clients per tunnel:** 10, then a refused client WebSocket upgrade (403).
-- **What `/userlimits` reports:** these limits, by name.
+- **What `/userlimits` reports:** these limits, by name. For the two per-tunnel limits, the current value is the
+  highest count over the account's tunnels (F-8203 AC-30).
 
 ## 7. The relay's language: TypeScript (ADR-0015)
 
