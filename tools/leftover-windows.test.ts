@@ -240,7 +240,13 @@ describe('the leftover close on the display (card #3210)', () => {
 
   /** The nameless X child a top-level draws: the manager does not manage it, so the display pass never targets it. */
   function childOf(windowPid: string): DisplayWindow {
-    return {name: '', managed: false, windowPid, acceptsClose: true, closes: true};
+    return {
+      name: '',
+      managed: false,
+      windowPid,
+      acceptsClose: true,
+      closes: true,
+    };
   }
 
   /**
