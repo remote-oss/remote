@@ -208,6 +208,10 @@ export function openConnectionStep(
           token = record.connectionToken;
           return connection.storeSharedRecord(record);
         },
+        storeSharedCli: (record, replacing) => {
+          token = record.connectionToken;
+          return connection.storeSharedCli(record, replacing);
+        },
         onNotice: listener => connection.onNotice(listener),
         answer: (promptId, text) => connection.answer(promptId, text),
         refuse: promptId => connection.refuse(promptId),

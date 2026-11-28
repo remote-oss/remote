@@ -106,6 +106,51 @@ describe('slice 1: the shared connection, with the bundled helper and the real s
       );
     });
 
+    it('ruling-3305-shared-cli-cas: two windows that offer a program at once, both in place of none, leave one: the other is kept out and told which, and a later window finds that one', async () => {
+      const record = {
+        remotePort: 0,
+        operatingSystem: 'linux',
+        architecture: 'x64',
+        temporaryFolder: '/tmp',
+        connectionToken: '',
+      };
+      /** The program a window offers, told apart by its port. */
+      function programOf(port: number) {
+        return {
+          port,
+          controlToken: `control-${String(port)}`,
+          connectionToken: `server-${String(port)}`,
+          stopScript: `stop ${String(port)}`,
+        };
+      }
+      const first = await connected();
+      const second = await connected();
+      const offers = await Promise.all(
+        [first, second].map((each, index) =>
+          each.connection.storeSharedCli(
+            {...record, sharedCli: programOf(41101 + index)},
+            null,
+          ),
+        ),
+      );
+      const stored = offers.findIndex(offer => offer.kind === 'stored');
+      const later = await connected();
+      deepStrictEqual(
+        [
+          offers.map(offer => offer.kind).sort(),
+          offers.find(offer => offer.kind === 'kept'),
+          later.outcome.kind === 'connected'
+            ? later.outcome.sharedRecord?.sharedCli
+            : later.outcome.kind,
+        ],
+        [
+          ['kept', 'stored'],
+          {kind: 'kept', sharedCli: programOf(41101 + stored)},
+          programOf(41101 + stored),
+        ],
+      );
+    });
+
     it('a reload within the grace joins the helper that runs, with no new login (F-2103)', async () => {
       const first = await connected();
       const loginsBefore = host.logins();

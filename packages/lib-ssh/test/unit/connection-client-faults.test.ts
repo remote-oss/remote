@@ -34,6 +34,13 @@ const RECORD = {
   connectionToken: 'token-value',
 };
 
+const SHARED_PROGRAM = {
+  port: 31545,
+  controlToken: 'control-token',
+  connectionToken: 'server-token',
+  stopScript: 'stop it',
+};
+
 /** What the helper under test does with a kind of request. */
 type Plan = {reply: PlainData} | {fail: 'reject' | 'never'};
 
@@ -252,6 +259,45 @@ describe('the window side against a helper that does not follow the protocol', (
     deepStrictEqual(
       await driven((await connection()).storeSharedRecord(RECORD)),
       false,
+    );
+  });
+
+  /** What became of a program offered to the helper in place of none. */
+  async function offered(): Promise<unknown> {
+    return driven(
+      (await connection()).storeSharedCli(
+        {...RECORD, sharedCli: SHARED_PROGRAM},
+        null,
+      ),
+    );
+  }
+
+  it('ruling-3305-shared-cli-cas: an earlier helper, which answers accepted and reads no replaced program, stored the offer', async () => {
+    deepStrictEqual(await offered(), {kind: 'stored'});
+  });
+
+  it('ruling-3305-shared-cli-cas: an offer the helper keeps out names the program it keeps', async () => {
+    plans.set('setSharedRecord', {
+      reply: {
+        type: 'sharedCliKept',
+        sharedCli: {...SHARED_PROGRAM, port: 31546},
+      },
+    });
+    deepStrictEqual(await offered(), {
+      kind: 'kept',
+      sharedCli: {...SHARED_PROGRAM, port: 31546},
+    });
+  });
+
+  it('ruling-3305-shared-cli-cas: an offer the helper rejects or answers with another reply is declined', async () => {
+    plans.set('setSharedRecord', {fail: 'reject'});
+    const rejected = await offered();
+    plans.set('setSharedRecord', {
+      reply: {type: 'refused', reason: 'notOwner'},
+    });
+    deepStrictEqual(
+      [rejected, await offered()],
+      [{kind: 'declined'}, {kind: 'declined'}],
     );
   });
 

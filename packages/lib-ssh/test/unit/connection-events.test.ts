@@ -19,6 +19,15 @@ const REPLIES: PlainData[] = [
   {type: 'answered', accepted: true},
   {type: 'scriptEnded', status: 3},
   {type: 'scriptFailed', reason: 'timeout', detail: 'no end in time'},
+  {
+    type: 'sharedCliKept',
+    sharedCli: {
+      port: 31545,
+      controlToken: 'control-token',
+      connectionToken: 'server-token',
+      stopScript: 'stop it',
+    },
+  },
 ];
 
 const EVENTS: PlainData[] = [
@@ -66,8 +75,10 @@ describe('connection replies and events (contracts §4 S9)', () => {
         {type: 'scriptEnded', status: 'ok'},
         {type: 'scriptFailed', reason: 'because', detail: 'x'},
         {type: 'scriptFailed', reason: 'timeout'},
+        {type: 'sharedCliKept'},
+        {type: 'sharedCliKept', sharedCli: {port: 31545}},
       ].map(body => readConnectionReply(body)),
-      Array.from({length: 11}, () => undefined),
+      Array.from({length: 13}, () => undefined),
     );
   });
 

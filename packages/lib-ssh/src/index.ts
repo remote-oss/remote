@@ -173,6 +173,7 @@ export {
   type ScriptFailureReason,
   readConnectionRequest,
   type SharedCli,
+  type SharedCliStore,
   SHARED_CLI_STOP_MILLISECONDS,
   type SharedRecord,
   STOP_SHARED_CLI,
