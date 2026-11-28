@@ -1,3 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json"
+  "extends": "../../tsconfig.base.json",
+  "include": ["${configDir}/src", "${configDir}/vscode-dts"],
+  "references": [
+    {
+      "path": "../lib-identifiers"
+    },
+    {
+      "path": "../lib-standdown"
+    }
+  ]
 }

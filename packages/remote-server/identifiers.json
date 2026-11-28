@@ -1,0 +1,82 @@
+{
+  "source": "remote-oss/remote-server#7 (F-8901)",
+  "standsDownFor": "ms-vscode.remote-server",
+  "standingDownKey": "remote-tunnels.standingDown",
+  "namespaces": {
+    "commands": ["remote-tunnels."],
+    "settings": ["remote.tunnels."],
+    "contextKeys": ["remote-tunnels."]
+  },
+  "contextKeys": [
+    {
+      "id": "remote-tunnels.standingDown",
+      "setter": "extension"
+    }
+  ],
+  "infoLineCommands": [],
+  "runtimeCommands": [
+    {
+      "id": "remote-tunnels.isConnectedToRemote",
+      "purpose": "the activation event Remote Explorer raises to ask whether the window is on a tunnel; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.connectNewWindowToTunnel",
+      "purpose": "the activation event of a new tunnel window asked for from outside the extension; registered so that it is found, and does nothing visible until the Connect to Tunnel card fills it"
+    },
+    {
+      "id": "remote-tunnels.internal.isAuthenticated",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.internal.getTunnelsList",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.internal.getActiveRemote",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.internal.getFoldersHistory",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.internal.connectToRemote",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.internal.deleteFolderFromHistory",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    },
+    {
+      "id": "remote-tunnels.internal.unregisterTunnel",
+      "purpose": "the activation event of Remote Explorer's request for tunnel data; registered so that it is found, and does nothing visible until the Remote Explorer data card answers it"
+    }
+  ],
+  "internal": [],
+  "invented": [
+    {
+      "id": "remote-tunnels.standingDown",
+      "kind": "contextKeys",
+      "spec": "F-8901",
+      "date": "2026-10-06"
+    }
+  ],
+  "settingPairs": [],
+  "ungated": [],
+  "locales": [
+    "cs",
+    "de",
+    "es",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pl",
+    "pt-br",
+    "qps-ploc",
+    "ru",
+    "tr",
+    "zh-cn",
+    "zh-tw"
+  ]
+}
