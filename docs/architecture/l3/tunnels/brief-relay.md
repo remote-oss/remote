@@ -70,7 +70,14 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 
   `aad` and `bearer` get 401, with the detail "Sign in with a GitHub account." (GitHub only, D-107 question 4).
 - **Who the token belongs to:** the relay calls `GET https://api.github.com/user` with the token, and caches the
-  answer for five minutes, keyed by a hash of the token. The account is its **numeric `id`**. Any GitHub token that
+  answer for five minutes, keyed by a hash of the token. A token GitHub refuses is held as refused for 60 s, keyed the
+  same way. Accounts and refusals share one map of at most 1,000 entries, least recently used out first (#3209).
+  A source, from the socket's peer address since the relay terminates TLS itself, gets at most 10 lookups for tokens
+  in neither cache in a one-minute window from its first such lookup, then 429 with `Retry-After`. A source is an
+  IPv4 address (an IPv4-mapped IPv6 address counts as its IPv4 address), or an IPv6 address's /64. At most 10,000
+  sources are held; ended windows go first, then the oldest running one. An
+  unauthenticated `/user` counts against the relay's own limit at GitHub (`ruling-3207-relay-hardening`). A
+  deployment that puts a proxy in front of the relay must revisit the source address. The account is its **numeric `id`**. Any GitHub token that
   identifies an account works, a personal access token included (`ruling-22-tunnel-rules` 2). The scopes our client
   and agent ask for are `read:user`, the identity part of `[cli]`'s `read:user+read:org` (`auth.rs:96`). The relay
   needs no organization data.
@@ -83,6 +90,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
 
 - **The owner:** a tunnel is its creator's, by numeric id. Release 1's access is **owner only**: the owner manages,
   hosts and connects. That is "private" in the protocol's terms.
+- **Online:** every listed or fetched `Tunnel` carries `status.hostConnectionCount`, the number of host legs the relay
+  holds for it right now (§5). The client lists a tunnel at 0 as Offline (F-8101 AC-22; F-8902 AC-13).
 - **Access control:** the relay stores the ACL it's given (`contracts/tunnel_access_control_entry.rs:16-89`), and
   honours only deny entries and the owner. An **allow** entry of type `Anonymous` (public) gets 400 with the detail
   "Public access isn't offered." `[cli]`'s private ports send an `Anonymous` *deny* entry (`[cli] dev_tunnels.rs:1288-1317`),
@@ -93,7 +102,10 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
     and `cid`. The TypeScript SDK reads only `exp` (`ts/src/management/tunnelAccessTokenProperties.ts:11-12,70-72`).
   - The lifetimes are 24 h for `host`, and 1 h for `connect` and `manage:ports`. `[cli]` fetches the host token again
     on each reconnect (`[cli] dev_tunnels.rs:156-180`).
-  - `tunnel <token>` is valid only for its tunnel and its scopes.
+  - `tunnel <token>` is valid only for its tunnel and its scopes. The claims also carry `own`, the owner's numeric id,
+    and `gen`, a random generation stored with the tunnel at its creation: new on every create, kept on update. On
+    use, the stored tunnel must match both, so a deleted id created again, by anyone, refuses every older token
+    (`ruling-3207-relay-hardening`).
 
 ## 5. The relay's two WebSocket legs
 
@@ -117,6 +129,11 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
     port 31545 (`[cli] constants.rs:14-15`) are the host agent's and the client's business, not the relay's.
 - **Keep-alive:** each side pings after 60 s of silence and ends the leg if no pong comes within 10 s (`ws.rs:147-187`);
   the relay answers pings and runs the same machine on its side.
+- **A leg's lifetime:** its token is checked when the leg opens, and the token's owner (`own`) must still be on the
+  allowlist then. An open leg lives until it closes, its tunnel is deleted, or its owner loses access. When the relay
+  re-reads the allowlist, it closes every leg of a tunnel whose owner is no longer listed. There's no timer at the
+  token's `exp`, since the protocol's clients renew a token only when a connect gets 401
+  (`ts/src/connections/tunnelConnectionSession.ts:400-405`) (`ruling-3227-leg-lifetime`).
 - **Not offered in release 1:** the TypeScript SDK's `-v2-dev` subprotocols (`ts/src/connections/tunnelRelayTunnelHost.ts:63`,
   `tunnelRelayTunnelClient.ts:42`). A client that asks only for them is refused at the upgrade.
 
@@ -126,7 +143,8 @@ and its answers (remote-oss/remote-server#21). Our own rules: `ruling-22-tunnel-
   which `[cli]` matches to delete an idle tunnel and retry (`dev_tunnels.rs:37,657-679,746-773`).
 - **Ports per tunnel:** 10, then 429 with the detail "This tunnel already has 10 ports."
 - **Connected clients per tunnel:** 10, then a refused client WebSocket upgrade (403).
-- **What `/userlimits` reports:** these limits, by name.
+- **What `/userlimits` reports:** these limits, by name. For the two per-tunnel limits, the current value is the
+  highest count over the account's tunnels (F-8203 AC-30).
 
 ## 7. The relay's language: TypeScript (ADR-0015)
 
