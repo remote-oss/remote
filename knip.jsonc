@@ -171,6 +171,7 @@
     "mkfifo",
     "pgrep",
     "pwsh",
+    "reg",
     "shellcheck",
     "ssh-add",
     "ssh-agent",
