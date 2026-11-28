@@ -172,6 +172,7 @@ export {
   type ByteStream,
   type CliControl,
   type CliControlFailure,
+  type CliNotification,
   type CliServeParams,
   type CliSocket,
   openCliControl,

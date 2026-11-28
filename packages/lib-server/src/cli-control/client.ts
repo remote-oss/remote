@@ -39,6 +39,16 @@ export interface CliServeParams {
   quality: string;
   connectionToken: string;
   useLocalDownload: boolean;
+  /** The extensions the server installs when it starts; none when absent. */
+  extensions?: readonly string[];
+  /** Where the host gets the server, for a host program that takes it from the client; absent for the editor's own program. */
+  serverSource?: Readonly<Record<string, unknown>>;
+}
+
+/** A notification of the program that the client does not handle itself: its method and its parameters. */
+export interface CliNotification {
+  method: string;
+  params: Readonly<Record<string, unknown>>;
 }
 
 /** One server socket of the connection, for one editor connection. */
@@ -53,6 +63,11 @@ export interface CliSocket {
 
 /** The control connection to the command-line program. */
 export interface CliControl extends CliMethods {
+  /**
+   * Hears every notification the client does not handle itself (a host program's `version` and `serverprogress`), those
+   * that came before the listener too, the first sixty-four of them at most.
+   */
+  onNotification(listener: (notification: CliNotification) => void): void;
   /** Runs the challenge with the token. */
   authenticate(
     token: string,
@@ -78,6 +93,9 @@ export interface CliControl extends CliMethods {
 
 /** The level of a `serverlog` line that reports an error. */
 const ERROR_LEVEL = 4;
+
+/** How many notifications nobody listens for yet the client keeps for the first listener. */
+const MOST_UNHEARD = 64;
 
 /** The response to a challenge: base64url, without padding, of the SHA-256 of its text. */
 function responseTo(challenge: string): string {
@@ -115,6 +133,9 @@ export function openCliControl(stream: ByteStream): CliControl {
   let succeeded = false;
   let nextSocketId = 0;
   let running: Promise<unknown> = Promise.resolve();
+  const notificationListeners: Array<(notification: CliNotification) => void> =
+    [];
+  const unheard: CliNotification[] = [];
 
   function finish(): void {
     if (ended) {
@@ -212,6 +233,12 @@ export function openCliControl(stream: ByteStream): CliControl {
       if (state !== undefined) {
         closeStream(state);
       }
+    } else if (notificationListeners.length > 0) {
+      for (const listener of notificationListeners) {
+        listener({method, params});
+      }
+    } else if (unheard.length < MOST_UNHEARD) {
+      unheard.push({method, params});
     }
   }
 
@@ -382,10 +409,13 @@ export function openCliControl(stream: ByteStream): CliControl {
       socket_id: socketId,
       commit_id: params.commit,
       quality: params.quality,
-      extensions: [],
+      extensions: [...(params.extensions ?? [])],
       connection_token: params.connectionToken,
       use_local_download: params.useLocalDownload,
       compress: false,
+      ...(params.serverSource === undefined
+        ? {}
+        : {server_source: params.serverSource}),
     });
     logListener = undefined;
     if (reply?.kind === 'result') {
@@ -410,6 +440,12 @@ export function openCliControl(stream: ByteStream): CliControl {
 
   return {
     ...methodsOf({request, requestStreamed}),
+    onNotification: listener => {
+      notificationListeners.push(listener);
+      for (const notification of unheard.splice(0)) {
+        listener(notification);
+      }
+    },
     authenticate: async token => {
       const issued = await challengeStep('challenge_issue', {token});
       if ('kind' in issued) {

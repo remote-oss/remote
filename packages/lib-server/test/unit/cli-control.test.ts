@@ -385,6 +385,88 @@ describe('the CLI control client: serve', () => {
   });
 });
 
+describe('the CLI control client: what a host program that is not the editor\u2019s own adds', () => {
+  it('#3344: serve sends the extensions and the server source it is given, and neither when it is given none', async () => {
+    const {peer, control} = connected(accepting);
+    await control.serve(
+      {
+        ...SERVE,
+        extensions: ['ms-python.python'],
+        serverSource: {name: 'vscodium', host: 'example.invalid'},
+      },
+      () => undefined,
+    );
+    deepStrictEqual(peer.requests[0]?.params, {
+      socket_id: 0,
+      commit_id: 'c1',
+      quality: 'insider',
+      extensions: ['ms-python.python'],
+      connection_token: 'conn-token',
+      use_local_download: false,
+      compress: false,
+      server_source: {name: 'vscodium', host: 'example.invalid'},
+    });
+  });
+
+  it('#3344: a serve with no server source sends no server_source key', async () => {
+    const {peer, control} = connected(accepting);
+    await control.serve(SERVE, () => undefined);
+    strictEqual('server_source' in (peer.requests[0]?.params ?? {}), false);
+  });
+
+  it('#3344: a notification the client does not handle reaches a listener, with its parameters, in order', async () => {
+    const {peer, control} = connected(accepting);
+    const heard: Array<[string, unknown]> = [];
+    control.onNotification(({method, params}) => heard.push([method, params]));
+    peer.send(
+      {
+        id: null,
+        method: 'version',
+        params: {version: '1.0', protocol_version: 6},
+      },
+      {id: null, method: 'serverprogress', params: {phase: 'downloading'}},
+    );
+    await settle();
+    deepStrictEqual(heard, [
+      ['version', {version: '1.0', protocol_version: 6}],
+      ['serverprogress', {phase: 'downloading'}],
+    ]);
+  });
+
+  it('#3344: a notification that came before the first listener is handed to it when it comes, and only once', async () => {
+    const {peer, control} = connected(accepting);
+    peer.send({id: null, method: 'version', params: {protocol_version: 6}});
+    await settle();
+    const first: string[] = [];
+    const second: string[] = [];
+    control.onNotification(({method}) => first.push(method));
+    control.onNotification(({method}) => second.push(method));
+    deepStrictEqual([first, second], [['version'], []]);
+  });
+
+  it('#3344: the notifications nobody has asked for are kept up to sixty-four, the rest dropped', async () => {
+    const {peer, control} = connected(accepting);
+    for (let count = 0; count < 70; count += 1) {
+      peer.send({id: null, method: 'serverprogress', params: {count}});
+    }
+    await settle();
+    let heard = 0;
+    control.onNotification(() => {
+      heard += 1;
+    });
+    strictEqual(heard, 64);
+  });
+
+  it('#3344: the notifications the client handles itself (serverlog, the streams) do not reach the listener', async () => {
+    const {peer, control} = connected(accepting);
+    const heard: string[] = [];
+    control.onNotification(({method}) => heard.push(method));
+    peer.send(logOf('line', 2));
+    await settle();
+    deepStrictEqual(heard, []);
+  });
+});
+
 describe('the CLI control client: the framing', () => {
   it('V7a: a reply and a notification in one chunk are both handled in order', async () => {
     const {peer, answer, seen} = loggedServe();
