@@ -10,6 +10,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -96,4 +97,9 @@ export function readTunnelRecord(folder: string): TunnelRecord | undefined {
 /** Writes `record` as the tunnel record of `folder`. */
 export function writeTunnelRecord(folder: string, record: TunnelRecord): void {
   writeStateFile(folder, 'tunnel.json', `${JSON.stringify(record)}\n`);
+}
+
+/** Removes the state file `file` of `folder`; a file that is not there is already removed. */
+export function removeStateFile(folder: string, file: StateFile): void {
+  rmSync(path.join(folder, file), {force: true});
 }

@@ -2,6 +2,7 @@ import {activeWindowName} from './display.ts';
 import {startInWindow, terminalFacts, windowEvents} from './harness.ts';
 import {
   chooseQuickPickRow,
+  focusForPalette,
   moveQuickPickFocus,
   pageFocusFacts,
   pressEscape,
@@ -49,6 +50,9 @@ async function sampleQuickInput(
  * effect can be told from one that never got the command.
  */
 async function showedPalette(name: string): Promise<void> {
+  // A keyboard the window's terminal holds is in the workbench first, as a user clicking the editor would: a quick
+  // input does not open over a focused terminal (#2424).
+  await focusForPalette(name);
   const sent = Date.now();
   const trail: string[] = [];
   const state = {shown: false};
