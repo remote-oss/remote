@@ -539,8 +539,11 @@ const PACKAGE_EXTENSIONS: ReadonlyMap<string, string> = new Map([
 /** The folder of the acceptance tests' own package. */
 const ACCEPTANCE = 'tests/acceptance';
 
+/** The tunnels conformance package's folder: a test package that imports no workspace package (layout.md). */
+const CONFORMANCE = 'tests/tunnels-conformance';
+
 /** The folders pnpm-workspace.yaml must list for the graph to know every package. */
-const WORKSPACE = ['packages/*', ACCEPTANCE];
+const WORKSPACE = ['packages/*', ACCEPTANCE, CONFORMANCE];
 
 /** What the package reach reads: who uses each package folder, and who imports each source. */
 export interface SourceGraph {
@@ -601,6 +604,7 @@ export function sourceGraph(root: string): SourceGraph | undefined {
       .filter(entry => entry.isDirectory())
       .map(entry => `packages/${entry.name}`),
     ACCEPTANCE,
+    CONFORMANCE,
   ];
   const manifests = new Map(
     folders.map(folder => [

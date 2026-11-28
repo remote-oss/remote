@@ -403,11 +403,15 @@ describe('acceptance-reach: what a change to a package reaches (card tooling-169
     root = mkdtempSync(path.join(tmpdir(), 'package-reach-'));
     write(
       'pnpm-workspace.yaml',
-      'packages:\n  - packages/*\n  - tests/acceptance\n',
+      'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\n',
     );
     write(
       'tests/acceptance/package.json',
       JSON.stringify({name: 'acceptance'}),
+    );
+    write(
+      'tests/tunnels-conformance/package.json',
+      JSON.stringify({name: 'tunnels-conformance'}),
     );
     manifest('lib-base');
     manifest('lib-middle', 'lib-base');
@@ -697,11 +701,15 @@ describe('acceptance-reach: the names other sources import from the launch table
     root = mkdtempSync(path.join(tmpdir(), 'table-imports-'));
     write(
       'pnpm-workspace.yaml',
-      'packages:\n  - packages/*\n  - tests/acceptance\n',
+      'packages:\n  - packages/*\n  - tests/acceptance\n  - tests/tunnels-conformance\n',
     );
     write(
       'tests/acceptance/package.json',
       JSON.stringify({name: 'acceptance'}),
+    );
+    write(
+      'tests/tunnels-conformance/package.json',
+      JSON.stringify({name: 'tunnels-conformance'}),
     );
     mkdirSync(path.join(root, 'packages'));
     write('tools/acceptance-launches.ts', 'export const alpha = 1;\n');
