@@ -80,6 +80,13 @@ export const COPIED_FILES: Readonly<Record<string, CopiedFiles>> = {
   },
 };
 
+/** The package that carries the relay's domain, the file it is written to, and the variable of the release build that names it. */
+const RELAY_PACKAGE = 'remote-server';
+
+const RELAY_FILE = 'relay.json';
+
+const RELAY_DOMAIN_VARIABLE = 'REMOTE_OSS_RELAY_DOMAIN';
+
 /** Where a package keeps the entry points of its programs, and where their bundles go. */
 const PROGRAMS_PATH = 'src/programs';
 
@@ -163,6 +170,7 @@ export async function buildPackages(
   root: string,
   folders: string[],
   copied: Readonly<Record<string, CopiedFiles>> = COPIED_FILES,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Promise<string[]> {
   const selected = folders.length > 0 ? folders : packageFolders(root);
   const outcomes: string[] = [];
@@ -224,6 +232,18 @@ export async function buildPackages(
       outcomes.push(
         `${folder}: ${programs.map(entry => `${PROGRAM_BUNDLES_PATH}/${path.basename(entry, '.ts')}.js`).join(', ')}`,
       );
+    }
+    const relayDomain = environment[RELAY_DOMAIN_VARIABLE];
+    if (
+      folder === RELAY_PACKAGE &&
+      relayDomain !== undefined &&
+      relayDomain !== ''
+    ) {
+      writeFileSync(
+        path.join(directory, RELAY_FILE),
+        `${JSON.stringify({domain: relayDomain})}\n`,
+      );
+      outcomes.push(`${folder}: ${RELAY_FILE}`);
     }
     const shipped = copied[folder];
     if (shipped !== undefined) {

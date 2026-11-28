@@ -24,3 +24,4 @@ tests/acceptance/slow-remote/extension.cjs
 # Python bytecode (the conformance runner)
 __pycache__/
 *.pyc
+packages/remote-server/relay.json
