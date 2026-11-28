@@ -5,6 +5,7 @@
  * agent's events and the host's state.
  */
 
+import {HARNESS_SUITE_VARIABLE} from './acceptance-display-reporter.ts';
 import {OUTCOME_VARIABLE, outcomeFileOf} from './known-reds.ts';
 import {spawn, spawnSync} from 'node:child_process';
 import {
@@ -455,13 +456,16 @@ export function plainEditorOf(
 
 /**
  * The Node mocha run of a launch with no runner: the test files of its suite folder it lists, else every one, without the
- * repository's config, reported by mocha's default reporter that also prints each file's time (tools/acceptance-file-times.ts).
+ * repository's config, reported by the file-times reporter that prints each file's time (tools/acceptance-file-times.ts) —
+ * for the ssh-core launch, the display reporter beside it (#3210), which also says the display's windows at each file's end.
  */
 export function plainTestsOf(
   root: string,
   launch: Launch,
   environment: Readonly<Record<string, string | undefined>>,
 ): Program {
+  // The ssh-core launch's log says the display's windows after each of its files (#3210).
+  const measuresDisplay = launch.label === 'ssh-core';
   return {
     file: process.execPath,
     programArguments: [
@@ -470,7 +474,9 @@ export function plainTestsOf(
       '--extension',
       'ts',
       '--reporter',
-      path.join(root, 'tools', 'acceptance-file-times.ts'),
+      measuresDisplay
+        ? path.join(root, 'tools', 'acceptance-display-reporter.ts')
+        : path.join(root, 'tools', 'acceptance-file-times.ts'),
       ...(launch.kind === 'plain' && launch.files !== undefined
         ? launch.files
         : ['*.test.ts']
@@ -479,7 +485,10 @@ export function plainTestsOf(
         path.join(root, 'tests', 'acceptance', launch.suite, file),
       ]),
     ],
-    environment: {...environment},
+    environment: {
+      ...environment,
+      ...(measuresDisplay ? {[HARNESS_SUITE_VARIABLE]: launch.suite} : {}),
+    },
   };
 }
 
