@@ -386,6 +386,7 @@ export default defineConfig(
       'packages/*/src/web-extension.ts',
       'packages/*/src/programs/*.ts',
       'packages/tunnel-agent/src/main.ts',
+      'packages/tunnel-proxy/src/main.ts',
     ],
     rules: {
       'no-restricted-properties': 'off',

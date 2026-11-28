@@ -1,5 +1,8 @@
 {
-  "exclude": {},
+  "exclude": {
+    "src/main.ts": "starts the local proxy",
+    "src/sdk.ts": "the relay's service and the client leg over the dev tunnels SDK: the conformance job and the tunnels launch run it against a relay"
+  },
   "ratchet": {
     "lines": 100,
     "branches": 100,
