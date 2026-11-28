@@ -55,7 +55,7 @@ remote-explorer       ->  lib-identifiers, lib-standdown, lib-companion, lib-aut
 remote-server         ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-forwarding, lib-companion, lib-log
 remote-ssh            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-ssh, lib-server, lib-forwarding, lib-companion, lib-state, lib-log
 remote-wsl            ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-log
-remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-state, lib-log  (+ lib-ssh if F-1302 lands the hop here)
+remote-containers     ->  lib-identifiers, lib-standdown, lib-authority, lib-product, lib-host, lib-wsl, lib-server, lib-forwarding, lib-companion, lib-helper, lib-state, lib-log  (no lib-ssh: F-1302 runs over core's getRemoteExecServer, ruling-3238)
 tunnel-agent          ->  lib-identifiers, lib-server, lib-host, lib-log   (a service, ADR-0016; outside the editor)
 
 lib-ssh -> lib-host, lib-helper, lib-identifiers, lib-log        lib-server -> lib-host, lib-product, lib-log

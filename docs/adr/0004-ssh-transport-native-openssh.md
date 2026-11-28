@@ -5,6 +5,10 @@
 - Deciders: the user; design by `remote-architect`
 - Scope: every package that opens an SSH connection: Remote-SSH, WSL over SSH, Dev Containers on a remote host,
   and the shared SSH library the container view defines
+- Scope note (the user, 2026-11-28): the Remote - Tunnels client's tunnel-protocol session is outside this ADR. It's
+  the dev tunnels relay's `none`-exchange SSH over an authenticated WebSocket, which OpenSSH can't speak, and the user
+  allowed `@microsoft/dev-tunnels-ssh` for it ("Lets use `@microsoft/dev-tunnels-ssh`"). That extension only, for that
+  protocol only (ADR-0014 decision 2, brief-client §5). Every connection to an SSH host stays OpenSSH's
 - Requirements: ADR-0002 rule 8 (no native Node modules); the Remote-SSH specifications when they are read
 
 ## Context

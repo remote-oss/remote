@@ -5,6 +5,7 @@
  * hangs on it are held back. Nothing here imports the editor.
  */
 
+import {hostAlias} from 'lib-server';
 import {
   enablePortsViewWhenConnected,
   type LabelFormatterHost,
@@ -32,7 +33,7 @@ import {
 } from './connect/connect-commands.ts';
 import {windowlessLine} from './connect/windowless.ts';
 import {commands, runtimeCommands} from './identifiers.generated.ts';
-import {hostAlias, sshTargetOf} from './pipeline/host-settings.ts';
+import {sshTargetOf} from './pipeline/host-settings.ts';
 import {maintenanceHandlers} from './maintenance/maintenance-commands.ts';
 import type {NoticePort} from './surfaces/notice.ts';
 import {registerWindowLabel} from './surfaces/label-formatter.ts';

@@ -46,8 +46,43 @@ function isLaterCommand(words: readonly string[]): boolean {
   );
 }
 
+/** What a command that is built does, by command: the exit status it ends with. */
+export interface Handlers {
+  /** Registers the tunnel and serves it until stopped; `name` is the one `--name` gave. */
+  start?(name: string | undefined): Promise<number>;
+  /** Renames the registered tunnel. */
+  rename?(name: string): Promise<number>;
+  /** Deletes the registered tunnel and forgets it. */
+  unregister?(): Promise<number>;
+}
+
+/** The exit status of the built command `words` ask for, or none when no handler answers them. */
+function handled(
+  words: readonly string[],
+  handlers: Handlers,
+): Promise<number> | undefined {
+  const [first, name] = words;
+  const named = words.length === 2 && name !== undefined && name !== '';
+  if (words.length === 0) {
+    return handlers.start?.(undefined);
+  }
+  if (first === '--name' && named) {
+    return handlers.start?.(name);
+  }
+  if (first === 'rename' && named) {
+    return handlers.rename?.(name);
+  }
+  return words.length === 1 && first === 'unregister'
+    ? handlers.unregister?.()
+    : undefined;
+}
+
 /** Runs the command `words` ask for, writing through `output`, and gives the exit status. */
-export function runCommand(words: readonly string[], output: Output): number {
+export async function runCommand(
+  words: readonly string[],
+  output: Output,
+  handlers: Handlers = {},
+): Promise<number> {
   if (words.length === 1 && words[0] === '--version') {
     output.stdout(`${manifest.version}\n`);
     return 0;
@@ -55,6 +90,10 @@ export function runCommand(words: readonly string[], output: Output): number {
   if (words.length === 1 && words[0] === '--help') {
     output.stdout(`${USAGE}\n`);
     return 0;
+  }
+  const status = await handled(words, handlers);
+  if (status !== undefined) {
+    return status;
   }
   if (isLaterCommand(words)) {
     output.stderr(`${['tunnel-agent', ...words].join(' ')}: not built yet\n`);

@@ -1,0 +1,341 @@
+criterion	card	gist	note
+F-8901.AC-1	#3339	Extensions view shows our id, publisher, display name	
+F-8901.AC-2	#3339	Manifest identical to reference except the ruled differences	
+F-8901.AC-3	#3339	Repository, bugs and help links not Microsoft's	
+F-8901.AC-4	#3339	Reference present: stands down with one warning	
+F-8901.AC-5	#3339	Reference disabled, reload: activates normally, no warning	
+F-8901.AC-6	#3339	No telemetry key, package, logger or telemetry.json	
+F-8901.AC-7	#3339	Extension pack names remote-oss.remote-explorer only	
+F-8901.AC-8	#3339	After stand-down each Remote-Tunnels entry appears once	
+F-8901.AC-9	#3339	Reference installed mid-session: no warning until reload	
+F-8901.AC-10	#3339	Dependent on Microsoft id not activated; id not claimed	
+F-8901.AC-11	#3339	README states telemetry, coexistence, licence, help links	
+F-8901.AC-12	#3339	14 language files equal reference's; name untranslated	
+F-8901.AC-13	#3339	Licence MIT with the project's licence file	
+F-8901.AC-14	#3348	Desktop hand-off link uses vscode.env.uriScheme	
+F-8901.AC-15	#3339	No activation or side effects before first command	
+F-8901.AC-16	#3339	Exactly one R-54 warning per activation	
+F-8901.AC-17	#3339	Installed beside reference without reload: stands down once	
+F-8001.AC-1	#3339	Window start shows nothing; reference activation events only	
+F-8001.AC-2	#3339	Palette lists six desktop commands, no Continue Working	
+F-8001.AC-3	#3342	Remote indicator: Connect to Tunnel first and focused	
+F-8001.AC-4	#3343	Internal commands answer Remote Explorer silently	
+F-8001.AC-5	#3339	Command's first screen opens at once after activation	
+F-8001.AC-6	#3339	Output channel exists only after activation	
+F-8001.AC-7	#3339	Restricted Mode identical; not listed as workspaceUnsupported	
+F-8001.AC-8	#3339	Pack installs remote-oss.remote-explorer alongside	
+F-8001.AC-9	#3339	Works without Remote Explorer, no notifications	
+F-8001.AC-10	#3339	UI extension: local only, works in remote windows	
+F-8001.AC-11	#3348	Web build activates with same commands plus web entries	
+F-8001.AC-12	#3339	Language pack shows reference translations; name kept	
+F-8001.AC-13	#3339	English text when no language pack	
+F-8001.AC-14	#3339	Reference enabled: one warning, no registration, entries once	
+F-8001.AC-15	#3339	Warning button opens Extensions view on reference id	
+F-8001.AC-16	#3339	Warning repeats once per reload or host restart	
+F-8001.AC-17	#3339	No activation or side effects before first use	
+F-8001.AC-18	#3339	Activates without proposal grant, no own UI	
+F-8001.AC-19	#3339	Activation creates no global-storage folder or temp file	
+F-8001.AC-20	#3339	Extensions view shows own publisher, icon, category Other	
+F-8001.AC-21	#3339	Early invocation activates, runs R-54 check, then works	
+F-8001.AC-22	#3339	Command before activation with reference: stands down once	
+F-8001.AC-23	#3339	standingDown cleared on reload, not on host restart	
+F-8001.AC-24	#3339	Entries listed before activation without reference	
+F-8001.AC-25	#3343	Folder-history global-state entry under our id only	
+F-8001.AC-26	#3339	No resolvers grant: commands work, one log line	
+F-8002.AC-1	#3347	Three help commands listed with exact titles, no keybinding	
+F-8002.AC-2	#3347	Help commands absent from menus; no menus contribution	
+F-8002.AC-3	#3347	Inactive: command activates and completes silently	
+F-8002.AC-4	#3347	Get Started opens manifest repository's README	
+F-8002.AC-5	#3347	Get Started leaves window unchanged, no own UI	
+F-8002.AC-6	#3347	Get Started reopens the URL on every run	
+F-8002.AC-7	#3347	Settings opens @ext: search with three settings	
+F-8002.AC-8	#3347	Settings opens as a tab when useModal off	
+F-8002.AC-9	#3347	Settings rerun reuses editor, resets search text	
+F-8002.AC-10	#3347	Settings scope tabs match the window kind	
+F-8002.AC-11	#3347	Report Issue opens prefilled Issue Reporter window	
+F-8002.AC-12	#3347	Issue Reporter gets no extension-supplied data	
+F-8002.AC-13	#3347	Manifest bugs and repository name the project's own	
+F-8002.AC-14	#3347	Report Issue again opens no second reporter	
+F-8002.AC-15	#3347	Feedback disabled: core's command-not-found error dialog	
+F-8002.AC-16	#3347	Failed tunnel window: three commands still usable	
+F-8002.AC-17	#3347	Help commands write no settings or stored state	
+F-8002.AC-18	#3347	README help links project's own; names host agent	
+F-8002.AC-19	#3347	Browser cannot open: core's error dialog only	
+F-8002.AC-20	#3347	github.com docs link opens without trust prompt	
+F-8002.AC-21	#3347	Settings in tunnel window shows a Remote tab	
+F-8101.AC-1	#3342	Connect to Tunnel listed once in palette	
+F-8101.AC-2	#3342	Indicator menu's first row Connect to Tunnel, focused	
+F-8101.AC-3	#3342	Tunnel window: Connect to Tunnel still first row	
+F-8101.AC-4	#3341	First screen is account pick with GitHub only	
+F-8101.AC-5	#3341	GitHub row described Last used after a pick	
+F-8101.AC-6	#3342	Loading state with busy bar until list arrives	
+F-8101.AC-7	#3342	One tunnel: Online row, Learn More, Switch Account	
+F-8101.AC-8	#3342	First row focused; ArrowDown wraps around	
+F-8101.AC-9	#3342	Filter matches labels only, not descriptions	
+F-8101.AC-10	#3342	Row description is host name after one connect	host name: the agent sets the tunnel description (A4), recorded in history at first connect
+F-8101.AC-11	#3342	Picking a tunnel reloads same window into tunnel+name	
+F-8101.AC-12	#3342	Empty window becomes an empty tunnel window	
+F-8101.AC-13	#3342	In tunnel window, picking current tunnel reconnects	
+F-8101.AC-14	#3342	Connect ignores folder history; opens without folder	
+F-8101.AC-15	#3342	Same screens without Remote Explorer	
+F-8101.AC-16	#3342	Unsaved editor: core save prompt before reload	
+F-8101.AC-17	#3342	Escape at any step closes, window unchanged	
+F-8101.AC-18	#3342	Learn More opens the project's host-agent documentation	
+F-8101.AC-19	#3342	Switch Account row starts F-8102's switch flow	
+F-8101.AC-20	#3341	Signed out: GitHub consent dialog, no Microsoft sign-in	
+F-8101.AC-21	#3342	No tunnels: texts shown; Create a Tunnel opens page	
+F-8101.AC-22	#3342	Offline tunnel listed under Offline after Online	needs R1 (the listing reports live host legs); provisional (Q1)
+F-8101.AC-23	#3342	Listing writes no log lines or files	
+F-8101.AC-24	#3339	Entries hidden by standingDown when reference present	
+F-8101.AC-25	#3342	Restricted Mode screens identical	
+F-8101.AC-26	#3342	Unreachable service: re-sign-in dialog, then S038 error	
+F-8101.AC-27	#3341	Refused account: relay text, offer another account	
+F-8101.AC-28	#3341	Account question offers GitHub only	
+F-8101.AC-29	#3342	Listing fails after 15 s with Retry	
+F-8102.AC-1	#3341	Sign in with a Different Account listed once	
+F-8102.AC-2	#3341	Account question placeholder and GitHub row only	
+F-8102.AC-3	#3341	Fresh profile: GitHub focused, no description	
+F-8102.AC-4	DOC	Microsoft row ordering follows last pick	Microsoft sign-in not offered (D-107 item 4)
+F-8102.AC-5	DOC	Typing micro leaves only the Microsoft row	Microsoft sign-in not offered (D-107 item 4)
+F-8102.AC-6	#3341	Escape at account question keeps last pick	
+F-8102.AC-7	#3341	Accessible session: no dialog, list loads	
+F-8102.AC-8	#3341	Session from github provider with the ruled scopes	pending metis: AC text user:email vs BR-4 read:user
+F-8102.AC-9	#3341	No session: core's consent dialog appears	
+F-8102.AC-10	#3341	Consent cancelled: one error notification text	
+F-8102.AC-11	#3341	Resolve without stored type asks account question	
+F-8102.AC-12	#3341	Stored account type skips the question	
+F-8102.AC-13	#3341	Unknown name in resolve: Pick a different account dialog	
+F-8102.AC-14	#3341	Cancel there leads to Tunnel not found dialog	
+F-8102.AC-15	#3341	Consent cancelled in resolve: Connection closed, no message	
+F-8102.AC-16	#3341	Escape at question in resolve: Connection closed	
+F-8102.AC-17	#3341	Pick a different account, then cancel: nothing changed	
+F-8102.AC-18	#3341	Different-account command cancelled: still signed in	
+F-8102.AC-19	#3342	Tunnel Credential Command setting row: no description	
+F-8102.AC-20	#3341	Credential command setting never run on desktop	
+F-8102.AC-21	#3349	Delegated credential finds no tunnel: text shown	web only; needs C11
+F-8102.AC-22	DOC	Microsoft provider unavailable: error notification	Microsoft sign-in not offered (D-107 item 4)
+F-8102.AC-23	#3341	Sign-in flows write no files in storage or temp	
+F-8102.AC-24	#3341	German strings from the extension's bundle	
+F-8102.AC-25	#3341	Core consent for not-yet-allowed account, then reused	
+F-8102.AC-26	#3341	Enter picks the focused row	
+F-8102.AC-27	#3341	Refused account in Connect: text and re-sign-in offer	
+F-8102.AC-28	#3341	Account question GitHub only, no Microsoft sign-in	
+F-8102.AC-29	#3341	Refused account in resolve: text, failed window	
+F-8103.AC-1	#3344	Activates on onResolveRemoteAuthority:tunnel; resolver called	
+F-8103.AC-2	#3344	Opening Remote and Connecting notification with question	
+F-8103.AC-3	#3344	Window connects; title, Explorer root, indicator show name	
+F-8103.AC-4	#3340	Reload reconnects without question or notification	
+F-8103.AC-5	#3341	Reopening after editor restart asks no account question	
+F-8103.AC-6	#3340	Reconnects after a stall; notification closes itself	
+F-8103.AC-7	#3342	Connect to Tunnel gives empty tunnel window, one question	
+F-8103.AC-8	#3343	Connect in New Window connects without a question	
+F-8103.AC-9	#3344	Name sent and shown exactly as typed	
+F-8103.AC-10	#3344	Extra plus in authority: cannot resolve machine name	
+F-8103.AC-11	#3344	Unknown name: Tunnel not found dialog	
+F-8103.AC-12	#3344	Cancel on that dialog: failed window, Connection closed	
+F-8103.AC-13	#3344	Close Connection: resolve fails, window usable	
+F-8103.AC-14	#3344	Escape at question: notification closes, Connection closed	
+F-8103.AC-15	#3344	Empty name: Connection closed without a dialog	
+F-8103.AC-16	#3344	Host not running: tunnel-not-running error text	
+F-8103.AC-17	#3344	Nameless lookup failure: Tunnel not found	
+F-8103.AC-18	#3344	Outdated protocol: message, Upgrade opens extension page	
+F-8103.AC-19	#3344	Failed window: indicator menu and Disconnected label	
+F-8103.AC-20	#3344	Close Remote Connection gives an empty local window	
+F-8103.AC-21	#3340	Windows share one local proxy; it ends after last	
+F-8103.AC-22	#3343	Folder history entry for the argument as given	
+F-8103.AC-23	#3339	No resolvers proposal: nothing broken; connects once enabled	
+F-8103.AC-24	#3344	Bare tunnel authority: core error, resolver not called	
+F-8103.AC-25	#3344	Output channel logs the resolve's phases	
+F-8103.AC-26	#3344	Label shows [name] before the resolve completes	
+F-8103.AC-27	#3344	Reconnect retries silently while relay unreachable	
+F-8103.AC-28	#3344	Odd characters accepted; malformed plus rejected	
+F-8103.AC-29	#3340	Local proxy gone within a minute after Escape	
+F-8103.AC-30	#3340	Local proxy cannot start: failed window, no dialog	
+F-8103.AC-31	#3341	Refused account in resolve: text, no S007/S030, failed	
+F-8103.AC-32	#3344	Connects to running host agent for allowlisted account	
+F-8104.AC-1	#3342	Default Extensions setting row: description, empty list	
+F-8104.AC-2	#3342	Always Update CLI setting row: scope note, enum values	
+F-8104.AC-3	#3342	Setting scopes: machine versus application tabs	
+F-8104.AC-4	#3342	Schema warnings for invalid setting values	
+F-8104.AC-5	#3163	Default extension installed on a running host server	agent installs into a running server (#3163 amendment)
+F-8104.AC-6	#3163	Already installed extension: host folder unchanged	#3163 amendment
+F-8104.AC-7	#3344	Local user setting used when Remote has none	
+F-8104.AC-8	#3344	Remote setting overrides local; unknown local id ignored	
+F-8104.AC-9	#3344	Empty list: no install step, host unchanged	
+F-8104.AC-10	#3340	Live proxy reuse skips install; new proxy applies list	
+F-8104.AC-11	#3163	Bad id at server start: connection still succeeds	#3163 amendment
+F-8104.AC-12	#3163	Bad id on running server: connection fails	#3163 amendment
+F-8104.AC-13	#3344	Log names failing id and host error at Info	serverlog levels (#3162 amendment)
+F-8104.AC-14	#3344	After removing the bad id, reconnect succeeds	
+F-8104.AC-15	#3344	Current host: no CLI-update prompt	
+F-8104.AC-16	DOC	Outdated host: CLI update prompt with three buttons	pending metis: unreachable with the project's agent (AC-34)
+F-8104.AC-17	DOC	Update shows progress, then completion text	pending metis: unreachable with the project's agent (AC-34)
+F-8104.AC-18	DOC	Always update writes the setting true	pending metis: unreachable with the project's agent (AC-34)
+F-8104.AC-19	DOC	Not Now: nothing updated or written	pending metis: unreachable with the project's agent (AC-34)
+F-8104.AC-20	DOC	alwaysUpdateCLI true: update runs without prompt	pending metis: unreachable with the project's agent (AC-34)
+F-8104.AC-21	#3344	never: no prompt and no update	
+F-8104.AC-22	#3344	Missing server: Downloading then Extracting progress	needs the agent's serverprogress (#3162 amendment)
+F-8104.AC-23	#3344	Server present: no download or extract progress	
+F-8104.AC-24	#3344	Download failure: no connect, core's error shown	
+F-8104.AC-25	#3344	No extra global-state keys; only Always update writes	
+F-8104.AC-26	DOC	CLI update failure: error shown, window stays	pending metis: unreachable with the project's agent (AC-34)
+F-8104.AC-27	#3344	Install logged at Trace level, not Info	serverlog levels (#3162 amendment)
+F-8104.AC-28	#3163	Partial install failure still fails the connection	#3163 amendment
+F-8104.AC-29	#3344	Invalid items passed unvalidated; connection fails	
+F-8104.AC-30	#3344	Never-connected failure shows the fallback label	
+F-8104.AC-31	#3344	Serve requests never ask for server telemetry	
+F-8104.AC-32	#3163	Agent obtains and starts server for a new commit	serverprogress (#3162 amendment)
+F-8104.AC-33	#3163	Agent starts servers with telemetry off	
+F-8104.AC-34	#3344	Host agent: no CLI update at any setting value	
+F-8104.AC-35	#3163	x64 and arm64 hosts get their platform's server	
+F-8201.AC-1	#3341	View activates via isAuthenticated; one silent GitHub lookup	
+F-8201.AC-2	#3341	No session: GitHub sign-in row only, no prompt	
+F-8201.AC-3	#3343	Running tunnel row with description running	
+F-8201.AC-4	#3343	Tunnel row without history: no children, context menu	
+F-8201.AC-5	#3343	View build stores the tunnel's account type	
+F-8201.AC-6	#3343	Connect in New Window opens tunnel, caller unchanged	
+F-8201.AC-7	#3343	New tunnel window's row reads connected at once	
+F-8201.AC-8	#3343	Connect in Current Window reloads into the tunnel	
+F-8201.AC-9	#3343	Empty or workspace tunnel window: history unchanged	
+F-8201.AC-10	#3343	Opened folder appears under the tunnel row	
+F-8201.AC-11	#3343	History keeps order, no duplicates, 30 entries	
+F-8201.AC-12	#3343	Active folder pushed to Remote Explorer within 2 s	
+F-8201.AC-13	#3343	Folder row New Window opens folder; history unchanged	
+F-8201.AC-14	#3343	Folder row Current Window reloads into the folder	
+F-8201.AC-15	#3343	Remove from Recent List deletes entry at once	
+F-8201.AC-16	#3343	Last folder removed: no children; reopen appends	
+F-8201.AC-17	#3343	Removals from two windows both persist	
+F-8201.AC-18	#3343	Deleted host folder stays listed; core error on connect	
+F-8201.AC-19	#3343	Escape on context menu changes nothing	
+F-8201.AC-20	#3343	Unregister cancelled: tunnel still listed	
+F-8201.AC-21	#3342	connectNewWindowToTunnel pickers open one new window	
+F-8201.AC-22	#3343	Nine commands by keybinding without arguments are harmless	
+F-8201.AC-23	#3343	getTunnelsList consent cancelled: no session created	
+F-8201.AC-24	#3343	Queries write only global state, no files	
+F-8201.AC-25	#3343	Restricted Mode: view queries and actions unchanged	
+F-8201.AC-26	#3343	Folder history survives an editor restart	
+F-8201.AC-27	#3343	Refresh shows busy icon, same rows, no sign-in row	
+F-8201.AC-28	#3343	In tunnel window, Current Window reloads the same window	
+F-8201.AC-29	#3343	Active folder row carries the folder-active icon	
+F-8201.AC-30	#3341	connectNewWindowToTunnel shows GitHub as Last used	
+F-8201.AC-31	#3343	Activation stores empty folder-history in global state	
+F-8201.AC-32	#3343	Folder rows in insertion order; sort settings honoured	
+F-8201.AC-33	#3341	isAuthenticated signed out shows nothing	
+F-8201.AC-34	#3343	Trusted window behaves as in Restricted Mode	
+F-8201.AC-35	#3343	connectToRemote honours folder and workspace kinds	
+F-8201.AC-36	#3343	getActiveRemote waits for the resolve	
+F-8201.AC-37	#3343	Hover texts built from tunnel name and path	
+F-8201.AC-38	#3343	isConnectedToRemote results per window and argument	
+F-8201.AC-39	#3343	Unregister removes tunnel; other accounts never see it	
+F-8201.AC-40	#3341	Refused account in the view: relay text, no rows	
+F-8201.AC-41	#3343	No WSL distribution in the answer or the view	
+F-8201.AC-42	#3343	Renamed tunnel keeps its id; old history orphaned	
+F-8201.AC-43	#3161	Re-registration reuses stored id or creates a new one	
+F-8202.AC-1	#3345	Auto-forwarded port row: Private, localhost address	
+F-8202.AC-2	#3345	Forwarded address localhost:port; one loopback listener	
+F-8202.AC-3	DOC	Unauthenticated request to Private address gets 302	pending metis: release 1 serves no web address (the user's answer, point 7)
+F-8202.AC-4	#3345	Row menu has Port Visibility, no protocol items	
+F-8202.AC-5	#3345	Port Visibility lists Private only, checked	
+F-8202.AC-6	#3345	Escape closes visibility menus; port unchanged	
+F-8202.AC-7	#3345	Without Remote Explorer: Visibility column, Private only	
+F-8202.AC-8	#3345	Choosing Private keeps the row; no notification	
+F-8202.AC-9	DOC	Choosing Public re-forwards the port publicly	public ports out of scope (D-107)
+F-8202.AC-10	#3345	Forward a Port: no visibility question, Private	
+F-8202.AC-11	#3345	User-forwarded port restored as Private after reload	
+F-8202.AC-12	#3345	Stop Forwarding removes row; no remote reach	
+F-8202.AC-13	#3345	privacyprivate command exists, hidden from palette	
+F-8202.AC-14	#3345	German Privat from the extension's bundle	
+F-8202.AC-15	#3345	Log names no port; no visibility stored	
+F-8202.AC-16	#3345	Visibility never shown as Unknown	
+F-8202.AC-17	#3345	Local window: no Ports contribution	
+F-8202.AC-18	#3345	Already forwarded port: core message, no second row	
+F-8202.AC-19	#3345	Privileged port 80 forwards without elevation	
+F-8202.AC-20	#3345	Non-localhost host accepted, shown as host:port	
+F-8202.AC-21	#3345	Two hosts, same port: two rows, independent stop	
+F-8202.AC-22	#3345	Auto-forwarded port returns after reload	
+F-8202.AC-23	#3345	privacyprivate keybinding changes nothing	
+F-8202.AC-24	#3345	Auto-forwarded row disappears when process stops	
+F-8202.AC-25	DOC	Unlisted client's request never reaches remote process	pending metis: release 1 serves no web address (the user's answer, point 7)
+F-8202.AC-26	#3345	No public visibility; no unauthenticated reach	
+F-8202.AC-27	#3345	No relay web address; editor forwarding works, Private	
+F-8202.AC-28	#3345	One loopback listener reaches the remote process	
+F-8203.AC-1	#3346	Show Usage Limits listed once in every window	
+F-8203.AC-2	#3346	Not in the remote indicator menu	
+F-8203.AC-3	#3346	Checking notification appears with the account question	
+F-8203.AC-4	#3346	Asks GitHub-only account question on every run	
+F-8203.AC-5	#3346	No limit: heading, no-limits line, Learn more URL	
+F-8203.AC-6	#3346	Panel opens on the channel with focus	
+F-8203.AC-7	#3346	Second run appends a second block	
+F-8203.AC-8	#3346	Escape: question and progress close, nothing written	
+F-8203.AC-9	#3346	No session: consent dialog while progress shows	
+F-8203.AC-10	#3346	Consent cancelled from palette: core error modal	
+F-8203.AC-11	#3346	Keybinding run: warning notification instead of modal	
+F-8203.AC-12	#3341	Picked type listed first with Last used	
+F-8203.AC-13	#3346	Second start while question open: one of each	
+F-8203.AC-14	#3346	Unreachable service: core error modal, output unchanged	
+F-8203.AC-15	#3346	Any count limit reached: limit-reached line	
+F-8203.AC-16	#3346	Bandwidth and reset lines never shown	
+F-8203.AC-17	#3345	Limit refusal offers Show Limits	
+F-8203.AC-18	#3346	No files or limits state; listed global-state keys only	
+F-8203.AC-19	#3346	German progress and result texts	
+F-8203.AC-20	#3346	Log level Warning suppresses result lines	
+F-8203.AC-21	#3346	Silent service: aborts after about 20 s	
+F-8203.AC-22	#3346	Command activates extension without Remote Explorer	
+F-8203.AC-23	#3346	Tunnel window: result in panel, title unchanged	
+F-8203.AC-24	#3346	Keybinding run, silent service: warning notification	
+F-8203.AC-25	#3346	Rerun after outage fails; no answer cached	
+F-8203.AC-26	#3346	No Checking entry remains after any ending	
+F-8203.AC-27	#3341	Refused account in usage limits: text, nothing written	
+F-8203.AC-28	#3350	Relay refuses an eleventh tunnel, port or client	
+F-8203.AC-29	#3350	Operator-set limit N enforced exactly	
+F-8203.AC-30	#3346	Limit line iff a limit reached; per-tunnel maximum	needs R2 (per-tunnel current value is the highest over the account)
+F-8301.AC-1	#3348	Web tunnel window lists Continue Working command	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-2	#3348	Web indicator menu lists it after Connect to Tunnel	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-3	#3348	Desktop palette never lists the command	
+F-8301.AC-4	#3348	Desktop indicator menu: only Connect to Tunnel	
+F-8301.AC-5	#3348	Web without folder or tunnel: command hidden	
+F-8301.AC-6	#3348	Opens one link with editor's uriScheme and windowId	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-7	#3348	No own UI; web window stays connected	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-8	#3348	Desktop opens the link and connects same tunnel	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-9	#3348	Link names first folder or workspace file	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-10	#3348	Desktop keybinding changes nothing; R-46 text at most	
+F-8301.AC-11	#3348	Keybinding during account pick leaves it unchanged	
+F-8301.AC-12	#3348	No desktop editor: no own error, stays connected	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-13	#3348	Command writes nothing, sends no telemetry	
+F-8301.AC-14	#3348	Derivative web build uses its own scheme	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-15	#3348	First invocation activates through the command	
+F-8301.AC-16	#3348	Link carries windowId=_blank; desktop opens new window	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8301.AC-17	#3348	Windows drive-letter path encoded in the link	needs C11 and a Windows tunnel host (the agent is Linux only)
+F-8301.AC-18	#3348	Lost connection: link still handed over	needs C11 (browser resolver, pending the user's F-1403 item)
+F-8302.AC-1	#3348	Web Explorer welcome text with Connect button	
+F-8302.AC-2	#3348	Welcome item sorts after core's open block	
+F-8302.AC-3	#3348	Welcome button runs connect; GitHub-only pick	
+F-8302.AC-4	#3348	Web window with a remote: item hidden	
+F-8302.AC-5	#3348	Desktop Explorer never shows the welcome text	
+F-8302.AC-6	#3348	Desktop empty Explorer does not activate extension	
+F-8302.AC-7	#3348	Button runs the command in any language	
+F-8302.AC-8	#3348	No webOpener; README says links left to host	
+F-8302.AC-9	#3348	Desktop Open Link on vscode-remote: extension adds nothing	
+F-8302.AC-10	#3348	No load warnings: no webOpener, no welcome group	
+F-8302.AC-11	#3348	Escape from welcome pick leaves welcome clickable	
+F-8302.AC-12	#3348	Welcome flow writes no files, settings or state	
+F-8302.AC-13	#3348	Desktop vscode:// tunnel link: nothing, no activation	
+F-8302.AC-14	#3348	No group or proposal; item still placed	
+F-8902.AC-1	#3339	No host-making contribution in the extension	
+F-8902.AC-2	#3341	Core's access prompt once, then the list loads	
+F-8902.AC-3	#3342	Accepted account lists tunnel; refused lists nothing	
+F-8902.AC-4	#3339	Network only to relay or the auth provider	
+F-8902.AC-5	#3339	Writes no product configuration or argv.json	
+F-8902.AC-6	#3344	Client sends no update or server-download request	
+F-8902.AC-7	DOC	Removed stub: Windows dev tunnels policies	removed stub (remote-server#19 Q6(b))
+F-8902.AC-8	#3339	README compatibility note; host strings equal reference's	
+F-8902.AC-9	DOC	Specs name the relay; Microsoft's only reference data	spec text (D-101, D-107)
+F-8902.AC-10	#3339	README admin section; no dev tunnels policy read	
+F-8902.AC-11	#3350	Relay refuses an unlisted account's listing	
+F-8902.AC-12	#3341	GitHub only via editor provider; no client secret	
+F-8902.AC-13	#3350	Tunnel online while agent runs, offline after stop	R1; provisional (F-8101 Q1)
+F-8902.AC-14	#3350	Relay refuses public port exposure	
+F-8902.AC-15	#3350	Allowlist by numeric id; edits and renames honoured	
+F-8902.AC-16	#3350	Relay accepts a listed account's personal access token	
+F-8902.AC-17	#3164	Agent runs as systemd user unit; removal deletes it	
+F-8902.AC-18	#3165	Agent offered for Linux x64/arm64; never updates	

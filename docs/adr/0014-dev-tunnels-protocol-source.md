@@ -33,9 +33,12 @@ reference extension's file, and none of it is Microsoft's hosted service.
    It is read for the management API (tunnels, ports, endpoints, access tokens), the relay protocol (the
    `tunnel-relay-client` and `tunnel-relay-host` WebSocket subprotocols and the SSH channels they carry) and their
    data shapes.
-2. **It may be a dependency where a design calls for it**, with its MIT notice carried. ADR-0004 still holds: no
-   SSH connection that an extension opens goes through the SDK's JavaScript SSH implementation. The relay service
-   and the host side choose, in their own designs, whether they use the SDK.
+2. **It may be a dependency where a design calls for it**, with its MIT notice carried. ADR-0004 still holds for
+   every SSH connection to a host: none goes through the SDK's JavaScript SSH implementation. **The one exception is
+   the Remote - Tunnels client's tunnel-protocol session** (the user, 2026-11-28: "Lets use
+   `@microsoft/dev-tunnels-ssh`"): that extension, and no other, uses the SDK's `TunnelRelayTunnelClient` on
+   `@microsoft/dev-tunnels-ssh` for the relay's `none`-exchange session, which OpenSSH can't speak (brief-client §5).
+   The relay service and the host side choose, in their own designs, whether they use the SDK.
 3. **Not admitted:**
    - the reference extensions' files, which the wall still keeps out;
    - the hosted service's implementation, which nobody outside can see;
@@ -69,4 +72,5 @@ reference extension's file, and none of it is Microsoft's hosted service.
 - Every protocol citation in a design or a card is `[dev-tunnels] <path>@<commit>` or the public documentation, and
   none is a reference extension's file.
 - No recording or observation of Microsoft's hosted service exists (D-107).
-- No extension's SSH connection goes through the SDK's JavaScript SSH implementation (ADR-0004).
+- No extension's SSH connection to a host goes through the SDK's JavaScript SSH implementation (ADR-0004). The Remote -
+  Tunnels client's tunnel-protocol session is the one use of it, by the user's answer (decision 2).
