@@ -12,6 +12,7 @@ import {
   channelContractCases,
   LARGE_COPY_LENGTH,
   LONG_LINE_LENGTH,
+  ruleScriptOf,
   stagedInputOf,
   type ChannelHarness,
   type ContractScenario,
@@ -31,26 +32,8 @@ function printing(lines: readonly string[], status: number): string {
   return [...prints, `exit ${String(status)}`].join('\n');
 }
 
-/**
- * The sh text that starts a long `sleep` in a session of its own, so that it leaves the script's group, waits until it
- * has written its pid to `pidFile` from there, and prints it: the pid is told only once the process is out of the group.
- */
-function detachedSleep(pidFile: string): string {
-  return [
-    `rm -f '${pidFile}'`,
-    'if command -v setsid >/dev/null 2>&1; then',
-    `  setsid sh -c 'echo $$ > "$0.tmp"; mv "$0.tmp" "$0"; exec sleep 600' '${pidFile}' &`,
-    'else',
-    `  perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' sh -c 'echo $$ > "$0.tmp"; mv "$0.tmp" "$0"; exec sleep 600' '${pidFile}' &`,
-    'fi',
-    `while [ ! -s '${pidFile}' ]; do sleep 0.02; done`,
-    `cat '${pidFile}'`,
-    'wait',
-  ].join('\n');
-}
-
 /** The sh text of the script that `scenario` asks the shell to run. */
-function scriptOf(scenario: ContractScenario, folder: string): string {
+function scriptOf(scenario: ContractScenario): string {
   switch (scenario.kind) {
     case 'printsLines':
       return printing(scenario.lines, scenario.status);
@@ -61,8 +44,8 @@ function scriptOf(scenario: ContractScenario, folder: string): string {
       return "sha256sum | cut -d ' ' -f 1";
     case 'backgroundsThenWaits':
       return 'sleep 600 &\nprintf "%s\\n" "$!"\nwait';
-    case 'detachesThenWaits':
-      return detachedSleep(path.join(folder, 'detached.pid'));
+    case 'startsDetached':
+      return ruleScriptOf(scenario) ?? 'exit 0';
     case 'printsBothStreams':
       return "printf 'out one\\n'\nprintf 'err one\\n' >&2\nprintf 'out two\\n'";
     case 'printsLongLine':
@@ -112,7 +95,7 @@ function harnessFor(shell: string): ChannelHarness {
           shell,
         }),
         script: {
-          script: scriptOf(scenario, folder),
+          script: scriptOf(scenario),
           interpreter: 'posixShell',
           environment: {},
           input: stagedInputOf(scenario, localFile),
