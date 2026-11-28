@@ -4,17 +4,14 @@
  * fails the connect when the script does.
  */
 
+import {hostAlias} from 'lib-server';
 import type {FailureReason} from 'lib-authority';
 import type {FailureHint, ProcessHandle} from 'lib-ssh';
 import {contentHashOf} from '../preconnect/approvals.ts';
 import type {PreconnectPorts} from '../preconnect/ports.ts';
 import {expandedPath, programPath} from '../preconnect/script-path.ts';
 import {english, textOfId} from '../surfaces/failure-strings.ts';
-import {
-  hostAlias,
-  type PreconnectChoice,
-  preconnectChoiceOf,
-} from './host-settings.ts';
+import {type PreconnectChoice, preconnectChoiceOf} from './host-settings.ts';
 import type {ConnectSteps, StepResult} from './steps.ts';
 
 /** What the step reads and shows. */

@@ -4,6 +4,7 @@
  * and the write to `remote.SSH.remotePlatform`.
  */
 
+import {hostAlias} from 'lib-server';
 import type {Scheduler} from 'lib-helper';
 import type {Logger} from 'lib-log';
 import type {PlatformPickVariant} from '../connect/platform-picker.ts';
@@ -11,7 +12,6 @@ import {
   PLATFORM_RETRY_PAUSE_MILLISECONDS,
   PLATFORM_WRITE_MILLISECONDS,
 } from './bounds.ts';
-import {hostAlias} from './host-settings.ts';
 import {
   decidePlatform,
   PLATFORM_OF_PROBE,
