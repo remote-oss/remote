@@ -25,6 +25,7 @@ import type {Clock} from 'lib-server';
 import {FakeClock} from 'lib-server/testing/fake-clock';
 import {
   containersOverridePolicy,
+  installedServerOnHost,
   lockWaitLine,
   runServerSteps,
   type ServerRequest,
@@ -297,6 +298,19 @@ function rootChannelOf(
   });
 }
 
+/** What a run saw, before it has seen anything. */
+function freshSeen(): Seen {
+  return {
+    downloads: [],
+    renames: [],
+    removed: [],
+    asked: [],
+    phases: [],
+    percents: [],
+    sink: new MemorySink(),
+  };
+}
+
 async function runSteps(
   channel: RecordingChannel,
   options: Parameters<typeof dependenciesOf>[1] & {
@@ -312,15 +326,7 @@ async function runSteps(
     beforeStart?: ServerRequest['beforeStart'];
   } = {},
 ): Promise<{result: ServerResult; seen: Seen}> {
-  const seen: Seen = {
-    downloads: [],
-    renames: [],
-    removed: [],
-    asked: [],
-    phases: [],
-    percents: [],
-    sink: new MemorySink(),
-  };
+  const seen = freshSeen();
   const request: ServerRequest = {
     channel,
     rootChannel: options.root ?? rootChannelOf(),
@@ -1914,6 +1920,39 @@ describe('the waits for the install lock (card containers-65)', () => {
       [
         'the server start waits for the install lock (attempt 4 of 30)',
         'the server start took the install lock after 5 attempts',
+      ],
+    );
+  });
+});
+
+describe('the server installed for the CLI on an SSH host (ruling-3268-install-root)', () => {
+  it('with an install root and no server on the host, the probe and the install are both told the root, and the server’s node and data folder are under it', async () => {
+    const channel = channelOf();
+    const installed = await installedServerOnHost(dependenciesOf(freshSeen()), {
+      channel,
+      remoteUser: 'node',
+      installRoot: '/opt/vs',
+      onPhase: () => undefined,
+      onDownloadPercent: () => undefined,
+      cancellation: NEVER,
+    });
+    const bootstrap = scriptsOf(channel).filter(script =>
+      script.includes('INSTALL_ROOT='),
+    );
+    deepStrictEqual(
+      [
+        installed,
+        bootstrap.length,
+        bootstrap.every(script => script.includes("INSTALL_ROOT='/opt/vs'")),
+      ],
+      [
+        {
+          kind: 'installed',
+          nodeFolder: '/opt/vs/.fixture-server/bin/abc123',
+          dataFolder: '/opt/vs/.fixture-server',
+        },
+        2,
+        true,
       ],
     );
   });
