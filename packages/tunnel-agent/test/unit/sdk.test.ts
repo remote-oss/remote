@@ -149,8 +149,9 @@ describe('the SDK host a leg holds, with its connect and its relay lookup stood 
   it('a connection to a port other than the control port is destroyed, and the control port’s goes to the control server, not destroyed', async () => {
     const destroyed: number[] = [];
     const accepted: unknown[] = [];
-    const streamOf = (port: number): SshStream =>
-      ({destroy: () => destroyed.push(port)}) as unknown as SshStream;
+    function streamOf(port: number): SshStream {
+      return {destroy: () => destroyed.push(port)} as unknown as SshStream;
+    }
     const controlStream = streamOf(CONTROL_PORT);
     await endOfLeg(
       host => {
