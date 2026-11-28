@@ -165,9 +165,13 @@
     "packages/*/src/web-extension.ts": ["exports"],
     // Mocha loads a reporter by its path and takes the module's value.
     "tools/acceptance-file-times.ts": ["exports"],
+    "tools/acceptance-display-reporter.ts": ["exports"],
   },
   // System tools the tests and checks run, which no package provides.
   "ignoreBinaries": [
+    // The harness display step installs them; display.ts runs them to say the display's windows.
+    "xdotool",
+    "xprop",
     "mkfifo",
     "pgrep",
     "pwsh",

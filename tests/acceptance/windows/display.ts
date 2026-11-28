@@ -1,23 +1,70 @@
 /**
- * @fileoverview The windows of the harness display through `xdotool` and `xprop`, the key driver the display step
- * installs: the window of a name, its activation through the window manager, the window the display's active window
- * is, and the display's visible windows at an instant, with their names and managedness. A page read over the
- * protocol cannot say what the window manager gave its active window to, so the display says it. The activation asks
+ * @fileoverview The windows of the harness display through `xdotool`, `xprop` and `wmctrl`, the key driver the display
+ * step installs: the window of a name, its activation through the window manager, the window the display's active
+ * window is, the display's visible windows at an instant, with their names, their WM_CLASS and their managedness, and
+ * the read of the window a leftover close asks the display to close, with the ownership that says whose it is. A
+ * page read over the protocol cannot say what the window manager gave its active window to, so the display says it.
+ * The activation asks
  * for the window the manager manages: `xdotool search` returns the children of a name as well, and a child window
  * takes no activation.
  */
 
-import {execFile} from 'node:child_process';
+import {execFile, execFileSync} from 'node:child_process';
 import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+/** The environment of a display read: the process's, with the harness display as the default. */
+function displayEnv(): NodeJS.ProcessEnv {
+  return {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'};
+}
+
 /** Runs `xdotool` with `words` on the harness display and gives its output. */
 export async function drive(...words: string[]): Promise<string> {
   const {stdout} = await execFileAsync('xdotool', words, {
-    env: {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'},
+    env: displayEnv(),
   });
   return stdout.trim();
+}
+
+/** Runs `xdotool` with `words` on the harness display and waits for its output, so a readout can say the display's windows at once. */
+function driveSync(...words: string[]): string {
+  return execFileSync('xdotool', words, {
+    env: displayEnv(),
+    encoding: 'utf8',
+  }).trim();
+}
+
+/** A key driver over the harness display that waits for each answer, so a readout can say the display's windows at once. */
+export type KeyDriverSync = typeof driveSync;
+
+/** The X window `id`'s `property` through `xprop`, giving its output. */
+function xpropRead(windowId: string, property: string): string {
+  return execFileSync('xprop', ['-id', windowId, property], {
+    env: displayEnv(),
+    encoding: 'utf8',
+  });
+}
+
+/** Whether a window holds a WM_STATE, read at once: a window or display that is gone by the read says no. */
+function hasWmStateSync(windowId: string): boolean {
+  try {
+    return xpropRead(windowId, 'WM_STATE').includes('WM_STATE(');
+  } catch {
+    return false;
+  }
+}
+
+/** The X window `id`'s WM_CLASS, as `xprop` prints it after the `=`, none while the display gives it none. */
+function windowClassOf(windowId: string): string {
+  try {
+    const printed = xpropRead(windowId, 'WM_CLASS');
+    const equals = printed.indexOf('=');
+    const value = equals < 0 ? '' : printed.slice(equals + 1).trim();
+    return value === '' ? 'none' : value;
+  } catch {
+    return 'none';
+  }
 }
 
 /** A key driver over the harness display: the harness installs `xdotool`, and a test stands a stand-in in its place. */
@@ -27,16 +74,12 @@ export type KeyDriver = typeof drive;
 async function hasWmState(windowId: string): Promise<boolean> {
   try {
     await execFileAsync('xprop', ['-id', windowId, 'WM_STATE'], {
-      env: {...process.env, DISPLAY: process.env.DISPLAY ?? ':99'},
+      env: displayEnv(),
     });
     return true;
-  } catch (caught) {
-    // xprop exits 123 when the property is absent, and a missing tool is no answer either.
-    const code = (caught as {code?: unknown}).code;
-    if (code === 123 || code === 'ENOENT') {
-      return false;
-    }
-    throw caught;
+  } catch {
+    // A window gone by the read (a BadWindow), a property that is absent, and a missing tool all say no: the close must not red the launch for a window that already closed, as the sync reader says.
+    return false;
   }
 }
 
@@ -300,4 +343,134 @@ export function windowsOf(windows: readonly TopLevelWindow[]): string {
         })`,
     )
     .join(', ');
+}
+
+/** A visible window on the display at a readout, with its name, its WM_CLASS and whether the window manager manages it. */
+export interface ListedWindow {
+  /** The X window id. */
+  id: string;
+  /** The window's name, or none while the display gives it none. */
+  name: string;
+  /** The window's WM_CLASS, as xprop prints it, or none while the display gives it none. */
+  windowClass: string;
+  /** Whether the window holds a WM_STATE, which only a managed top-level does. */
+  managed: boolean;
+}
+
+/** The display's visible windows through `driver`, `wmReader` and `classReader`, with name, WM_CLASS and managedness. */
+export function listedWindowsOf(
+  driver: KeyDriverSync,
+  wmReader: (windowId: string) => boolean,
+  classReader: (windowId: string) => string,
+): ListedWindow[] {
+  let found: string;
+  try {
+    found = driver('search', '--onlyvisible', '--name', '.*');
+  } catch (caught) {
+    // `xdotool search` exits with 1 when no window matches, and a display that cannot be reached fails the same
+    // way, saying so on its error: the empty answer without the error is the no-windows one.
+    const error = caught as {status?: number; stderr?: string};
+    if (error.status === 1 && (error.stderr ?? '').trim() === '') {
+      return [];
+    }
+    throw caught;
+  }
+  const windows: ListedWindow[] = [];
+  for (const windowId of found.split('\n')) {
+    if (windowId !== '') {
+      let name: string;
+      try {
+        name = driver('getwindowname', windowId);
+      } catch {
+        // A name the display does not give is none at the readout.
+        name = '';
+      }
+      windows.push({
+        id: windowId,
+        name,
+        windowClass: classReader(windowId),
+        managed: wmReader(windowId),
+      });
+    }
+  }
+  return windows;
+}
+
+/** The display's visible windows on the harness display, each with its name, its WM_CLASS and whether the manager manages it. */
+export function listedWindows(): ListedWindow[] {
+  return listedWindowsOf(driveSync, hasWmStateSync, windowClassOf);
+}
+
+/** The X window `id`'s _NET_WM_PID through `driver`, none while the display gives it none. */
+export async function windowPidOf(
+  driver: KeyDriver,
+  windowId: string,
+): Promise<string | undefined> {
+  try {
+    const windowPid = await driver('getwindowpid', windowId);
+    return windowPid === '' ? undefined : windowPid;
+  } catch (caught) {
+    // `xdotool getwindowpid` exits with 1 when the window holds no _NET_WM_PID, and a display that cannot be reached fails
+    // the same way: both are no answers, and a driver that fails otherwise is an error.
+    const code = (caught as {code?: unknown}).code;
+    if (code === 1 || code === 'ENOENT') {
+      return undefined;
+    }
+    throw caught;
+  }
+}
+
+/**
+ * Whether closing window `id` asks the window manager: its `WM_PROTOCOLS` lists `WM_DELETE_WINDOW`, read with `xprop`.
+ * A window that does not list it is closed only by the manager killing its client, so a close that must not kill the
+ * editor's client is skipped while it does not.
+ */
+export function mayCloseOnDisplay(windowId: string): Promise<boolean> {
+  return execFileAsync('xprop', ['-id', windowId, 'WM_PROTOCOLS'], {
+    env: displayEnv(),
+  })
+    .then(({stdout}) => stdout.includes('WM_DELETE_WINDOW'))
+    .catch(() => {
+      // A window gone by the read (a BadWindow), a property that is absent, and a missing tool all say no: the close must not red the launch for a window that already closed, as the sync reader says.
+      return false;
+    });
+}
+
+/** Closes the X window `id`: a `_NET_CLOSE_WINDOW` through `wmctrl` to the window manager, as a user's close asks it. */
+export function closeWindowOnDisplay(windowId: string): Promise<void> {
+  return execFileAsync('wmctrl', ['-i', '-c', windowId], {
+    env: displayEnv(),
+  }).then(
+    () => undefined,
+    (caught: unknown) => {
+      // A window that is gone by the close, or a display the manager does not serve, leaves nothing to close.
+      const code = (caught as {code?: unknown}).code;
+      if (code === 1 || code === 'ENOENT') {
+        return;
+      }
+      throw caught;
+    },
+  );
+}
+
+/** Whether the display's name `title` holds the window name `name`, the way the display's name search does. */
+export function nameHoldsName(title: string, name: string): boolean {
+  return new RegExp(namePattern(name)).test(title);
+}
+
+/**
+ * The step a leftover close runs on: the display's windows, the ownership it reads and the close it sends. The launch
+ * runs it on the harness display, and a test stands a table in its place.
+ */
+export interface DisplayStep {
+  /** The display's visible windows, each with its name and whether the manager manages it. */
+  windows(): Promise<TopLevelWindow[]>;
+  /** The window `windowId`'s _NET_WM_PID, while the display gives it one. */
+  pidOf(windowId: string): Promise<string | undefined>;
+  /** The launch's editor main process, while the launch can say which process it is. */
+  editorPid(): Promise<string | undefined>;
+  /** Whether closing window `windowId` asks the window manager. */
+  mayClose(windowId: string): Promise<boolean>;
+  /** Closes window `windowId`, as a user's close asks the window manager. */
+  close(windowId: string): Promise<void>;
 }

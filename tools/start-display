@@ -28,6 +28,8 @@ fi
 command -v xdotool >/dev/null || missing+=(xdotool)
 # The WM_STATE read of the key driver's window picks, in x11-utils.
 command -v xprop >/dev/null || missing+=(x11-utils)
+# The _NET_CLOSE_WINDOW of the leftover windows the display closes, in wmctrl.
+command -v wmctrl >/dev/null || missing+=(wmctrl)
 # How long one apt-get call may run: the five minutes it may wait for the dpkg lock, and two more for its work.
 APT_CALL_SECONDS=420
 # How long the whole step may run, over every call of the three attempts: six calls each ended at their own limit would

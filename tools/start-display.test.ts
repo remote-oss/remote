@@ -170,7 +170,7 @@ function ownOptions(machine: Machine): string {
 function aptCall(machine: Machine, command: string): string {
   const fixed =
     '-o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Dpkg::Use-Pty=0';
-  return `apt-get ${command} ${fixed} ${ownOptions(machine)}${command === 'install' ? ' -y xdotool x11-utils' : ''}`;
+  return `apt-get ${command} ${fixed} ${ownOptions(machine)}${command === 'install' ? ' -y xdotool x11-utils wmctrl' : ''}`;
 }
 
 /** A hosted image's Ubuntu source, which names its archive through the mirror list in the machine's folder. */
@@ -301,8 +301,8 @@ describe('start-display (card #3235)', () => {
           aptCall(machine, 'install'),
         ],
         attempts: [
-          'start-display: installing xdotool x11-utils failed (attempt 1 of 3)',
-          'start-display: installing xdotool x11-utils failed (attempt 2 of 3)',
+          'start-display: installing xdotool x11-utils wmctrl failed (attempt 1 of 3)',
+          'start-display: installing xdotool x11-utils wmctrl failed (attempt 2 of 3)',
         ],
       },
     );
@@ -321,13 +321,15 @@ describe('start-display (card #3235)', () => {
           .length,
         policy: outcome.calls.filter(call => call.startsWith('apt-cache')),
         last: outcome.output.includes(
-          'start-display: could not install xdotool x11-utils; their candidates and the sources:',
+          'start-display: could not install xdotool x11-utils wmctrl; their candidates and the sources:',
         ),
       },
       {
         status: 1,
         updates: 3,
-        policy: [`apt-cache ${ownOptions(machine)} policy xdotool x11-utils`],
+        policy: [
+          `apt-cache ${ownOptions(machine)} policy xdotool x11-utils wmctrl`,
+        ],
         last: true,
       },
     );
@@ -349,7 +351,7 @@ describe('start-display (card #3235)', () => {
         status: 0,
         calls: [
           'apt-get update -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Dpkg::Use-Pty=0',
-          'apt-get install -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 -y xdotool x11-utils',
+          'apt-get install -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 -y xdotool x11-utils wmctrl',
         ],
         ownFolder: false,
       },
