@@ -388,7 +388,11 @@ function launchDisplayStep(): DisplayStep {
   };
 }
 
-/** The window ids of the display the launch's last clean settle held, so a close pass closes what a row left after it, and never what the launch found. */
+/**
+ * The window ids of the display the launch's last clean settle held, so a close pass closes what a row left after it, and never what
+ * the launch found. The first pass settles before it closes, with the display's windows as the launch found them: the launch's own
+ * window has no bracketed title in a launch that does not set one, so the record, not the title, spares it.
+ */
 let settledWindows: Set<string> | undefined;
 
 /** The windows the display pass told of, once each, so a window that will not close is not re-told at every settle. */
@@ -438,8 +442,9 @@ function editorMainProcess(): Promise<string | undefined> {
 /**
  * Closes, on the display, the editor top-levels the launch's rows left: a visible top-level the launch's editor opened
  * (its _NET_WM_PID is the editor's main process) that the launch's last clean settle did not hold, that no window's
- * agent reports, and that asks its window manager for a close. A top-level that will not close, or that does not accept
- * one, is told once and held in the record, as a named window that will not close is not failed.
+ * agent reports, and that asks its window manager for a close. The first pass settles the display the launch found,
+ * whatever the titles of its windows are, before it closes anything. A top-level that will not close, or that does not
+ * accept one, is told once and held in the record, as a named window that will not close is not failed.
  */
 async function closeUnownedDisplayWindows(step: DisplayStep): Promise<void> {
   const editor = await step.editorPid();
@@ -454,6 +459,9 @@ async function closeUnownedDisplayWindows(step: DisplayStep): Promise<void> {
   }
   const names = windowNames();
   const windows = await step.windows();
+  // The launch found the display as it held it before any row ran: a window of the launch, titled or not, is never a row's
+  // to close, and only a later pass closes a top-level a row has left since.
+  settledWindows ??= new Set(windows.map(each => each.id));
   for (const window of windows) {
     if (!window.managed) {
       continue;
@@ -463,7 +471,7 @@ async function closeUnownedDisplayWindows(step: DisplayStep): Promise<void> {
     if (window.name === '[]') {
       continue;
     }
-    if (settledWindows?.has(window.id) === true) {
+    if (settledWindows.has(window.id)) {
       continue;
     }
     if (names.some(name => nameHoldsName(window.name, name))) {
