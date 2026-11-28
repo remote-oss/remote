@@ -1,0 +1,4 @@
+# The toolchain of the client image's Rust stage (rust:1.100.0, pinned by digest in client.Dockerfile).
+[toolchain]
+channel = "1.100.0"
+profile = "minimal"

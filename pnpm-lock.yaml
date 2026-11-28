@@ -493,6 +493,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/lib-ssh
 
+  tests/tunnels-conformance: {}
+
 packages:
 
   '@azure/abort-controller@2.2.0':

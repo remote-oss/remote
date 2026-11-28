@@ -8,7 +8,11 @@ import {randomBytes} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
 import path from 'node:path';
 import {setTimeout as pause} from 'node:timers/promises';
-import {checked, type CommandRunner} from '../../tools/command-runner.ts';
+import {
+  checked,
+  type CommandResult,
+  type CommandRunner,
+} from '../../tools/command-runner.ts';
 import {startingAllowlist, startingTable} from './identities.ts';
 
 const SUITE_FOLDER = import.meta.dirname;
@@ -17,7 +21,10 @@ const ROOT = path.join(SUITE_FOLDER, '..', '..');
 /** The relay's image, built in the run from the relay package and never pushed. */
 const RELAY_IMAGE = 'remote-oss-tunnel-relay:run';
 
-/** Where the run's folder is mounted in both containers. */
+/** The clients' image: the Rust client and the suite's TypeScript client, built in the run and never pushed. */
+const CLIENT_IMAGE = 'remote-oss-tunnel-client:run';
+
+/** Where the run's folder is mounted in every container. */
 const RUN_MOUNT = '/run-files';
 
 /** Where the suite's folder is mounted, read-only, in the identity service's container. */
@@ -44,11 +51,12 @@ const READY_LINE = 'the relay serves cp.';
 /** How often the relay's output is read while the run waits for its ready line, in milliseconds. */
 const READY_POLL_MILLISECONDS = 500;
 
-/** What a run of the stack is called: its network, and the names of its two containers. */
+/** What a run of the stack is called: its network, and the names of its three containers. */
 export interface StackNames {
   network: string;
   relay: string;
   identity: string;
+  client: string;
 }
 
 /** The names of the stack whose run folder is `folder`: its network is named after the folder. */
@@ -58,6 +66,7 @@ export function namesOf(folder: string): StackNames {
     network,
     relay: `${network}-relay`,
     identity: `${network}-identity`,
+    client: `${network}-client`,
   };
 }
 
@@ -203,7 +212,7 @@ export function relayEnvironmentOf(domain: string, folder: string): string[] {
   ].flatMap(setting => ['-e', setting]);
 }
 
-/** The options both containers share: detached, on the run's network, as `user`, with the run's folder mounted. */
+/** The options every container shares: detached, on the run's network, as `user`, with the run's folder mounted. */
 function containerOptionsOf(
   names: StackNames,
   name: string,
@@ -272,27 +281,83 @@ export function relayArgumentsOf(
   ];
 }
 
-/** Builds the relay's image: the relay package deployed from the lockfile into `context`, under the suite's Dockerfile. */
-export function buildRelayImage(command: CommandRunner, context: string): void {
-  checked(command, 'pnpm', [
-    '--dir',
-    ROOT,
-    '--filter',
-    'tunnel-relay',
-    'deploy',
-    '--prod',
-    '--legacy',
-    context,
-  ]);
-  checked(command, 'docker', [
-    'build',
-    '--quiet',
-    '--file',
-    path.join(SUITE_FOLDER, 'relay.Dockerfile'),
-    '--tag',
-    RELAY_IMAGE,
-    context,
-  ]);
+/**
+ * The `docker` arguments that start the clients' container of a run: on the run's network, where the relay's names
+ * resolve, trusting the run's authority in Node and in the Rust client's OpenSSL.
+ */
+export function clientArgumentsOf(
+  names: StackNames,
+  folder: string,
+  user: string,
+): string[] {
+  const authority = mounted(filesOf(folder).caFile);
+  return [
+    ...containerOptionsOf(names, names.client, folder, user),
+    '-e',
+    `NODE_EXTRA_CA_CERTS=${authority}`,
+    '-e',
+    `SSL_CERT_FILE=${authority}`,
+    CLIENT_IMAGE,
+  ];
+}
+
+/** An image of the run: the workspace package its context deploys, its Dockerfile in the suite, and the name it is built as. */
+interface RunImage {
+  workspacePackage: string;
+  dockerfile: string;
+  imageName: string;
+}
+
+/** The run's two images: the relay's, and the clients'. */
+const RUN_IMAGES: readonly RunImage[] = [
+  {
+    workspacePackage: 'tunnel-relay',
+    dockerfile: 'relay.Dockerfile',
+    imageName: RELAY_IMAGE,
+  },
+  {
+    workspacePackage: 'tunnels-conformance',
+    dockerfile: 'client.Dockerfile',
+    imageName: CLIENT_IMAGE,
+  },
+];
+
+/**
+ * Builds the run's images, each from its workspace package deployed from the lockfile into a context of its own in
+ * `folder`, under the suite's Dockerfile for it.
+ */
+export function buildImages(command: CommandRunner, folder: string): void {
+  for (const image of RUN_IMAGES) {
+    const context = path.join(folder, `${image.workspacePackage}-image`);
+    checked(command, 'pnpm', [
+      '--dir',
+      ROOT,
+      '--filter',
+      image.workspacePackage,
+      'deploy',
+      '--prod',
+      '--legacy',
+      context,
+    ]);
+    checked(command, 'docker', [
+      'build',
+      '--quiet',
+      '--file',
+      path.join(SUITE_FOLDER, image.dockerfile),
+      '--tag',
+      image.imageName,
+      context,
+    ]);
+  }
+}
+
+/** Runs `programArguments` in the clients' container of the stack named `names`, and gives how it ended. */
+export function inClient(
+  command: CommandRunner,
+  names: StackNames,
+  programArguments: readonly string[],
+): CommandResult {
+  return command('docker', ['exec', names.client, ...programArguments]);
 }
 
 /** Whether `logs`, a container's output so far, holds the relay's ready line. */
@@ -345,8 +410,9 @@ export interface StackOptions {
 }
 
 /**
- * Starts the stack of a run: the image, the certificates and the run's files, the network, the identity service and
- * the relay, which it waits for. Both containers run as the runner's own user, so the run's files stay its own.
+ * Starts the stack of a run: the images, the certificates and the run's files, the network, the identity service, the
+ * relay, which it waits for, and the clients' container. Every container runs as the runner's own user, so the run's
+ * files stay its own.
  */
 export async function startStack(
   command: CommandRunner,
@@ -355,7 +421,7 @@ export async function startStack(
   const {domain, folder, published} = options;
   const names = namesOf(folder);
   const user = `${String(process.getuid?.())}:${String(process.getgid?.())}`;
-  buildRelayImage(command, path.join(folder, 'relay-image'));
+  buildImages(command, folder);
   makeRunCertificates(command, folder, domain);
   writeRunFiles(folder);
   checked(command, 'docker', ['network', 'create', names.network]);
@@ -366,6 +432,7 @@ export async function startStack(
     relayArgumentsOf(names, domain, folder, user, published),
   );
   await awaitRelay(command, names.relay, options.readyMilliseconds);
+  checked(command, 'docker', clientArgumentsOf(names, folder, user));
   const relayAddress = checked(command, 'docker', [
     'inspect',
     '--format',
@@ -381,8 +448,14 @@ export async function startStack(
   };
 }
 
-/** Removes the stack whose names are `names`: both containers and the network, whichever of them exist. */
+/** Removes the stack whose names are `names`: its containers and the network, whichever of them exist. */
 export function stopStack(command: CommandRunner, names: StackNames): void {
-  checked(command, 'docker', ['rm', '--force', names.relay, names.identity]);
+  checked(command, 'docker', [
+    'rm',
+    '--force',
+    names.relay,
+    names.identity,
+    names.client,
+  ]);
   checked(command, 'docker', ['network', 'rm', '--force', names.network]);
 }

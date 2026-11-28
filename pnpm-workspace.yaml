@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - tests/acceptance
+  - tests/tunnels-conformance
 
 # esbuild's install script only checks that its platform binary is present.
 allowBuilds:

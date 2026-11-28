@@ -21,15 +21,14 @@
         "tools/package-extensions.ts!",
         "tools/package-run.ts!",
         ".vscode-test.mjs!",
-        // The tunnels conformance run's command and the stub identity service its container starts.
-        "tests/tunnels-conformance/run.ts!",
-        "tests/tunnels-conformance/stub-identity.ts!",
       ],
-      "project": [
-        "tools/**/*.ts!",
-        "*.config.ts!",
-        "tests/tunnels-conformance/*.ts!",
-      ],
+      "project": ["tools/**/*.ts!", "*.config.ts!"],
+    },
+    // The tunnels conformance run (#3076): its command and the stub identity service its container starts; its unit
+    // rows are tools/tunnels-conformance.test.ts.
+    "tests/tunnels-conformance": {
+      "entry": ["run.ts!", "stub-identity.ts!"],
+      "project": ["*.ts!"],
     },
     // Tests only: no coverage unit; the code is exercised by the acceptance job.
     "tests/acceptance": {

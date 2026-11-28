@@ -1,13 +1,19 @@
 /**
- * @fileoverview The rows of the tunnels conformance run, in order. The stack's own row comes first: the relay answers
- * the run's listed account through the run's authority, so every later row starts from a stack that serves.
+ * @fileoverview The rows of the tunnels conformance run, in order. The stack's own rows come first: the relay answers
+ * the run's listed account through the run's authority, from the runner and from the clients' container by its name,
+ * so every later row starts from a stack that serves.
  */
 
 import {readFileSync} from 'node:fs';
 import {request} from 'node:https';
+import {
+  checked,
+  type CommandRunner,
+  runCommand,
+} from '../../tools/command-runner.ts';
 import type {ConformanceRow} from './conformance.ts';
 import {TOKENS} from './identities.ts';
-import {RUN_CLUSTER, type Stack} from './stack.ts';
+import {inClient, RUN_CLUSTER, type Stack} from './stack.ts';
 
 /** The management API's version, which every request names. */
 const API_VERSION = '2023-09-27-preview';
@@ -65,6 +71,31 @@ export function checkListing(answer: RelayAnswer): void {
   }
 }
 
+/**
+ * Sends `GET path` with `token` from the clients' container, to the relay by its control-plane name, as a client of the
+ * run does: Node's own `fetch`, trusting the run's authority through NODE_EXTRA_CA_CERTS alone.
+ */
+export function clientGet(
+  command: CommandRunner,
+  stack: Stack,
+  path: string,
+  token: string,
+): RelayAnswer {
+  const address = `https://cp.${stack.domain}${path}?api-version=${API_VERSION}`;
+  const script = [
+    `const response = await fetch(${JSON.stringify(address)}, {headers: {authorization: ${JSON.stringify(`github ${token}`)}}});`,
+    'process.stdout.write(JSON.stringify({status: response.status, body: await response.text()}));',
+  ].join(' ');
+  return JSON.parse(
+    checked(
+      (program, programArguments) =>
+        inClient(command, stack.names, [program, ...programArguments]),
+      'node',
+      ['--input-type=module', '--eval', script],
+    ),
+  ) as RelayAnswer;
+}
+
 /** The run's rows. */
 export const ROWS: readonly ConformanceRow[] = [
   {
@@ -73,6 +104,15 @@ export const ROWS: readonly ConformanceRow[] = [
       'the stack: the relay lists the listed account’s tunnels in the run’s cluster, through the run’s authority',
     check: async stack => {
       checkListing(await relayGet(stack, '/tunnels', TOKENS.listed));
+    },
+  },
+  {
+    file: 'tunnels-conformance/rows.ts',
+    title:
+      'the stack: the clients’ container reaches the relay by its control-plane name, trusting the run’s authority',
+    check: stack => {
+      checkListing(clientGet(runCommand, stack, '/tunnels', TOKENS.listed));
+      return Promise.resolve();
     },
   },
 ];

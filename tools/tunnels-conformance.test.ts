@@ -19,11 +19,17 @@ import {
   startingTable,
   TOKENS,
 } from '../tests/tunnels-conformance/identities.ts';
-import {checkListing, relayGet} from '../tests/tunnels-conformance/rows.ts';
 import {
-  buildRelayImage,
+  checkListing,
+  clientGet,
+  relayGet,
+} from '../tests/tunnels-conformance/rows.ts';
+import {
+  buildImages,
+  clientArgumentsOf,
   filesOf,
   identityArgumentsOf,
+  inClient,
   isReady,
   makeRunCertificates,
   namesOf,
@@ -39,16 +45,23 @@ import type {KnownRed} from './known-reds.ts';
 /** A command a fake runner was given: the program and its first two words. */
 type Given = [string, string, string | undefined];
 
-/** A runner that answers every command with status 0 and the output `answers` gives for its program and first word. */
+/**
+ * A runner that answers every command with status 0 and the output `answers` gives for its program and first word; it
+ * keeps each command's first words in `given`, and the whole of it in `calls`.
+ */
 function fakeRunner(answers: Readonly<Record<string, string>>): {
   given: Given[];
+  calls: string[][];
   command: CommandRunner;
 } {
   const given: Given[] = [];
+  const calls: string[][] = [];
   return {
     given,
+    calls,
     command: (program, programArguments) => {
       given.push([program, programArguments[0] ?? '', programArguments[1]]);
+      calls.push([program, ...programArguments]);
       return {
         status: 0,
         stdout: answers[`${program} ${programArguments[0] ?? ''}`] ?? '',
@@ -133,11 +146,12 @@ describe('the stub identity service of the tunnels run (card #3076)', () => {
 });
 
 describe('the tunnels run’s stack (card #3076)', () => {
-  it('names its network and both containers after the run folder, in lower case', () => {
+  it('names its network and its three containers after the run folder, in lower case', () => {
     deepStrictEqual(namesOf('/tmp/Tunnels-Run-Ab1'), {
       network: 'tunnels-tunnels-run-ab1',
       relay: 'tunnels-tunnels-run-ab1-relay',
       identity: 'tunnels-tunnels-run-ab1-identity',
+      client: 'tunnels-tunnels-run-ab1-client',
     });
   });
 
@@ -277,13 +291,69 @@ describe('the tunnels run’s stack (card #3076)', () => {
     );
   });
 
-  it('builds the image from the relay package deployed from the lockfile, under the suite’s Dockerfile', () => {
-    const {given, command} = fakeRunner({});
-    buildRelayImage(command, '/tmp/run/relay-image');
-    deepStrictEqual(given, [
-      ['pnpm', '--dir', path.join(import.meta.dirname, '..')],
-      ['docker', 'build', '--quiet'],
+  it('builds each image from its workspace package deployed from the lockfile, under the suite’s Dockerfile for it', () => {
+    const {calls, command} = fakeRunner({});
+    buildImages(command, '/tmp/run');
+    deepStrictEqual(
+      calls.map(call =>
+        call[0] === 'pnpm'
+          ? [call[4], call.at(-1)]
+          : [path.basename(String(call[4])), call[6], call[7]],
+      ),
+      [
+        ['tunnel-relay', '/tmp/run/tunnel-relay-image'],
+        [
+          'relay.Dockerfile',
+          'remote-oss-tunnel-relay:run',
+          '/tmp/run/tunnel-relay-image',
+        ],
+        ['tunnels-conformance', '/tmp/run/tunnels-conformance-image'],
+        [
+          'client.Dockerfile',
+          'remote-oss-tunnel-client:run',
+          '/tmp/run/tunnels-conformance-image',
+        ],
+      ],
+    );
+  });
+
+  it('starts the clients’ container on the run’s network, trusting the run’s authority in Node and in OpenSSL', () => {
+    deepStrictEqual(
+      clientArgumentsOf(namesOf('/tmp/run'), '/tmp/run', '1001:1001').slice(2),
+      [
+        '--name',
+        'tunnels-run-client',
+        '--network',
+        'tunnels-run',
+        '--user',
+        '1001:1001',
+        '--volume',
+        '/tmp/run:/run-files',
+        '-e',
+        'NODE_EXTRA_CA_CERTS=/run-files/ca.pem',
+        '-e',
+        'SSL_CERT_FILE=/run-files/ca.pem',
+        'remote-oss-tunnel-client:run',
+      ],
+    );
+  });
+
+  it('runs a program in the clients’ container and gives how it ended', () => {
+    const {calls, command} = fakeRunner({
+      'docker exec': 'tunnels-rust-client 0.0.0\n',
+    });
+    const result = inClient(command, namesOf('/tmp/run'), [
+      'tunnels-rust-client',
     ]);
+    deepStrictEqual(
+      {calls, stdout: result.stdout},
+      {
+        calls: [
+          ['docker', 'exec', 'tunnels-run-client', 'tunnels-rust-client'],
+        ],
+        stdout: 'tunnels-rust-client 0.0.0\n',
+      },
+    );
   });
 
   it('starts the stack in order and gives the relay’s address on the run’s network', async () => {
@@ -308,6 +378,8 @@ describe('the tunnels run’s stack (card #3076)', () => {
         steps: [
           'pnpm --dir',
           'docker build',
+          'pnpm --dir',
+          'docker build',
           'openssl req',
           'openssl req',
           'openssl x509',
@@ -315,6 +387,7 @@ describe('the tunnels run’s stack (card #3076)', () => {
           'docker run',
           'docker run',
           'docker logs',
+          'docker run',
           'docker inspect',
         ],
         address: ['172.18.0.9', 443],
@@ -337,12 +410,19 @@ describe('the tunnels run’s stack (card #3076)', () => {
     rmSync(folder, {recursive: true, force: true});
   });
 
-  it('removes both containers and the network, whichever of them exist', () => {
-    const {given, command} = fakeRunner({});
+  it('removes its three containers and the network, whichever of them exist', () => {
+    const {calls, command} = fakeRunner({});
     stopStack(command, namesOf('/tmp/run'));
-    deepStrictEqual(given, [
-      ['docker', 'rm', '--force'],
-      ['docker', 'network', 'rm'],
+    deepStrictEqual(calls, [
+      [
+        'docker',
+        'rm',
+        '--force',
+        'tunnels-run-relay',
+        'tunnels-run-identity',
+        'tunnels-run-client',
+      ],
+      ['docker', 'network', 'rm', '--force', 'tunnels-run'],
     ]);
   });
 
@@ -507,6 +587,41 @@ describe('the tunnels conformance run’s rows (card #3076)', () => {
             'github stub-token-listed',
           ],
         ],
+      },
+    );
+  });
+  it('asks the relay by its control-plane name from the clients’ container, with Node’s own fetch', () => {
+    const {calls, command} = fakeRunner({
+      'docker exec': '{"status":200,"body":"{\\"value\\":[]}"}',
+    });
+    const answer = clientGet(
+      command,
+      localStack('/tmp/run', 443),
+      '/tunnels',
+      TOKENS.listed,
+    );
+    const script = String(calls[0]?.at(-1));
+    deepStrictEqual(
+      {
+        answer,
+        program: calls[0]?.slice(0, 6),
+        address: script.includes(
+          '"https://cp.run.tunnels.test/tunnels?api-version=2023-09-27-preview"',
+        ),
+        token: script.includes('"github stub-token-listed"'),
+      },
+      {
+        answer: {status: 200, body: '{"value":[]}'},
+        program: [
+          'docker',
+          'exec',
+          'tunnels-run-client',
+          'node',
+          '--input-type=module',
+          '--eval',
+        ],
+        address: true,
+        token: true,
       },
     );
   });
